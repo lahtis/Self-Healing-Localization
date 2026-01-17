@@ -1,4 +1,4 @@
-# Self‑Healing Localization Layer
+# Self‑Healing Localization (SHL)
 ### Automatic, self‑maintaining localization for any Python project  
 **Author:** Tuomas Lähteenmäki  
 **License:** MIT  
@@ -19,7 +19,7 @@
 
 ## 🌍 Overview
 
-Self‑Healing Localization Layer (SHL) is a lightweight, dependency‑free Python library that eliminates missing translations forever.
+Self‑Healing Localization (SHL) is a lightweight, dependency‑free Python library that eliminates missing translations forever.
 
 It provides:
 
@@ -68,7 +68,7 @@ Pure Python. Works everywhere.
 Clone the repository:
 
 ```bash
-git clone https://github.com/lahtis/Self-healing-localization
+git clone https://codeberg.org/lahtis/Self_Healing_Localization
 ```
 
 Import the engine:
@@ -110,9 +110,9 @@ If `prompts/fi.json` does not exist, it will be created automatically using `pro
 ## 🧩 Project Structure
 
 ```
-self-healing-localization/
+SHL/
 │
-├─ shl/
+├─ api/
 │   ├─ localizer.py            # UI text localization
 │   ├─ template_localizer.py   # Prompt template localization
 │   ├─ engine.py               # Unified high-level manager
@@ -166,19 +166,7 @@ engine.sync()
 ## 🛠 Roadmap
 
 ### v0.2
-- AI‑powered translation (Gemini / Groq / OpenAI)
-- CLI tool (`selfheal sync`, `selfheal translate`)
-- Automatic detection of missing keys across all languages
 
-### v0.3
-- Web‑based Localization Studio
-- Visual diffing of translations
-- Export/import language packs
-
-### v1.0
-- Full ecosystem integrations (Flask, FastAPI, Django, Flet)
-- Community templates
-- Official PyPI release
 
 ---
 
