@@ -5,16 +5,8 @@ Version: 0.1.4
 License: MIT
 Description:
 This module is intentionally lightweight and dependency-free.
-It provides a clean interface for future expansion without affecting
-the core functionality of the Self-Healing Localization Layer (SHLL).
-
-Planned features for v0.2:
-- Automatic translation of missing keys
-- Batch translation tools
-- Provider-specific adapters (OpenAI, Azure, etc.)
-- CLI integration
-
-For now, this module acts as a placeholder and safe extension point.
+It provides a clean interface for expansion without affecting
+the core functionality of the Self-Healing Localization Layer (SHL).
 """
 import urllib.request
 import urllib.parse  # Tämä puuttui aiemmasta koodistasi
