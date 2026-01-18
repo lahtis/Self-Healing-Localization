@@ -1,39 +1,26 @@
-# Self‑Healing Localization (SHL)
+# Self‑Healing Localization Layer
 ### Automatic, self‑maintaining localization for any Python project  
 **Author:** Tuomas Lähteenmäki  
 **License:** MIT  
-**Version:** 0.1.1
+**Version:** 0.1.3
 
-**DEV:** 0.2.0
-
-
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 [![TestPyPI](https://img.shields.io/badge/TestPyPI-self--healing--localization-blue)](https://test.pypi.org/project/self-healing-localization/)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-Active-success)
 ![Platform](https://img.shields.io/badge/Platform-Cross--platform-lightgrey)
-![Localization](https://img.shields.io/badge/Localization-Self--Healing-orange)
-
 
 ---
 
 ## 🌍 Overview
 
-Self‑Healing Localization (SHL) is a lightweight, dependency‑free Python library that eliminates missing translations forever.
+Self‑Healing Localization Layer (SHL) is a lightweight, dependency‑free Python library that eliminates missing translations forever.
 
 It provides:
-
-- automatic creation of missing language files  
-- automatic creation of missing keys  
-- fallback to a base language (default: English)  
-- unified support for both UI text and AI prompt templates  
-- optional AI‑powered translation (planned for v0.2)  
-
-This library is designed to be **dropped into any project** — from small scripts to full applications — and it will maintain localization files automatically as the project grows.
-
-No more manual JSON editing.  
-No more “missing translation” errors.  
-No more incomplete language packs.
+- Automatic creation of missing language files  
+- Automatic creation of missing keys  
+- Fallback to a base language (default: English)  
+- Unified support for both UI text and AI prompt templates  
 
 ---
 
@@ -61,32 +48,49 @@ Pure Python. Works everywhere.
 
 ---
 
+
 ## 📦 Installation
 
-(PyPI release planned for v0.2)
-
-Clone the repository:
+Currently available via TestPyPI (v0.1.3):
 
 ```bash
-git clone https://codeberg.org/lahtis/Self_Healing_Localization
+pip install --index-url [https://test.pypi.org/simple/](https://test.pypi.org/simple/) self-healing-localization==0.1.3
 ```
 
-Import the engine:
+Self‑Healing Localization Layer (SHL) is a lightweight, dependency‑free Python library that eliminates missing translations forever.
 
-```python
-from shl.engine import LocalizationEngine
-```
+It provides:
+
+- automatic creation of missing language files  
+- automatic creation of missing keys  
+- fallback to a base language (default: English)  
+- unified support for both UI text and AI prompt templates  
+- optional AI‑powered translation (planned for v0.2)  
+
+This library is designed to be **dropped into any project** — from small scripts to full applications — and it will maintain localization files automatically as the project grows.
+
+No more manual JSON editing.  
+No more “missing translation” errors.  
+No more incomplete language packs.
 
 ---
 
+
 ## 🚀 Quick Start
 
-### 1. Initialize the engine
+### 1. Basic UI Localization
+Initialize the engine and start retrieving text. If the key doesn't exist, it is added to your JSON files automatically.
 
 ```python
 from shl.engine import LocalizationEngine
 
-engine = LocalizationEngine(lang_code="fi")  # Finnish
+# Initialize the engine (e.g., set user language to Finnish)
+engine = LocalizationEngine(lang_code="fi", base_lang="en")
+
+# Retrieve UI text. If 'welcome_msg' is missing, it's created with the default value.
+title = engine.ui_text("welcome_msg", "Welcome to the App!")
+
+print(title)
 ```
 
 ### 2. Retrieve UI text
@@ -95,7 +99,7 @@ engine = LocalizationEngine(lang_code="fi")  # Finnish
 title = engine.ui_text("app_title", "My Application")
 ```
 
-If `"app_title"` does not exist in `locales/lang_fi.json`, it will be added automatically.
+If `"app_title"` does not exist in `locales/lang_en.json`, it will be added automatically.
 
 ### 3. Retrieve prompt templates
 
@@ -105,26 +109,32 @@ summary_prompt = engine.template("summary_short", "Summarize the text:")
 
 If `prompts/fi.json` does not exist, it will be created automatically using `prompts/en.json` as the base.
 
+### 4. AI Prompt Templates
+Keep your AI prompts localized just like your UI strings.
+
+```python
+# Retrieve a localized prompt template
+prompt = engine.template("summarize_task", "Please summarize the following text:")
+```
+
 ---
 
 ## 🧩 Project Structure
+The library follows a modular design to keep the core logic separate from your application code:
 
 ```
-SHL/
+self-healing-localization/
 │
-├─ api/
-│   ├─ localizer.py            # UI text localization
-│   ├─ template_localizer.py   # Prompt template localization
-│   ├─ engine.py               # Unified high-level manager
-│   └─ ai_translation.py       # (planned) AI-powered translation
+├─ shl/
+│  └─ engine/                 # Core modular engine
+│     ├─ core.py              # Main LocalizationEngine
+│     ├─ localizer.py         # UI text logic
+│     ├─ template_localizer.py # AI template logic
+│     ├─ ai_translation.py    # (Coming in v0.2)
+│     └─ __init__.py          # Internal package exports
 │
-├─ locales/
-│   └─ lang_en.json            # Base UI language
-│
-├─ prompts/
-│   └─ en.json                 # Base template language
-│
-└─ README.md
+├─ pyproject.toml             # Package configuration
+└─ README.md                  # Project documentation
 ```
 
 ---
@@ -134,7 +144,7 @@ SHL/
 ### Initialize
 
 ```python
-engine = LocalizationEngine(lang_code="fi")
+engine = LocalizationEngine(lang_code="en")
 ```
 
 ### UI text
@@ -165,7 +175,26 @@ engine.sync()
 
 ## 🛠 Roadmap
 
+### v0.1.x: 
+- Core self-healing logic and modular engine.
+
+### v0.1.5 
+- Basic automatic translation engine (e.g., English -> Finnish).
+
 ### v0.2
+- AI‑powered translation (Gemini / Groq / OpenAI)
+- CLI tool (`selfheal sync`, `selfheal translate`)
+- Automatic detection of missing keys across all languages
+
+### v0.3
+- Web‑based Localization Studio
+- Visual diffing of translations
+- Export/import language packs
+
+### v1.0
+- Full ecosystem integrations (Flask, FastAPI, Django, Flet)
+- Community templates
+- Official PyPI release
 
 
 ---
