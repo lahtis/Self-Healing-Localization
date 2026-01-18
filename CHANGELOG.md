@@ -10,11 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.1.1] - 2026-01-10
+## [0.1.5] - 2026-01-10
 ### Notes
 This version focuses on stabilizing the original implementation before the architectural overhaul in 0.2.0.
 
-- Initial release of the **Self‑Healing Localization Layer (SHLL)**.
+- Initial release of the **Self‑Healing Localization Layer (SHL)**.
 - `localizer.py`:  
   - Automatic creation of missing UI language files.  
   - Automatic creation of missing UI keys.  
@@ -52,6 +52,9 @@ This version focuses on stabilizing the original implementation before the archi
 
 ## [0.1.0] — Initial Release
 - The initial release version. The structure existed, but the system was still clearly incomplete and partially broken.
-  
+
+##  [0.1.4] - Release 
+- Project focus returned to concrete solutions to localization problems.
+- The library translates the provided texts, for example from English to another language.
 ---
 
