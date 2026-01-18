@@ -2,7 +2,7 @@
 ### Automatic, self‑maintaining localization for any Python project  
 **Author:** Tuomas Lähteenmäki  
 **License:** MIT  
-**Version:** 0.1.3
+**Version:** 0.1.4
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 [![TestPyPI](https://img.shields.io/badge/TestPyPI-self--healing--localization-blue)](https://test.pypi.org/project/self-healing-localization/)
@@ -12,49 +12,52 @@
 
 ---
 
-## 🌍 Overview
+## Overview
 
 Self‑Healing Localization Layer (SHL) is a lightweight, dependency‑free Python library that eliminates missing translations forever.
 
-It provides:
-- Automatic creation of missing language files  
-- Automatic creation of missing keys  
-- Fallback to a base language (default: English)  
-- Unified support for both UI text and AI prompt templates  
+
+### What it Provides
+
+SHL (Self-Healing Localization) simplifies your development workflow by automating the tedious parts of internationalization (i18n):
+
+- Zero-Config Setup: Automatically generates missing language directories and JSON files on first run.
+- On-the-Fly Healing: Injects missing keys into your translation files dynamically as they are requested in code.
+- Smart Fallbacks: Seamlessly reverts to your base language (default: English) to prevent UI breakage.
+- Dual-Layer Engine: Unified management for both standard UI strings and complex AI prompt templates.
+- AI-Powered Autotranslation: Leverages LLMs to instantly translate missing content into any target language.
+
+### Key Features
+#### Self-Healing UI Localization
+
+Never worry about a missing translation again.
+- Automatic Infrastructure: Missing locale files are detected and initialized instantly.
+- Dynamic Key Injection: New keys added to code are automatically reflected in your JSON storage.
+- Safe Defaults: Ensures your UI always stays intact by falling back to the base language.
+
+#### AI-Native Prompt Management
+
+Specifically designed for modern AI applications.
+- Template Persistence: Generates and manages prompt templates across multiple languages.
+- Cross-Language Consistency: Ensures your AI prompts remain synchronized across all supported locales.
+- Smart Fallback: Copies base prompts as templates for new languages to ensure your AI features never fail.
+
+#### Unified Localization Engine
+The LocalizationEngine acts as the central brain of your app's languages:
+
+- Total Synchronization: One-click synchronization of all target languages with the base language.
+- Clean API: A simple, high-level interface for accessing both UI text and prompt templates.
+- Language Enforcement: Validates and ensures the existence of all required language assets at runtime.
 
 ---
 
-## ✨ Key Features
 
-### ✔ Self‑healing UI localization  
-- Missing language files are created automatically  
-- Missing keys are added on the fly  
-- Base language is used as fallback  
+## Installation
 
-### ✔ Self‑healing AI prompt template localization  
-- Missing template files are generated automatically  
-- Base templates are copied as fallback  
-- Missing template keys are added automatically  
-
-### ✔ Unified high‑level engine  
-The `LocalizationEngine` ties everything together:
-
-- ensures languages exist  
-- synchronizes all languages with the base language  
-- provides clean access to UI text and templates  
-
-### ✔ Zero dependencies  
-Pure Python. Works everywhere.
-
----
-
-
-## 📦 Installation
-
-Currently available via TestPyPI (v0.1.3):
+Currently available via TestPyPI (v0.1.4):
 
 ```bash
-pip install --index-url [https://test.pypi.org/simple/](https://test.pypi.org/simple/) self-healing-localization==0.1.3
+pip install --index-url [https://test.pypi.org/simple/](https://test.pypi.org/simple/) self-healing-localization==0.1.4
 ```
 
 Self‑Healing Localization Layer (SHL) is a lightweight, dependency‑free Python library that eliminates missing translations forever.
@@ -69,14 +72,14 @@ It provides:
 
 This library is designed to be **dropped into any project** — from small scripts to full applications — and it will maintain localization files automatically as the project grows.
 
-No more manual JSON editing.  
-No more “missing translation” errors.  
-No more incomplete language packs.
+- No more manual JSON editing.  
+- No more “missing translation” errors.  
+- No more incomplete language packs.
 
 ---
 
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Basic UI Localization
 Initialize the engine and start retrieving text. If the key doesn't exist, it is added to your JSON files automatically.
@@ -119,27 +122,27 @@ prompt = engine.template("summarize_task", "Please summarize the following text:
 
 ---
 
-## 🧩 Project Structure
+## Project Structure
 The library follows a modular design to keep the core logic separate from your application code:
 
 ```
 self-healing-localization/
 │
 ├─ shl/
-│  └─ engine/                 # Core modular engine
-│     ├─ core.py              # Main LocalizationEngine
-│     ├─ localizer.py         # UI text logic
+│  └─ engine/                  # Core modular engine
+│     ├─ core.py               # Main LocalizationEngine
+│     ├─ localizer.py          # UI text logic
 │     ├─ template_localizer.py # AI template logic
-│     ├─ ai_translation.py    # (Coming in v0.2)
-│     └─ __init__.py          # Internal package exports
+│     ├─ ai_translation.py     # AI translation
+│     └─ __init__.py           # Internal package exports
 │
-├─ pyproject.toml             # Package configuration
-└─ README.md                  # Project documentation
+├─ pyproject.toml              # Package configuration
+└─ README.md                   # Project documentation
 ```
 
 ---
 
-## 🔧 API Reference (v0.1)
+## API Reference (v0.1.x)
 
 ### Initialize
 
@@ -173,13 +176,13 @@ engine.sync()
 
 ---
 
-## 🛠 Roadmap
+## Roadmap
 
 ### v0.1.x: 
 - Core self-healing logic and modular engine.
 
-### v0.1.5 
-- Basic automatic translation engine (e.g., English -> Finnish).
+### v0.1.4 
+- Basic ai-automatic translation engine (e.g., English -> Finnish).
 
 ### v0.2
 - AI‑powered translation (Gemini / Groq / OpenAI)
@@ -199,20 +202,20 @@ engine.sync()
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome.  
 This project aims to become a new standard for open‑source localization — simple, automatic, and self‑maintaining.
 
 ---
 
-## 📄 License
+## License
 
 MIT License — free for personal and commercial use.
 
 ---
 
-## ⭐ Vision
+## Vision
 
 Localization should never be a burden.
 
@@ -223,7 +226,4 @@ No more incomplete language packs.
 Localization that heals itself.**
 
 
-#localization • #i18n • #l10n • #self-healing • #translation • #multilingual  
-#json • #python • #developer-tools • #automation • #templates • #cli  
-#ai-assisted • #language-files • #internationalization • #localization-engine
-
+#localization • #i18n • #l10n • #self-healing • #translation • #multilingual  #json • #python • #developer-tools • #automation • #templates • #cli #ai-assisted • #language-files • #internationalization • #localization-engine
