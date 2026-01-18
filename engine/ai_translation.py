@@ -1,5 +1,5 @@
 """
-File: ai_translation.py — Optional module for future AI-powered translations.
+File: ai_translation.py — module for AI-powered translations.
 Author: Tuomas Lähteenmäki
 Version: 0.1.4
 License: MIT
