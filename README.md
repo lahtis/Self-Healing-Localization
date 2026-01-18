@@ -175,6 +175,7 @@ engine.sync()
 ```
 
 ### Optional language config
+
 If no language is provided programmatically, SHL will automatically read the user language from config.conf
 
 ```ini
@@ -190,7 +191,7 @@ language = fi
 - Core self-healing logic and modular engine.
 
 ### v0.1.4 
-- Basic ai-automatic translation engine (e.g., English -> Finnish).
+- Basic automatic translation engine (e.g., English -> Finnish) or any language.
 
 ### v0.2
 - AI‑powered translation (Gemini / Groq / OpenAI)
