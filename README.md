@@ -174,6 +174,14 @@ engine.ensure_language("de")
 engine.sync()
 ```
 
+### Optional language config
+If no language is provided programmatically, SHL will automatically read the user language from config.conf
+
+```ini
+[SETTINGS]
+language = fi
+```
+
 ---
 
 ## Roadmap
