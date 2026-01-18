@@ -9,7 +9,7 @@ It provides a clean interface for expansion without affecting
 the core functionality of the Self-Healing Localization Layer (SHL).
 """
 import urllib.request
-import urllib.parse  # Tämä puuttui aiemmasta koodistasi
+import urllib.parse
 import json
 
 def translate_text(text, target_lang="fi", source_lang="en"):
