@@ -36,11 +36,11 @@ class LocalizationEngine:
     # --- Language Management ---
 
     def ensure_language(self, lang_code):
-        """Varmistaa, että kielitiedostot ovat olemassa."""
+        
         Localizer(lang_code, self.ui_folder)
         TemplateLocalizer(lang_code, self.template_folder)
 
-    # --- Key Management (Korjattu nimet vastaamaan __init__-metodia) ---
+    # --- Key Management ---
 
     def ensure_ui_key(self, key, default=""):
         """Varmistaa, että UI-avain on olemassa."""
@@ -51,7 +51,6 @@ class LocalizationEngine:
         return text
 
     def ensure_template_key(self, key, default=""):
-        """Varmistaa, että prompt-avain on olemassa."""
         text = self.template_localizer.get_template(key)
         if text is None:
             self.template_localizer.set_template(key, default)
@@ -61,7 +60,6 @@ class LocalizationEngine:
     # --- Retrieval & Self-Healing ---
 
     def ui_text(self, key, default_value=""):
-        # Kutsuu nyt localizer.py:n uutta get_text-metodia
         text = self.ui_localizer.get_text(key)
         
         if text is None:
@@ -75,19 +73,16 @@ class LocalizationEngine:
         return text
 
     def template(self, key, default=""):
-        """Hakee prompt-pohjan."""
         return self.template_localizer.get_template(key)
 
     # --- Synchronization ---
 
     def sync(self):
-        """Synkronoi kaikki avaimet peruskielestä nykyiseen kieleen."""
-        # UI synkronointi
         base_ui = Localizer(self.base_lang, self.ui_folder)
         for key, value in base_ui.texts.items():
             self.ensure_ui_key(key, value)
 
-        # Template synkronointi
+        
         base_templates = TemplateLocalizer(self.base_lang, self.template_folder)
         for key, value in base_templates.templates.items():
             self.ensure_template_key(key, value)
