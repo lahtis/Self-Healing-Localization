@@ -61,7 +61,7 @@ pip install self-healing-localization
 Currently available via TestPyPI (v0.1.5):
 
 ```bash
-pip install --index-url [https://test.pypi.org/simple/](https://test.pypi.org/simple/) self-healing-localization==0.1.4
+pip install --index-url [https://test.pypi.org/simple/](https://test.pypi.org/simple/) self-healing-localization==0.1.5
 ```
 
 Self‑Healing Localization Layer (SHL) is a lightweight, dependency‑free Python library that eliminates missing translations forever.
