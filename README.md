@@ -2,7 +2,7 @@
 ### Automatic, self‑maintaining localization for any Python project  
 **Author:** Tuomas Lähteenmäki  
 **License:** MIT  
-**Version:** 0.1.4
+**Version:** 0.1.5
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 [![TestPyPI](https://img.shields.io/badge/TestPyPI-self--healing--localization-blue)](https://test.pypi.org/project/self-healing-localization/)
@@ -53,8 +53,12 @@ The LocalizationEngine acts as the central brain of your app's languages:
 
 
 ## Installation
+Currently available via PyPi (v0.1.5):
+```bash
+pip install self-healing-localization
+```
 
-Currently available via TestPyPI (v0.1.4):
+Currently available via TestPyPI (v0.1.5):
 
 ```bash
 pip install --index-url [https://test.pypi.org/simple/](https://test.pypi.org/simple/) self-healing-localization==0.1.4
@@ -159,7 +163,7 @@ engine.ui_text(key, default="")
 ### Template text
 
 ```python
-engine.template(key, default="")
+engine.template(key)
 ```
 
 ### Ensure language exists
@@ -174,6 +178,9 @@ engine.ensure_language("de")
 engine.sync()
 ```
 
+- SHL is currently focused on UI localization. 
+- Prompt template localization is considered an advanced / experimental feature in v0.1.x.
+
 ### Optional language config
 
 If no language is provided programmatically, SHL will automatically read the user language from config.conf
@@ -187,23 +194,26 @@ language = fi
 
 ## Roadmap
 
-### v0.1.x: 
+### [v0.1.x]
 - Core self-healing logic and modular engine.
 
-### v0.1.4 
+### [v0.1.4] - 2026-01-18 
 - Basic automatic translation engine (e.g., English -> Finnish) or any language.
 
-### v0.2
+### [v0.1.5] - 2026-01-19 - REALEASED
+- Fixed incorrect constructor argument usage in core engine. Internal fix, no API change.
+  
+### [v0.2.0]
 - AI‑powered translation (Gemini / Groq / OpenAI)
 - CLI tool (`selfheal sync`, `selfheal translate`)
 - Automatic detection of missing keys across all languages
 
-### v0.3
+### [v0.3.0]
 - Web‑based Localization Studio
 - Visual diffing of translations
 - Export/import language packs
 
-### v1.0
+### [v1.0.0]
 - Full ecosystem integrations (Flask, FastAPI, Django, Flet)
 - Community templates
 - Official PyPI release
