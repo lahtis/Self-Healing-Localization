@@ -10,6 +10,8 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-Active-success)
 ![Platform](https://img.shields.io/badge/Platform-Cross--platform-lightgrey)
+[![Downloads](https://pepy.tech/badge/self-healing-localization)](https://pepy.tech/project/self-healing-localization)
+
 
 ---
 
