@@ -5,6 +5,7 @@
 **Version:** 0.1.5
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+[![PyPI version](https://img.shields.io/pypi/v/self-healing-localization?color=blue&label=PyPI)](https://pypi.org/project/self-healing-localization/)
 [![TestPyPI](https://img.shields.io/badge/TestPyPI-self--healing--localization-blue)](https://test.pypi.org/project/self-healing-localization/)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-Active-success)
