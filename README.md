@@ -4,6 +4,12 @@
 **License:** MIT  
 **Version:** 0.1.6
 
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Version](https://img.shields.io/badge/Version-0.1.6-brightgreen)
+![Status](https://img.shields.io/badge/Status-Active-success)
+![Downloads](https://img.shields.io/badge/Downloads-0-lightgrey)
+
 ---
 
 ## Overview
