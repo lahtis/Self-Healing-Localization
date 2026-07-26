@@ -223,7 +223,7 @@ If no language is provided programmatically, SHL reads the language from '''conf
  - Fixed incorrect constructor argument usage in core engine. Internal fix, no API change.
  - Offical PyPI release
 
-### [v0.1.6] - Test PyPI RELEASE
+### [v0.1.6] - 2026-07-26 - Test PyPI RELEASE
  - Core self-healing logic and modular engine
  - AI translations (MyMemory + LibreTranslate fallback)
  - Translation cache for API call optimization
