@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Version](https://img.shields.io/badge/Version-0.1.6-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Active-success)
-[![PyPI Downloads](https://img.shields.io/pypi/dm/self-healing-localization)](https://pypi.org/project/self-healing-localization/)
+[![Downloads](https://static.pepy.tech/badge/self-healing-localization)](https://pepy.tech/project/self-healing-localization)
 
 ---
 
