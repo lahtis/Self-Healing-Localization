@@ -77,10 +77,10 @@ pip install self-healing-localization
 ---
 
 ### Test
-Test version available via TestPyPI (v0.1.6):
+Test version available via TestPyPI preview (v0.1.6):
 
 ```bash
-pip install --index-url [https://test.pypi.org/simple/](https://test.pypi.org/simple/) self-healing-localization==0.1.6
+pip install -i https://test.pypi.org/simple/ self-healing-localization==0.1.6
 ```
 
 ## Quick Start
@@ -227,7 +227,7 @@ If no language is provided programmatically, SHL reads the language from '''conf
 ### [v0.1.5] - 2026-01-19 - RELEASED
 
  - Fixed incorrect constructor argument usage in core engine. Internal fix, no API change.
- - Offical PyPI release
+ - Initial PyPI release.
 
 ### [v0.1.6] - 2026-07-26 - Test PyPI RELEASE
  - Core self-healing logic and modular engine
