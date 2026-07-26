@@ -33,20 +33,22 @@ This library is designed to be **dropped into any project** — from small scrip
 ## Key Features
 
 ### Self‑Healing UI Localization
-- Missing language files are created automatically  
-- Missing keys are added on the fly  
-- Base language is used as fallback  
+- Missing language files are created automatically.  
+- Missing keys are added on the fly.  
+- Base language is used as fallback.  
 
 ### Self‑Healing AI Prompt Template Localization
-- Missing template files are generated automatically  
-- Base templates are copied as fallback  
-- Missing template keys are added automatically  
+Large Language Model (LLM) applications often require localized prompt templates in addition to localized UI text. SHL manages both through the same self-healing localization engine.
+
+- Missing template files are generated automatically.  
+- Base templates are copied as fallback.  
+- Missing template keys are added automatically.  
 
 ### Unified High‑Level Engine
 The `LocalizationEngine` ties everything together:
-- Ensures languages exist  
-- Synchronizes all languages with the base language  
-- Provides clean access to UI text and templates  
+- Ensures languages exist.  
+- Synchronizes all languages with the base language.  
+- Provides a single interface for UI text and prompt templates.
 
 ### Zero Dependencies
 Pure Python. Works everywhere.
