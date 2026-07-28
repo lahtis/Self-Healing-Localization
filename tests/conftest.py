@@ -8,7 +8,6 @@ import json
 import tempfile
 import logging
 
-# Set test logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger("shl.tests")
 

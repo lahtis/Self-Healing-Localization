@@ -1,7 +1,7 @@
 """
 File: template_localizer.py
 Author: Tuomas Lähteenmäki
-Version: 0.1.6
+Version: 0.1.7
 License: MIT
 Description:
     Self-Healing Localizer for AI prompt templates.
@@ -11,6 +11,7 @@ Description:
     - Ensures template consistency across languages
     - Validates template keys and handles corruption gracefully
     - Consistent None vs "" handling
+    - Preserves region subtags for language variants
 """
 
 import json
@@ -31,15 +32,16 @@ class TemplateLocalizer:
     - Adds missing keys on the fly
     - Handles corrupted JSON files gracefully
     - Validates and normalizes all template keys
+    - Preserves region subtags for language variants
     """
 
     def __init__(self, lang_code=None, base_lang="en", folder="prompts"):
         self.folder = folder
-        
+
         # Determine language (persistent base fallback)
         if lang_code is None:
             lang_code = self._detect_language() or base_lang
-        
+
         # Validate and normalize language code
         self.lang_code = self._validate_lang_code(lang_code)
         self.base_lang = self._validate_lang_code(base_lang)
@@ -49,13 +51,13 @@ class TemplateLocalizer:
             os.makedirs(self.folder)
             logger.info(f"Created template folder: {self.folder}")
 
-        # File paths
+        # File paths (e.g., fi.json, zh-tw.json)
         self.lang_file = os.path.join(self.folder, f"{self.lang_code}.json")
         self.base_file = os.path.join(self.folder, f"{self.base_lang}.json")
 
         # Load or create template file
         self.templates = self._load_or_create()
-        
+
         logger.debug(f"TemplateLocalizer initialized: lang={self.lang_code}, templates={len(self.templates)}")
 
     def _detect_language(self) -> Optional[str]:
@@ -71,11 +73,31 @@ class TemplateLocalizer:
         return None
 
     def _validate_lang_code(self, lang_code: str) -> str:
-        """Validate and normalize language code"""
+        """
+        Validate and normalize language code.
+        Preserves region subtags for file naming (zh-TW → zh-tw.json).
+        """
         if not isinstance(lang_code, str) or not lang_code.strip():
             logger.warning(f"Invalid language code: {lang_code}, using 'en'")
             return "en"
-        return lang_code.strip().lower()
+
+        code = lang_code.strip().lower()
+
+        # If code contains hyphen, preserve the region (zh-TW → zh-tw)
+        if '-' in code:
+            parts = code.split('-')
+            if len(parts) == 2 and len(parts[0]) == 2 and len(parts[1]) == 2:
+                return f"{parts[0]}-{parts[1]}"
+            return parts[0]
+
+        # If code contains underscore (from LANG env), convert to hyphen
+        if '_' in code:
+            parts = code.split('_')
+            if len(parts) == 2 and len(parts[0]) == 2 and len(parts[1]) == 2:
+                return f"{parts[0]}-{parts[1]}"
+            return parts[0]
+
+        return code
 
     def _validate_key(self, key: str) -> str:
         """
@@ -85,17 +107,16 @@ class TemplateLocalizer:
         if not isinstance(key, str):
             logger.warning(f"Invalid template key type: {type(key)}")
             return ""
-        
-        # Normalize whitespace
+
         normalized = key.strip()
-        
+
         if not normalized:
             logger.debug("Empty template key detected")
             return ""
-        
+
         if normalized != key:
             logger.debug(f"Template key normalized: '{key}' → '{normalized}'")
-        
+
         return normalized
 
     def _load_json_safe(self, filepath: str) -> Dict[str, Any]:
@@ -106,17 +127,17 @@ class TemplateLocalizer:
         try:
             if not os.path.exists(filepath):
                 return {}
-                
+
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                
+
             if not isinstance(data, dict):
                 logger.error(f"JSON file does not contain a dictionary: {filepath}")
                 self._backup_corrupted_file(filepath)
                 return {}
-                
+
             return data
-            
+
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             logger.error(f"Corrupted JSON file: {filepath} - {e}")
             self._backup_corrupted_file(filepath)
@@ -141,16 +162,13 @@ class TemplateLocalizer:
         Load the template file if it exists.
         If missing, create it from the base language template.
         """
-        # Try to load template file
         if os.path.exists(self.lang_file):
             templates = self._load_json_safe(self.lang_file)
-            if templates:  # Successful load
+            if templates:
                 logger.debug(f"Loaded {len(templates)} templates from file: {self.lang_file}")
                 return templates
-            # If file was corrupted, templates is an empty dict
             logger.warning(f"Template file corrupted, loading base: {self.lang_file}")
-        
-        # Load base file (persistent fallback)
+
         base_templates = {}
         if os.path.exists(self.base_file):
             base_templates = self._load_json_safe(self.base_file)
@@ -158,28 +176,26 @@ class TemplateLocalizer:
                 logger.info(f"Loading from base templates: {self.base_file} ({len(base_templates)} templates)")
             else:
                 logger.warning(f"Base template file corrupted or empty: {self.base_file}")
-        
-        # Save new template file with base content
+
         try:
             self._save_templates(base_templates, self.lang_file)
             logger.info(f"Created new template file from base: {self.lang_file}")
         except Exception as e:
             logger.error(f"Template file save failed: {e}")
-        
+
         return base_templates
 
     def _save_templates(self, templates: Dict[str, Any], filepath: str = None):
         """Safely save templates to a JSON file"""
         if filepath is None:
             filepath = self.lang_file
-            
+
         try:
-            # Ensure directory exists
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
-            
+
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(templates, f, indent=4, ensure_ascii=False)
-                
+
         except Exception as e:
             logger.error(f"Template save failed: {filepath} - {e}")
 
@@ -205,23 +221,19 @@ class TemplateLocalizer:
         validated_key = self._validate_key(key)
         if not validated_key:
             return default_value if default_value else ""
-        
-        # Normalize default_value: None → ""
+
         normalized_default = default_value if default_value is not None else ""
-        
+
         if validated_key not in self.templates:
             self.templates[validated_key] = normalized_default
             self._save()
             logger.debug(f"Added missing template key: '{validated_key}'")
-        
-        # Return template, ensure we never return None
+
         text = self.templates.get(validated_key, normalized_default)
         return text if text is not None else ""
 
     def get(self, key, default_value=""):
-        """
-        Retrieve a template key with self-healing behavior.
-        """
+        """Retrieve a template key with self-healing behavior."""
         return self.ensure_key(key, default_value)
 
     def get_template(self, key: str, lang_code: str = None) -> Optional[str]:
@@ -232,19 +244,16 @@ class TemplateLocalizer:
         validated_key = self._validate_key(key)
         if not validated_key:
             return None
-        
-        # If different language requested, fetch from there
+
         if lang_code and lang_code != self.lang_code:
             return self._get_template_from_lang(validated_key, lang_code)
-        
-        # Get from own language
+
         text = self.templates.get(validated_key)
-        
-        # Fallback to base language (persistent)
+
         if text is None and self.lang_code != self.base_lang:
             logger.debug(f"Template key '{validated_key}' missing, fallback to base language")
             text = self._get_template_from_lang(validated_key, self.base_lang)
-        
+
         return text
 
     def _get_template_from_lang(self, key: str, lang_code: str) -> Optional[str]:
@@ -265,10 +274,9 @@ class TemplateLocalizer:
         if not validated_key:
             logger.warning("Attempted to set template for empty key")
             return ""
-        
-        # Normalize value: None → ""
+
         normalized_value = value if value is not None else ""
-        
+
         self.templates[validated_key] = normalized_value
         self._save()
         logger.debug(f"Template set: '{validated_key}' = '{normalized_value}'")
@@ -282,18 +290,18 @@ class TemplateLocalizer:
         validated_key = self._validate_key(key)
         if not validated_key:
             return ""
-        
+
         template = self.get_template(validated_key)
-        
+
         if template is None:
             logger.warning(f"Template '{validated_key}' not found for formatting")
-            return validated_key  # Return key name as fallback
-        
+            return validated_key
+
         try:
             return template.format(**kwargs)
         except (KeyError, ValueError) as e:
             logger.error(f"Template '{validated_key}' formatting error: {e}")
-            return template  # Return raw template
+            return template
 
     def has_key(self, key: str) -> bool:
         """Check if template key exists (normalized)"""
@@ -315,21 +323,16 @@ class TemplateLocalizer:
         return [(k, v if v is not None else "") for k, v in self.templates.items()]
 
     def __contains__(self, key):
-        """Check if template key exists (normalized)"""
         return self.has_key(key)
 
     def __getitem__(self, key):
-        """Get template key value (self-healing)"""
         return self.get(key)
 
     def __setitem__(self, key, value):
-        """Set template key value"""
         self.set_template(key, value)
 
     def __len__(self):
-        """Return number of template keys"""
         return len(self.templates)
 
     def __repr__(self):
-        """String representation for debugging"""
         return f"TemplateLocalizer(lang='{self.lang_code}', templates={len(self.templates)})"

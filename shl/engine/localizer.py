@@ -1,7 +1,7 @@
 """
 File: localizer.py
 Author: Tuomas Lähteenmäki
-Version: 0.1.6
+Version: 0.1.7
 License: MIT
 Description:
     Self-Healing Localizer for UI text.
@@ -10,7 +10,8 @@ Description:
     - Falls back to default language (English)
     - Handles corrupted JSON files gracefully
     - Validates and normalizes all keys
-    - Migrates legacy file format (lang_en.json → en.json)
+    - Migrates legacy file format (lang_xx.json → xx.json)
+    - Preserves region subtags in file names (zh-TW → zh-tw.json)
 """
 
 import json
@@ -32,6 +33,7 @@ class Localizer:
     - Handles corrupted JSON files gracefully
     - Validates and normalizes all keys
     - Migrates legacy file format automatically
+    - Preserves region subtags for language variants
     """
 
     def __init__(self, lang_code=None, base_lang="en", folder="locales"):
@@ -41,7 +43,7 @@ class Localizer:
         # Determine language (persistent base fallback)
         if lang_code is None:
             lang_code = self._detect_language() or base_lang
-        
+
         # Validate and normalize language code
         self.lang_code = self._validate_lang_code(lang_code)
         self.base_lang = self._validate_lang_code(base_lang)
@@ -51,13 +53,13 @@ class Localizer:
             os.makedirs(self.folder)
             logger.info(f"Created folder: {self.folder}")
 
-        # File paths (new format: en.json, fi.json)
+        # File paths (e.g., fi.json, zh-tw.json)
         self.lang_file = os.path.join(self.folder, f"{self.lang_code}.json")
         self.base_file = os.path.join(self.folder, f"{self.base_lang}.json")
 
         # Load or create language file
         self.texts = self._load_or_create()
-        
+
         logger.debug(f"Localizer initialized: lang={self.lang_code}, keys={len(self.texts)}")
 
     def _detect_language(self) -> Optional[str]:
@@ -73,11 +75,31 @@ class Localizer:
         return None
 
     def _validate_lang_code(self, lang_code: str) -> str:
-        """Validate and normalize language code"""
+        """
+        Validate and normalize language code.
+        Preserves region subtags for file naming (zh-TW → zh-tw.json).
+        """
         if not isinstance(lang_code, str) or not lang_code.strip():
             logger.warning(f"Invalid language code: {lang_code}, using 'en'")
             return "en"
-        return lang_code.strip().lower()
+
+        code = lang_code.strip().lower()
+
+        # If code contains hyphen, preserve the region (zh-TW → zh-tw)
+        if '-' in code:
+            parts = code.split('-')
+            if len(parts) == 2 and len(parts[0]) == 2 and len(parts[1]) == 2:
+                return f"{parts[0]}-{parts[1]}"
+            return parts[0]
+
+        # If code contains underscore (from LANG env), convert to hyphen
+        if '_' in code:
+            parts = code.split('_')
+            if len(parts) == 2 and len(parts[0]) == 2 and len(parts[1]) == 2:
+                return f"{parts[0]}-{parts[1]}"
+            return parts[0]
+
+        return code
 
     def _validate_key(self, key: str) -> str:
         """
@@ -87,17 +109,16 @@ class Localizer:
         if not isinstance(key, str):
             logger.warning(f"Invalid key type: {type(key)}")
             return ""
-        
-        # Normalize whitespace
+
         normalized = key.strip()
-        
+
         if not normalized:
             logger.debug("Empty key detected")
             return ""
-        
+
         if normalized != key:
             logger.debug(f"Key normalized: '{key}' → '{normalized}'")
-        
+
         return normalized
 
     def _load_json_safe(self, filepath: str) -> Dict[str, Any]:
@@ -108,17 +129,17 @@ class Localizer:
         try:
             if not os.path.exists(filepath):
                 return {}
-                
+
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                
+
             if not isinstance(data, dict):
                 logger.error(f"JSON file does not contain a dictionary: {filepath}")
                 self._backup_corrupted_file(filepath)
                 return {}
-                
+
             return data
-            
+
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             logger.error(f"Corrupted JSON file: {filepath} - {e}")
             self._backup_corrupted_file(filepath)
@@ -145,13 +166,13 @@ class Localizer:
         """
         if not os.path.exists(legacy_path):
             return None
-        
+
         if legacy_path == new_path:
             return None
-        
+
         logger.info(f"Found legacy file: {legacy_path}")
         legacy_texts = self._load_json_safe(legacy_path)
-        
+
         if legacy_texts:
             try:
                 self._save_texts(legacy_texts, new_path)
@@ -159,25 +180,24 @@ class Localizer:
                 return legacy_texts
             except Exception as e:
                 logger.error(f"Migration failed: {e}")
-        
+
         return None
 
     def _load_or_create(self) -> Dict[str, Any]:
         """Load or create language file with base fallback and legacy migration"""
-        # Try to load current format
         if os.path.exists(self.lang_file):
             texts = self._load_json_safe(self.lang_file)
             if texts:
                 logger.debug(f"Loaded {len(texts)} keys from file: {self.lang_file}")
                 return texts
             logger.warning(f"Language file corrupted, loading base: {self.lang_file}")
-        
-        # Check for legacy format (lang_en.json → en.json)
+
+        # Check for legacy format (lang_xx.json → xx.json)
         legacy_file = os.path.join(self.folder, f"lang_{self.lang_code}.json")
         legacy_texts = self._migrate_legacy_file(legacy_file, self.lang_file)
         if legacy_texts:
             return legacy_texts
-        
+
         # Load base file
         base_texts = {}
         if os.path.exists(self.base_file):
@@ -187,31 +207,26 @@ class Localizer:
             else:
                 logger.warning(f"Base file corrupted or empty: {self.base_file}")
         else:
-            # Check for legacy base format
             legacy_base = os.path.join(self.folder, f"lang_{self.base_lang}.json")
             base_texts = self._migrate_legacy_file(legacy_base, self.base_file) or {}
-        
-        # Save new language file with base texts
+
         try:
             self._save_texts(base_texts, self.lang_file)
             logger.info(f"Created new language file from base: {self.lang_file}")
         except Exception as e:
             logger.error(f"Language file save failed: {e}")
-        
+
         return base_texts
 
     def _save_texts(self, texts: Dict[str, Any], filepath: str = None):
         """Safely save texts to a JSON file"""
         if filepath is None:
             filepath = self.lang_file
-            
+
         try:
-            # Ensure directory exists
             os.makedirs(os.path.dirname(filepath), exist_ok=True)
-            
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(texts, f, indent=4, ensure_ascii=False)
-                
         except Exception as e:
             logger.error(f"Save failed: {filepath} - {e}")
 
@@ -237,14 +252,12 @@ class Localizer:
         validated_key = self._validate_key(key)
         if not validated_key:
             return default if default else ""
-        
-        # If key is missing, add with default
+
         if validated_key not in self.texts:
             self.texts[validated_key] = default if default else ""
             self._save()
             logger.debug(f"Added missing key: '{validated_key}' = '{default}'")
-        
-        # Return text, ensure we never return None
+
         text = self.texts.get(validated_key, default)
         return text if text is not None else ""
 
@@ -260,19 +273,16 @@ class Localizer:
         validated_key = self._validate_key(key)
         if not validated_key:
             return None
-        
-        # If different language requested, fetch from there
+
         if lang_code and lang_code != self.lang_code:
             return self._get_text_from_lang(validated_key, lang_code)
-        
-        # Get from own language
+
         text = self.texts.get(validated_key)
-        
-        # Fallback to base language (persistent)
+
         if text is None and self.lang_code != self.base_lang:
             logger.debug(f"UI key '{validated_key}' missing, fallback to base language")
             text = self._get_text_from_lang(validated_key, self.base_lang)
-        
+
         return text
 
     def _get_text_from_lang(self, key: str, lang_code: str) -> Optional[str]:
@@ -293,10 +303,8 @@ class Localizer:
         if not validated_key:
             logger.warning("Attempted to set text for empty key")
             return
-        
-        # Normalize value: None → ""
+
         normalized_value = value if value is not None else ""
-        
         self.texts[validated_key] = normalized_value
         self._save()
         logger.debug(f"Set: '{validated_key}' = '{normalized_value}'")
@@ -321,21 +329,16 @@ class Localizer:
         return [(k, v if v is not None else "") for k, v in self.texts.items()]
 
     def __contains__(self, key):
-        """Check if key exists (normalized)"""
         return self.has_key(key)
 
     def __getitem__(self, key):
-        """Get key value (self-healing)"""
         return self.L(key)
 
     def __setitem__(self, key, value):
-        """Set key value"""
         self.set_text(key, value)
 
     def __len__(self):
-        """Return number of keys"""
         return len(self.texts)
 
     def __repr__(self):
-        """String representation for debugging"""
         return f"Localizer(lang='{self.lang_code}', keys={len(self.texts)})"
