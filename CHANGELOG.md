@@ -7,7 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.1.6] - 2026-07-26
+## [0.1.7] - - 2026-07-28 - Test PyPI Preview
+
+### Added
+- GLFM (Global Language Family Mapper) integration via `LanguageValidator` class
+- 7,900+ language database with BCP-47 tags, fallback chains, and validation
+- Region subtag support: `zh-TW`, `pt-BR` get their own files (`zh-tw.json`, `pt-br.json`)
+- Dynamic language list fetching from LibreTranslate `/languages` API with 24h cache
+- Environment variable support via `.env` file (no external dependencies)
+- Optional MyMemory email parameter (`de`) for 30k words/day limit
+- LibreTranslate `api_key` and `base_url` as optional parameters
+- Detailed error messages for HTTP 403 (Forbidden) and 429 (Rate Limited)
+- API key masking in logs for security
+- Language code normalization: `en-US` → `en` for LibreTranslate compatibility
+- `get_supported_languages()` function for querying available languages
+- 11 new unit tests for language validator (106 total)
+
+### Changed
+- `_validate_lang_code()` preserves region subtags for file naming in both Localizer and TemplateLocalizer
+- `_detect_language()` converts `LANG` env var to proper format (`zh_TW` → `zh-TW`)
+- `translate_text()` accepts optional `libretranslate_url`, `libretranslate_api_key`, `mymemory_email`
+- `AITranslator` class accepts optional configuration parameters
+- Translation cache enforces max size (10,000 entries) to prevent memory issues
+- All hardcoded language mappings replaced with dynamic LibreTranslate API queries
+- `_normalize_lang_code()` handles Chinese subtags and region stripping
+- `get_stats()` now includes `glfm_loaded` key
+
+### Fixed
+- LibreTranslate HTTP error responses now include detailed debug logging
+- Language code compatibility between MyMemory (5-char) and LibreTranslate (2-char)
+- `LANG` environment variable parsing for region-specific locales
+
+---
+
+## [0.1.6] - 2026-07-26 - Test PyPI Preview
 
 ### Added
 - AI translations via MyMemory API with LibreTranslate fallback system
@@ -33,6 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Fixed
 - MyMemory `responseStatus` validation to detect failed translations
 - Corrupted JSON handling: exceptions now logged instead of crashing
+
+---
+
+## [0.1.5] - 2026-01-19
+
+### Fixed
+- Fixed incorrect constructor argument usage in core engine. Internal fix, no API change.
 
 ---
 
@@ -62,13 +102,6 @@ This version focuses on stabilizing the original implementation before the archi
 
 ### Notes
 - This version focuses on core functionality and stability.  
-
----
-
-## [0.1.5] - 2026-01-19
-
-### Fixed
-- Fixed incorrect constructor argument usage in core engine. Internal fix, no API change.
 
 ---
 
