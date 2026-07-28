@@ -6,7 +6,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-0.1.6-brightgreen)
+![Version](https://img.shields.io/badge/Version-0.1.7-brightgreen)
 ![Status](https://img.shields.io/badge/Status-Active-success)
 [![Downloads](https://static.pepy.tech/badge/self-healing-localization)](https://pepy.tech/project/self-healing-localization)
 
@@ -59,27 +59,25 @@ Pure Python. Works everywhere.
 
 ---
 
-### GLFM Language Database (New in v0.1.7)
-Optional integration with the Global Language Family Mapper:
-- 7,900+ languages with ISO 639-1/2/3/5 codes
-- BCP-47 compliant tags (e.g., `fi-Latn-FI`)
-- Automatic fallback chain resolution
-- Language validation against authoritative data
+## What's New in v0.1.7
 
----
+- GLFM Integration – 7,900+ languages with ISO 639, BCP-47, fallback chains
+- Region Subtag Support – `zh-TW`, `pt-BR` get their own files
+- Dynamic Language Detection – LibreTranslate `/languages` API with 24h cache
+- Environment Variable Support – `.env` file for API keys and configuration
+- Improved Error Handling – Clear messages for 403, 429 API errors
+- Language Code Normalization – Automatic `en-US` → `en` conversion
+- MyMemory Email Support – Optional email for 30k words/day limit
+- 106 Unit Tests – Full coverage for all components
 
-## What's New in v0.1.6
-
+All v0.1.6 features included:
 - AI Translations – MyMemory + LibreTranslate fallback system
 - Translation Cache – Automatically reduces API calls
 - Corrupted File Protection – Automatic .bak backup creation
 - Unified Logging – `error.log` with configurable levels
 - Dynamic Language Switching – `set_language()` on the fly
-- Comprehensive Tests – pytest unit tests for all components
 - Key Validation – Type, emptiness, and whitespace checks
 - Legacy File Migration – Automatic `lang_xx.json` → `xx.json` conversion
-
----
 
 ## Installation
 
@@ -245,7 +243,6 @@ engine = LocalizationEngine(
     template_folder="prompts",
     config=None,           # Custom configuration dict
     glfm_path=None         # Path to GLFM unified_languages.json
-)
 )
 ```
 
