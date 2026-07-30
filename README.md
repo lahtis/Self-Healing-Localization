@@ -1,13 +1,14 @@
-# Self‑Healing Localization Layer
+# Self‑Healing Localization
 ### Automatic, self‑maintaining localization for any Python project  
 **Author:** Tuomas Lähteenmäki  
 **License:** MIT  
-**Version:** 0.1.7
+**Version:** 0.2.0
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-0.1.7-brightgreen)
-![Status](https://img.shields.io/badge/Status-Active-success)
+[![PyPI](https://img.shields.io/pypi/v/self-healing-localization)](https://pypi.org/project/self-healing-localization/)
+[![TestPyPI](https://img.shields.io/badge/TestPyPI-Preview-blueviolet)](https://test.pypi.org/project/self-healing-localization/)
+![Status: Beta](https://img.shields.io/badge/Status-Beta-yellow)
 [![Downloads](https://static.pepy.tech/badge/self-healing-localization)](https://pepy.tech/project/self-healing-localization)
 
 ---
@@ -22,6 +23,7 @@ It provides:
 - Fallback to a base language (default: English).  
 - Unified support for both UI text and optional AI prompt templates.
 - GLFM integration for 7,900+ languages with BCP-47 tags and fallback chains.
+- - **NEW in v0.2.0:** Smart translation routing between MyMemory and LibreTranslate.
 
 This library is designed to be **dropped into any project** — from small scripts to full applications — and it will maintain localization files automatically as the project grows.
 
@@ -54,23 +56,40 @@ The `LocalizationEngine` ties everything together:
 - Provides a single interface for UI text and prompt templates.
 - Optional GLFM language validation with BCP-47 tags.
 
+### Smart Translation Routing (NEW in v0.2.0)
+- Automatically selects the best translation service for each language pair.
+- MyMemory as primary service, LibreTranslate as fallback.
+- Automatic fallback if primary service fails (rate limit, downtime, etc.).
+- Language support detection with 24-hour cache.
+- AI translation enabled only when configured (`ai_translation_enabled=False` by default).
+
 ### Zero Dependencies
 Pure Python. Works everywhere.
 
 ---
 
-## What's New in v0.1.7
+## What's New in v0.2.0
 
-- GLFM Integration – 7,900+ languages with ISO 639, BCP-47, fallback chains
-- Region Subtag Support – `zh-TW`, `pt-BR` get their own files
-- Dynamic Language Detection – LibreTranslate `/languages` API with 24h cache
-- Environment Variable Support – `.env` file for API keys and configuration
-- Improved Error Handling – Clear messages for 403, 429 API errors
-- Language Code Normalization – Automatic `en-US` → `en` conversion
-- MyMemory Email Support – Optional email for 30k words/day limit
-- 106 Unit Tests – Full coverage for all components
+- **Smart Translation Routing** – Automatically selects MyMemory or LibreTranslate based on language support.
+- **Automatic Provider Fallback** – If one service fails, automatically switches to the other.
+- **Comprehensive Error Classification** – 6 specific exception types for different error scenarios.
+- **Static Fallback Language Lists** – JSON files for easy maintenance when APIs are unavailable.
+- **MyMemory Language Support Detection** – Test-based detection with 24-hour cache.
+- **`ai_translation_enabled` Config** – AI translations disabled by default for predictable behavior.
+- **LibreTranslate Official Instance** – Default URL changed to `https://libretranslate.com`.
+- **DRY Architecture** – Centralized language code handling in `lang_utils.py`.
+- **106+ Unit Tests** – Full coverage for all components.
 
-All v0.1.6 features included:
+v0.1.7 Development Features:
+- GLFM Integration – 7,900+ languages with ISO 639, BCP-47, fallback chains.
+- Region Subtag Support – `zh-TW`, `pt-BR` get their own files.
+- Environment Variable Support – `.env` file for API keys and configuration.
+- Translation Cache – Automatically reduces API calls.
+- Corrupted File Protection – Automatic `.bak` backup creation.
+- Unified Logging – `error.log` with configurable levels.
+- Dynamic Language Switching – `set_language()` on the fly.
+
+v0.1.6 Development Features:
 - AI Translations – MyMemory + LibreTranslate fallback system
 - Translation Cache – Automatically reduces API calls
 - Corrupted File Protection – Automatic .bak backup creation
@@ -81,28 +100,25 @@ All v0.1.6 features included:
 
 ## Installation
 
-### Stable
-Stable version available via PyPI (v0.1.5):
-
+### Stable (PyPI)
 ```bash
 pip install self-healing-localization
 ```
 ---
 
-### Test
-Test version available via TestPyPI preview (v0.1.7):
-
+### Latest Development (TestPyPI)
 ```bash
-pip install -i https://test.pypi.org/simple/ self-healing-localization==0.1.7
+pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.0
 ```
 
 ## Environment Variables (.env)
 
 Create a .env file in your project root (optional):
+
 ```ini
 MYMEMORY_EMAIL=your@email.com
 LIBRETRANSLATE_API_KEY=your-api-key
-LIBRETRANSLATE_URL=https://translate.argosopentech.com
+LIBRETRANSLATE_URL=https://libretranslate.com
 ```
 
 ## Quick Start
@@ -122,8 +138,20 @@ title = engine.ui_text("welcome_msg", "Welcome to the App!")
 print(title)
 ```
 
+### 2. Enable AI Translation
 
-### 2. Retrieve UI text
+```python
+# Enable AI translations in config
+config = {"ai_translation_enabled": True}
+engine = LocalizationEngine(lang_code="fi", config=config)
+
+# Now missing texts will be automatically translated
+text = engine.ui_text("new_key", "Hello World!")
+# → "Hei maailma!" (automatically translated to Finnish)
+
+```
+
+### 3. Retrieve UI text
 
 ```python
 title = engine.ui_text("app_title", "My Application")
@@ -131,7 +159,7 @@ title = engine.ui_text("app_title", "My Application")
 
 If `"app_title"` does not exist in `locales/en.json`, it will be added automatically.
 
-### 3. Retrieve prompt templates
+### 4. Retrieve prompt templates
 
 ```python
 summary_prompt = engine.template("summary_short", "Summarize the text:")
@@ -139,7 +167,7 @@ summary_prompt = engine.template("summary_short", "Summarize the text:")
 
 If `prompts/fi.json` does not exist, it will be created automatically using `prompts/en.json` as the base.
 
-### 4. AI Prompt Templates
+## 4.1 AI Prompt Templates
 Keep your AI prompts localized just like your UI strings.
 
 ```python
@@ -147,13 +175,13 @@ Keep your AI prompts localized just like your UI strings.
 prompt = engine.template("summarize_task", "Please summarize the following text:")
 ```
 
-### 5. Dynamic Language Switching (New in v0.1.6)
+### 5. Dynamic Language Switching
 
 Switch languages on the fly without restarting your application.
 
 ```python
 # Start in English
-engine = LocalizationEngine(lang_code="en")
+engine = LocalizationEngine(lang_code="en", config={"ai_translation_enabled": True})
 
 # Switch to Finnish
 engine.set_language("fi")
@@ -164,7 +192,7 @@ engine.set_language("sv")
 print(engine.ui_text("greeting", "Hello!"))  # "Hej!" (AI-translated)
 ```
 
-### 6. Region Subtag Support (New in v0.1.7)
+### 6. Region Subtag Support
 
 ```python
 # Brazilian Portuguese and European Portuguese in separate files
@@ -178,7 +206,7 @@ engine = LocalizationEngine(lang_code="zh-CN")  # → zh-cn.json
 
 ### 7. Synchronize All Languages
 
-Sync all keys from the base language to the current language.
+Sync all keys from the fallback chain (GLFM fallback → base language) to the current language.
 
 ```python
 engine.sync()
@@ -194,6 +222,16 @@ engine = LocalizationEngine(
 stats = engine.get_stats()
 print(stats["glfm_loaded"])  # True
 print(stats["lang_code"])    # fi
+print(stats["glfm_fallback"]) # en (if configured)
+```
+
+### 9. Direct Translation with Smart Routing
+```python
+from shl.engine.ai_translation import translate_text
+
+# Automatically chooses the best provider
+result = translate_text("Hello World", target_lang="fi")
+print(result)  # "Hei maailma"
 ```
 
 ---
@@ -206,15 +244,21 @@ self-healing-localization/
 │
 ├── shl/
 │   ├── engine/
-│   │   ├── core.py
-│   │   ├── localizer.py
-│   │   ├── template_localizer.py
-│   │   ├── ai_translation.py
+│   │   ├── core.py                 # Main engine
+│   │   ├── localizer.py            # UI localization
+│   │   ├── template_localizer.py   # Template localization
+│   │   ├── ai_translation.py       # Translation with smart routing
+│   │   └── __init__.py
+│   ├── utils/
+│   │   ├── lang_utils.py           # BCP-47 language code handling
 │   │   └── __init__.py
 │   ├── data/
-│   │   └── unified_languages.json  # GLFM database
-│   ├── language_validator.py
-│   ├── logging_config.py
+│   │   ├── unified_languages.json  # GLFM database
+│   │   └── languages/
+│   │       ├── mymemory_fallback.json
+│   │       └── libretranslate_fallback.json
+│   ├── language_validator.py       # GLFM validation
+│   ├── logging_config.py           # Unified logging
 │   └── __init__.py
 │
 ├── tests/
@@ -223,6 +267,7 @@ self-healing-localization/
 │   ├── test_core.py
 │   ├── test_ai_translation.py
 │   ├── test_language_validator.py
+│   ├── test_lang_utils.py
 │   └── conftest.py
 │
 ├── pyproject.toml
@@ -231,7 +276,7 @@ self-healing-localization/
 
 ---
 
-## API Reference (v0.1.7)
+## API Reference (v0.2.0)
 
 ### LocalizationEngine
 
@@ -257,6 +302,16 @@ engine = LocalizationEngine(
 | `engine.ensure_ui_key(key, default="")` | Ensure UI key exists |
 | `engine.ensure_template_key(key, default="")` | Ensure template key exists |
 
+
+### Configuration Options (config.conf)
+```ini
+[SETTINGS]
+language = fi
+ai_translation_enabled = false   # Enable AI translation (default: false)
+fallback_to_base = true
+```
+If no language is provided programmatically, SHL reads the language from '''config.conf'''.
+
 ### AITranslator
 
 ```python
@@ -273,74 +328,62 @@ text = translator.translate("Hello", target_lang="fi")
 batch = translator.batch_translate({"a": "Hello", "b": "Goodbye"}, "fi")
 ```
 
-| Method | Description |
-|--------|-------------|
-| `translate_text(text, target_lang, source_lang)` | Translate with full fallback chain |
-| `get_supported_languages(base_url)` | Fetch languages from LibreTranslate instance |
 
+### Translation Functions
+```python
+from shl.engine.ai_translation import (
+    translate_text,
+    get_all_supported_languages,
+    get_best_provider,
+    get_supported_languages,
+    RateLimitExceededError,
+    ServiceUnavailableError,
+    LanguageNotSupportedError,
+    ProviderAccessError,
+    InvalidRequestError,
+    TranslationError
+)
 
-### Configuration (config.conf)
+# Smart translation with automatic provider selection
+result = translate_text("Hello", "fi", smart_routing=True)
 
-```ini
-[SETTINGS]
-language = fi
-ai_translation_enabled = true
-fallback_to_base = true
+# Get supported languages from both services
+langs = get_all_supported_languages()
+print(f"MyMemory: {len(langs['mymemory'])} languages")
+print(f"LibreTranslate: {len(langs['libretranslate'])} languages")
+
+# Get best provider for a language pair
+provider = get_best_provider("fi", "en")  # "mymemory" or "libretranslate"
 ```
-If no language is provided programmatically, SHL reads the language from '''config.conf'''.
 
 ### Translation Services
 
-| Service | Role | Limits |
+| Service | Role | Limits | Notes
 |--------|-------------|
-| MyMemory | Primary | 1,000 chars/day (30,000 with email)|
-| LibreTranslate | Fallback | Public instance, rate limited |
+| MyMemory | Primary | 1,000 chars/day (30,000 with email) | Translation memory + MT fallback |
+| LibreTranslate | Fallback | Public instance, rate limited | Open-source MT engine | 
 
 Both work without API keys. API key support available via .env file.
 
-## 🛠 Roadmap
+## Roadmap
 
-### [v0.1.x]
-- Core self-healing logic and modular engine.
+### [v0.2.0] - 2026-07-30 - CURRENT RELEASE
+ - Smart translation routing (MyMemory + LibreTranslate)
+ - Automatic provider fallback
+ - Comprehensive error classification
+ - Static fallback language lists (JSON)
+ - MyMemory language support detection
+ - ai_translation_enabled config (default: False)
+ - DRY architecture with lang_utils.py
+ - 106+ unit tests
 
-### [v0.1.4]
-- Basic automatic translation engine (e.g., English -> Finnish).
-
-### [v0.1.5] - 2026-01-19 - RELEASED
-
- - Fixed incorrect constructor argument usage in core engine. Internal fix, no API change.
- - Initial PyPI release.
-
-### [v0.1.6] - 2026-07-26 - Test PyPI RELEASE
- - Core self-healing logic and modular engine
- - AI translations (MyMemory + LibreTranslate fallback)
- - Translation cache for API call optimization
- - Corrupted JSON file backup (.bak)
- - Unified logging with configurable levels
- - Dynamic language switching (`set_language()`)
- - Key validation and normalization
- - Unit tests (pytest)
- - None vs "" consistency
- - Test PyPI release
-
-### [v0.1.7] - Current Test PyPI Release
-
- - GLFM integration (7,900+ languages)
- - Region subtag support (zh-TW, pt-BR)
- - Dynamic language detection with 24h cache
- - Environment variable support (.env)
- - Improved error handling (403, 429)
- - Language code normalization
- - MyMemory email support
- - 106 unit tests
-
-### [v0.2.0]
+### [v0.3.0]
  - AI‑powered translation (Gemini / Groq / OpenAI)
  - CLI tool (`selfheal sync`, `selfheal translate`)
  - Automatic detection of missing keys across all languages
  - Async support
 
-### [v0.3.0]
+### [v0.4.0]
  - Web‑based Localization Studio
  - Visual diffing of translations
  - Export/import language packs

@@ -1,13 +1,13 @@
 """
 File: localizer.py
 Author: Tuomas Lähteenmäki
-Version: 0.1.7
+Version: 0.2.0
 License: MIT
 Description:
     Self-Healing Localizer for UI text.
     - Creates missing language files automatically
     - Adds missing keys on the fly
-    - Falls back to default language (English)
+    - Falls back to default language (English) - controlled by caller
     - Handles corrupted JSON files gracefully
     - Validates and normalizes all keys
     - Migrates legacy file format (lang_xx.json → xx.json)
@@ -21,43 +21,33 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 
+from shl.utils.lang_utils import normalize_full_tag, base_language
+
 logger = logging.getLogger(__name__)
 
 
 class Localizer:
     """
     Self-Healing Localizer for UI text.
-    - Creates missing language files automatically
-    - Adds missing keys on the fly
-    - Falls back to default language (English)
-    - Handles corrupted JSON files gracefully
-    - Validates and normalizes all keys
-    - Migrates legacy file format automatically
-    - Preserves region subtags for language variants
+    Uses BCP-47 language tags with region subtag support.
     """
 
     def __init__(self, lang_code=None, base_lang="en", folder="locales"):
         self.folder = folder
-        self.base_lang = base_lang
 
-        # Determine language (persistent base fallback)
         if lang_code is None:
             lang_code = self._detect_language() or base_lang
 
-        # Validate and normalize language code
-        self.lang_code = self._validate_lang_code(lang_code)
-        self.base_lang = self._validate_lang_code(base_lang)
+        self.lang_code = normalize_full_tag(lang_code)
+        self.base_lang = base_language(base_lang)
 
-        # Ensure folder exists
         if not os.path.exists(self.folder):
             os.makedirs(self.folder)
             logger.info(f"Created folder: {self.folder}")
 
-        # File paths (e.g., fi.json, zh-tw.json)
         self.lang_file = os.path.join(self.folder, f"{self.lang_code}.json")
         self.base_file = os.path.join(self.folder, f"{self.base_lang}.json")
 
-        # Load or create language file
         self.texts = self._load_or_create()
 
         logger.debug(f"Localizer initialized: lang={self.lang_code}, keys={len(self.texts)}")
@@ -74,38 +64,8 @@ class Localizer:
             logger.debug(f"Language detection from config failed: {e}")
         return None
 
-    def _validate_lang_code(self, lang_code: str) -> str:
-        """
-        Validate and normalize language code.
-        Preserves region subtags for file naming (zh-TW → zh-tw.json).
-        """
-        if not isinstance(lang_code, str) or not lang_code.strip():
-            logger.warning(f"Invalid language code: {lang_code}, using 'en'")
-            return "en"
-
-        code = lang_code.strip().lower()
-
-        # If code contains hyphen, preserve the region (zh-TW → zh-tw)
-        if '-' in code:
-            parts = code.split('-')
-            if len(parts) == 2 and len(parts[0]) == 2 and len(parts[1]) == 2:
-                return f"{parts[0]}-{parts[1]}"
-            return parts[0]
-
-        # If code contains underscore (from LANG env), convert to hyphen
-        if '_' in code:
-            parts = code.split('_')
-            if len(parts) == 2 and len(parts[0]) == 2 and len(parts[1]) == 2:
-                return f"{parts[0]}-{parts[1]}"
-            return parts[0]
-
-        return code
-
     def _validate_key(self, key: str) -> str:
-        """
-        Validate and normalize key.
-        Consistent None vs '' policy: always returns a string.
-        """
+        """Validate and normalize key."""
         if not isinstance(key, str):
             logger.warning(f"Invalid key type: {type(key)}")
             return ""
@@ -122,10 +82,7 @@ class Localizer:
         return normalized
 
     def _load_json_safe(self, filepath: str) -> Dict[str, Any]:
-        """
-        Safely load a JSON file.
-        If the file is corrupted, create a backup and return an empty dict.
-        """
+        """Safely load a JSON file."""
         try:
             if not os.path.exists(filepath):
                 return {}
@@ -160,10 +117,7 @@ class Localizer:
             logger.error(f"Backup creation failed: {e}")
 
     def _migrate_legacy_file(self, legacy_path: str, new_path: str) -> Optional[Dict[str, Any]]:
-        """
-        Migrate legacy file format (lang_xx.json) to new format (xx.json).
-        Returns the loaded data if successful, None otherwise.
-        """
+        """Migrate legacy file format (lang_xx.json) to new format (xx.json)."""
         if not os.path.exists(legacy_path):
             return None
 
@@ -192,13 +146,11 @@ class Localizer:
                 return texts
             logger.warning(f"Language file corrupted, loading base: {self.lang_file}")
 
-        # Check for legacy format (lang_xx.json → xx.json)
         legacy_file = os.path.join(self.folder, f"lang_{self.lang_code}.json")
         legacy_texts = self._migrate_legacy_file(legacy_file, self.lang_file)
         if legacy_texts:
             return legacy_texts
 
-        # Load base file
         base_texts = {}
         if os.path.exists(self.base_file):
             base_texts = self._load_json_safe(self.base_file)
@@ -231,24 +183,20 @@ class Localizer:
             logger.error(f"Save failed: {filepath} - {e}")
 
     def _save(self):
-        """Save current texts (backwards compatibility)"""
+        """Save current texts"""
         self._save_texts(self.texts)
 
     def set_language(self, lang_code: str):
         """Switch active language and load new texts"""
-        validated_lang = self._validate_lang_code(lang_code)
-        if validated_lang != self.lang_code:
-            self.lang_code = validated_lang
+        new_lang = normalize_full_tag(lang_code)
+        if new_lang != self.lang_code:
+            self.lang_code = new_lang
             self.lang_file = os.path.join(self.folder, f"{self.lang_code}.json")
             self.texts = self._load_or_create()
-            logger.info(f"Language switched to: {validated_lang}")
+            logger.info(f"Language switched to: {new_lang}")
 
     def L(self, key, default=""):
-        """
-        Self-healing key lookup.
-        If key is missing, add it automatically.
-        Consistent None vs '' policy: always returns a string.
-        """
+        """Self-healing key lookup. If key is missing, add it automatically."""
         validated_key = self._validate_key(key)
         if not validated_key:
             return default if default else ""
@@ -265,25 +213,35 @@ class Localizer:
         """Get key value (same as L)"""
         return self.L(key, default)
 
-    def get_text(self, key: str, lang_code: str = None) -> Optional[str]:
+    def get_text(self, key: str, lang_code: str = None, fallback: bool = True) -> Optional[str]:
         """
         Return text or None if key doesn't exist.
-        Checks own language first, then base language.
+        Checks own language first, then base language if fallback=True.
+        
+        Args:
+            key: Key to look up
+            lang_code: Language code to use (default: self.lang_code)
+            fallback: Whether to fallback to base language (default: True)
         """
         validated_key = self._validate_key(key)
         if not validated_key:
             return None
 
-        if lang_code and lang_code != self.lang_code:
-            return self._get_text_from_lang(validated_key, lang_code)
+        target_lang = lang_code or self.lang_code
 
-        text = self.texts.get(validated_key)
+        # Hae kohdekielestä
+        text = self._get_text_from_lang(validated_key, target_lang)
+        if text is not None:
+            return text
 
-        if text is None and self.lang_code != self.base_lang:
+        # Fallback base-kieleen VAIN JOS fallback=True
+        if fallback and target_lang != self.base_lang:
             logger.debug(f"UI key '{validated_key}' missing, fallback to base language")
             text = self._get_text_from_lang(validated_key, self.base_lang)
+            if text is not None:
+                return text
 
-        return text
+        return None
 
     def _get_text_from_lang(self, key: str, lang_code: str) -> Optional[str]:
         """Get text from a specific language file"""
@@ -298,7 +256,7 @@ class Localizer:
         return None
 
     def set_text(self, key: str, value: str):
-        """Set text and save (consistent None vs '' handling)"""
+        """Set text and save"""
         validated_key = self._validate_key(key)
         if not validated_key:
             logger.warning("Attempted to set text for empty key")
@@ -310,7 +268,7 @@ class Localizer:
         logger.debug(f"Set: '{validated_key}' = '{normalized_value}'")
 
     def has_key(self, key: str) -> bool:
-        """Check if key exists (normalized)"""
+        """Check if key exists"""
         validated_key = self._validate_key(key)
         if not validated_key:
             return False
@@ -321,11 +279,11 @@ class Localizer:
         return list(self.texts.keys())
 
     def values(self):
-        """Return all values (None → '' normalized)"""
+        """Return all values"""
         return [v if v is not None else "" for v in self.texts.values()]
 
     def items(self):
-        """Return all key-value pairs (None → '' normalized)"""
+        """Return all key-value pairs"""
         return [(k, v if v is not None else "") for k, v in self.texts.items()]
 
     def __contains__(self, key):

@@ -1,7 +1,7 @@
 """
 File: logging_config.py
 Author: Tuomas Lähteenmäki
-Version: 0.1.6
+Version: 0.1.8
 License: MIT
 Description:
     Unified logging configuration for the Self-Healing Localization Layer.

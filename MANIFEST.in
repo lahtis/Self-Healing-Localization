@@ -2,8 +2,23 @@ include README.md
 include LICENSE
 include CHANGELOG.md
 include CONTRIBUTING.md
+
+# SHL source code
 recursive-include shl *.py
 recursive-include shl *.json
+
+# Tests (if you want them in the package)
 recursive-include tests *.py
+
+# Example data (optional - for users to see structure)
 recursive-include locales *.json
 recursive-include prompts *.json
+
+# Exclude unnecessary files
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude __pycache__
+global-exclude .DS_Store
+global-exclude .git*
+global-exclude .env
+global-exclude *.bak

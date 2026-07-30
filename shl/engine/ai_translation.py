@@ -1,13 +1,18 @@
 """
 File: ai_translation.py — module for AI-powered translations.
 Author: Tuomas Lähteenmäki
-Version: 0.1.7
+Version: 0.2.0
 License: MIT
 Description:
     Provides AI-powered translation capabilities with automatic fallback.
     - MyMemory as primary translation service (with optional email for higher limits)
-    - LibreTranslate as fallback service (with automatic language code normalization)
-    - Dynamic language list fetching with 24h cache
+    - LibreTranslate as fallback service
+    - Smart routing: chooses best service based on language support
+    - Automatic fallback if primary service fails (rate limit, downtime, etc.)
+    - Error classification: rate limit, service unavailable, language not supported
+    - Dynamic language list fetching from LibreTranslate with 24h cache
+    - Fallback static language list from JSON file if API unavailable
+    - MyMemory language support detection via test translation (cached 24h)
     - Translation caching to reduce API calls
     - API key support via .env file
     - Detailed error logging for common API errors (403, 429, etc.)
@@ -24,7 +29,43 @@ from urllib.request import Request, urlopen
 from urllib.parse import quote
 from urllib.error import URLError, HTTPError
 
+from shl.utils.lang_utils import base_language
+
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Custom exceptions for translation errors
+# ---------------------------------------------------------------------------
+
+class TranslationError(Exception):
+    """Base exception for translation errors."""
+    pass
+
+
+class ServiceUnavailableError(TranslationError):
+    """Translation service is down or unreachable."""
+    pass
+
+
+class RateLimitExceededError(TranslationError):
+    """Rate limit or quota exceeded."""
+    pass
+
+
+class LanguageNotSupportedError(TranslationError):
+    """Language not supported by the service."""
+    pass
+
+
+class ProviderAccessError(TranslationError):
+    """Access denied (banned, invalid API key, etc.)."""
+    pass
+
+
+class InvalidRequestError(TranslationError):
+    """Invalid request (bad parameters, etc.)."""
+    pass
 
 
 # ---------------------------------------------------------------------------
@@ -62,9 +103,39 @@ MYMEMORY_EMAIL = os.environ.get('MYMEMORY_EMAIL', '')
 LIBRETRANSLATE_API_KEY = os.environ.get('LIBRETRANSLATE_API_KEY', '')
 LIBRETRANSLATE_URL = os.environ.get(
     'LIBRETRANSLATE_URL',
-    'https://translate.argosopentech.com'
+    'https://libretranslate.com'
 )
-SHL_VERSION = "0.1.7"
+SHL_VERSION = "0.2.0"
+
+# Timeouts
+MYMEMORY_TIMEOUT = 10
+LIBRETRANSLATE_TIMEOUT = 15
+
+# Cache TTLs
+TRANSLATION_CACHE_TTL = 3600  # 1 hour
+LANGUAGE_CACHE_TTL = 86400    # 24 hours
+
+
+# ---------------------------------------------------------------------------
+# Static fallback language lists from JSON files
+# ---------------------------------------------------------------------------
+
+def _load_fallback_languages(filename: str) -> Dict[str, str]:
+    """Load fallback language list from JSON file."""
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        json_path = os.path.join(base_dir, 'data', 'languages', filename)
+        
+        with open(json_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning(f"Failed to load fallback languages from {filename}: {e}")
+        return {}
+
+
+# Load fallback lists
+_MYMEMORY_FALLBACK_LANGUAGES = _load_fallback_languages('mymemory_fallback.json')
+_LIBRETRANSLATE_FALLBACK_LANGUAGES = _load_fallback_languages('libretranslate_fallback.json')
 
 
 # ---------------------------------------------------------------------------
@@ -74,25 +145,16 @@ SHL_VERSION = "0.1.7"
 class TranslationCache:
     """Translation cache to reduce API calls"""
 
-    def __init__(self, ttl: int = 3600, max_size: int = 10000):
-        """
-        Initialize cache.
-
-        Args:
-            ttl: Time-to-live in seconds (default: 1 hour)
-            max_size: Maximum number of cache entries (default: 10000)
-        """
+    def __init__(self, ttl: int = TRANSLATION_CACHE_TTL, max_size: int = 10000):
         self.cache: Dict[str, tuple] = {}
         self.ttl = ttl
         self.max_size = max_size
 
     def _generate_key(self, text: str, source_lang: str, target_lang: str) -> str:
-        """Generate cache key based on text and languages"""
         raw_key = f"{text}:{source_lang}:{target_lang}"
         return hashlib.md5(raw_key.encode('utf-8')).hexdigest()
 
     def get(self, text: str, source_lang: str, target_lang: str) -> Optional[str]:
-        """Get translation from cache"""
         key = self._generate_key(text, source_lang, target_lang)
 
         if key in self.cache:
@@ -101,28 +163,21 @@ class TranslationCache:
                 logger.debug(f"Cache hit: '{text[:50]}...'")
                 return cached_text
             del self.cache[key]
-            logger.debug("Expired cache entry removed")
 
         return None
 
     def set(self, text: str, translated: str, source_lang: str, target_lang: str) -> None:
-        """Store translation in cache"""
         if len(self.cache) >= self.max_size:
             oldest_key = min(self.cache, key=lambda k: self.cache[k][1])
             del self.cache[oldest_key]
-            logger.debug("Cache full, oldest entry removed")
 
         key = self._generate_key(text, source_lang, target_lang)
         self.cache[key] = (translated, time.time())
-        logger.debug(f"Cached: '{text[:50]}...' -> '{translated[:50]}...'")
 
     def clear(self) -> None:
-        """Clear cache"""
         self.cache.clear()
-        logger.debug("Cache cleared")
 
     def size(self) -> int:
-        """Return cache size"""
         return len(self.cache)
 
 
@@ -130,23 +185,17 @@ _translation_cache = TranslationCache()
 
 
 # ---------------------------------------------------------------------------
-# Language list cache
+# Language list cache (24 hours) for LibreTranslate
 # ---------------------------------------------------------------------------
 
 _language_cache: Dict[str, tuple] = {}
-_LANGUAGE_CACHE_TTL = 86400  # 24 hours
 
 
 def get_supported_languages(base_url: str = None) -> Dict[str, str]:
     """
     Fetch supported languages from a LibreTranslate instance.
     Results are cached for 24 hours.
-
-    Args:
-        base_url: Base URL of the LibreTranslate instance
-
-    Returns:
-        Dictionary of {language_code: language_name}
+    Falls back to static list from JSON file if API unavailable.
     """
     if base_url is None:
         base_url = LIBRETRANSLATE_URL
@@ -155,13 +204,13 @@ def get_supported_languages(base_url: str = None) -> Dict[str, str]:
 
     if cache_key in _language_cache:
         languages, timestamp = _language_cache[cache_key]
-        if time.time() - timestamp < _LANGUAGE_CACHE_TTL:
+        if time.time() - timestamp < LANGUAGE_CACHE_TTL:
             return languages
 
     try:
         url = f"{cache_key}/languages"
         req = Request(url, headers={
-            'User-Agent': f'Mozilla/5.0 (SHL-Client/{SHL_VERSION})',
+            'User-Agent': f'SHL-Client/{SHL_VERSION}',
             'Accept': 'application/json'
         })
 
@@ -180,32 +229,85 @@ def get_supported_languages(base_url: str = None) -> Dict[str, str]:
             return languages
 
     except Exception as e:
-        logger.error(f"Failed to fetch language list: {e}")
-        if cache_key in _language_cache:
-            logger.info("Using cached language list")
-            return _language_cache[cache_key][0]
-        return {}
+        logger.warning(f"Failed to fetch language list from LibreTranslate: {e}")
+        logger.info("Using static fallback language list from JSON")
+        _language_cache[cache_key] = (_LIBRETRANSLATE_FALLBACK_LANGUAGES, time.time())
+        return _LIBRETRANSLATE_FALLBACK_LANGUAGES
 
 
 # ---------------------------------------------------------------------------
-# Language code normalization
+# MyMemory language support detection (test translation with cache)
 # ---------------------------------------------------------------------------
 
-def _normalize_lang_code(lang_code: str) -> str:
+_mymemory_support_cache: Dict[str, tuple] = {}
+
+
+def is_language_supported_by_mymemory(lang_code: str) -> bool:
     """
-    Normalize a language code for LibreTranslate.
-    Strips region subtags (e.g., 'en-US' → 'en').
-    Handles special cases like Chinese.
+    Test whether MyMemory supports a language.
+    Results are cached for 24 hours.
+    Falls back to static list from JSON if test fails.
     """
-    code = lang_code.strip().lower()
+    lang = base_language(lang_code)
+    
+    if lang in _mymemory_support_cache:
+        supported, timestamp = _mymemory_support_cache[lang]
+        if time.time() - timestamp < LANGUAGE_CACHE_TTL:
+            return supported
 
-    if code.startswith('zh'):
-        return 'zh'
+    try:
+        # Test with a tiny translation
+        result = _translate_mymemory("test", lang, "en", email=MYMEMORY_EMAIL)
+        supported = result is not None and result != "test"
+    except LanguageNotSupportedError:
+        supported = False
+    except Exception:
+        # If test fails, check fallback list
+        supported = lang in _MYMEMORY_FALLBACK_LANGUAGES
 
-    if '-' in code:
-        code = code.split('-')[0]
+    _mymemory_support_cache[lang] = (supported, time.time())
+    logger.debug(f"MyMemory language support for '{lang}': {supported}")
+    return supported
 
-    return code
+
+def get_all_supported_languages() -> Dict[str, Dict[str, str]]:
+    """
+    Get supported languages from both services.
+    MyMemory uses test-based detection, LibreTranslate uses API.
+    """
+    return {
+        "mymemory": _MYMEMORY_FALLBACK_LANGUAGES,
+        "libretranslate": get_supported_languages()
+    }
+
+
+def get_best_provider(
+    target_lang: str,
+    source_lang: str = "en",
+    supported_languages: Dict[str, Dict[str, str]] = None
+) -> str:
+    """
+    Choose the best translation provider for a language pair.
+    
+    Uses cached test translations for MyMemory and language list for LibreTranslate.
+    """
+    target = base_language(target_lang)
+    source = base_language(source_lang)
+
+    # 1. Check MyMemory support (using cached test results)
+    if is_language_supported_by_mymemory(target):
+        if is_language_supported_by_mymemory(source):
+            return "mymemory"
+
+    # 2. Check LibreTranslate support (from language list)
+    if supported_languages is None:
+        supported_languages = get_all_supported_languages()
+
+    libretranslate_langs = supported_languages.get("libretranslate", {})
+    if target in libretranslate_langs and source in libretranslate_langs:
+        return "libretranslate"
+
+    return "none"
 
 
 # ---------------------------------------------------------------------------
@@ -222,73 +324,6 @@ def _mask_api_key(key: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Main translation function
-# ---------------------------------------------------------------------------
-
-def translate_text(
-    text: str,
-    target_lang: str = "fi",
-    source_lang: str = "en",
-    use_cache: bool = True,
-    libretranslate_url: Optional[str] = None,
-    libretranslate_api_key: Optional[str] = None,
-    mymemory_email: Optional[str] = None
-) -> str:
-    """
-    Translate text automatically.
-
-    Translation order:
-    1. Check cache
-    2. Try MyMemory API
-    3. Fallback: LibreTranslate API
-    4. Final fallback: return original text
-
-    Args:
-        text: Text to translate
-        target_lang: Target language (default: "fi")
-        source_lang: Source language (default: "en")
-        use_cache: Use cache (default: True)
-        libretranslate_url: Override LibreTranslate server URL
-        libretranslate_api_key: Override LibreTranslate API key
-        mymemory_email: Override MyMemory email for higher daily limits
-
-    Returns:
-        Translated text or original text if translation fails
-    """
-    if not text or not isinstance(text, str):
-        logger.warning("translate_text: empty or invalid text")
-        return text if text else ""
-
-    if target_lang == source_lang:
-        return text
-
-    if use_cache:
-        cached = _translation_cache.get(text, source_lang, target_lang)
-        if cached is not None:
-            return cached
-
-    logger.debug(f"Translating: '{text[:100]}...' {source_lang}->{target_lang}")
-
-    translated = _translate_mymemory(text, target_lang, source_lang, mymemory_email)
-
-    if translated is None:
-        logger.info("MyMemory failed, trying LibreTranslate")
-        translated = _translate_libretranslate(
-            text, target_lang, source_lang,
-            libretranslate_url, libretranslate_api_key
-        )
-
-    if translated is None:
-        logger.warning("Translation completely failed, returning original text")
-        return text
-
-    if use_cache:
-        _translation_cache.set(text, translated, source_lang, target_lang)
-
-    return translated
-
-
-# ---------------------------------------------------------------------------
 # MyMemory API
 # ---------------------------------------------------------------------------
 
@@ -299,16 +334,15 @@ def _translate_mymemory(
     email: Optional[str] = None
 ) -> Optional[str]:
     """
-    Translate text via MyMemory API.
-
-    Args:
-        text: Text to translate
-        target_lang: Target language
-        source_lang: Source language
-        email: Optional email for higher daily limit (30k words instead of 1k)
-
-    Returns:
-        Translated text or None if translation fails
+    Translate text via MyMemory API with error classification.
+    
+    Raises:
+        RateLimitExceededError: 429 or quota message
+        ServiceUnavailableError: 5xx, network errors, timeout
+        LanguageNotSupportedError: 404 or 400 with unsupported message
+        ProviderAccessError: 403
+        InvalidRequestError: 400 (other)
+        TranslationError: Other errors
     """
     try:
         langpair = f"{source_lang}|{target_lang}"
@@ -322,45 +356,85 @@ def _translate_mymemory(
         logger.debug(f"MyMemory request: {url[:120]}...")
 
         req = Request(url, headers={
-            'User-Agent': f'Mozilla/5.0 (SHL-Client/{SHL_VERSION})',
+            'User-Agent': f'SHL-Client/{SHL_VERSION}',
             'Accept': 'application/json'
         })
 
-        with urlopen(req, timeout=10) as response:
+        with urlopen(req, timeout=MYMEMORY_TIMEOUT) as response:
             response_data = json.loads(response.read().decode('utf-8'))
 
             response_status = response_data.get("responseStatus")
-            if response_status != 200:
-                logger.warning(f"MyMemory invalid responseStatus: {response_status}")
-                logger.debug(f"MyMemory response: {response_data}")
-                return None
-
             response_details = response_data.get("responseData", {})
+            
+            # Check for quota/rate limit messages
+            quota_reached = response_data.get("quotaReached", False)
+            response_warning = response_details.get("warning", "")
+            
+            # Check if it looks like a rate limit or quota message
+            if quota_reached or "quota" in response_warning.lower():
+                raise RateLimitExceededError(f"MyMemory: quota reached: {response_warning}")
+
+            # HTTP status code classification
+            if response_status == 403:
+                raise ProviderAccessError("MyMemory: Access denied")
+            if response_status == 429:
+                raise RateLimitExceededError("MyMemory: Rate limit exceeded")
+            if response_status >= 500:
+                raise ServiceUnavailableError(f"MyMemory: Server error {response_status}")
+            if response_status == 404:
+                raise LanguageNotSupportedError(f"MyMemory: Language not supported")
+            if response_status == 400:
+                # Could be unsupported language or bad request
+                if "language" in str(response_data).lower():
+                    raise LanguageNotSupportedError("MyMemory: Language not supported")
+                raise InvalidRequestError(f"MyMemory: Bad request {response_status}")
+            if response_status != 200:
+                raise TranslationError(f"MyMemory: Unexpected status {response_status}")
+
             translated = response_details.get("translatedText")
 
             if translated and translated != text:
                 logger.debug(f"MyMemory success: '{translated[:100]}...'")
                 return translated
-            else:
-                logger.warning("MyMemory returned empty or same text")
-                return None
+            
+            logger.warning("MyMemory returned empty or same text")
+            return None
 
     except HTTPError as e:
-        logger.error(f"MyMemory HTTP error: {e.code} - {e.reason}")
-        return None
+        if e.code == 403:
+            raise ProviderAccessError(f"MyMemory HTTP 403")
+        elif e.code == 429:
+            raise RateLimitExceededError(f"MyMemory HTTP 429")
+        elif e.code >= 500:
+            raise ServiceUnavailableError(f"MyMemory HTTP {e.code}")
+        elif e.code == 404:
+            raise LanguageNotSupportedError("MyMemory language not supported")
+        elif e.code == 400:
+            try:
+                error_body = e.read().decode('utf-8')
+                if "language" in error_body.lower():
+                    raise LanguageNotSupportedError("MyMemory language not supported")
+            except Exception:
+                pass
+            raise InvalidRequestError(f"MyMemory HTTP 400")
+        else:
+            raise TranslationError(f"MyMemory HTTP {e.code}")
+
     except URLError as e:
-        logger.error(f"MyMemory URL error: {e.reason}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"MyMemory JSON parse error: {e}")
-        return None
+        raise ServiceUnavailableError(f"MyMemory network error: {e.reason}")
+    except TimeoutError:
+        raise ServiceUnavailableError("MyMemory timeout")
     except Exception as e:
-        logger.error(f"MyMemory unexpected error: {type(e).__name__}: {e}")
-        return None
+        # If it's already one of our exceptions, re-raise it
+        if isinstance(e, (RateLimitExceededError, ServiceUnavailableError, 
+                         LanguageNotSupportedError, ProviderAccessError, 
+                         InvalidRequestError, TranslationError)):
+            raise
+        raise TranslationError(f"MyMemory unexpected error: {type(e).__name__}: {e}")
 
 
 # ---------------------------------------------------------------------------
-# LibreTranslate API (fallback)
+# LibreTranslate API
 # ---------------------------------------------------------------------------
 
 def _translate_libretranslate(
@@ -371,34 +445,26 @@ def _translate_libretranslate(
     api_key: Optional[str] = None
 ) -> Optional[str]:
     """
-    Translate text via LibreTranslate API (fallback).
-
-    Uses a public free instance by default, or a custom instance
-    configured via parameters or environment variables.
-
-    Args:
-        text: Text to translate
-        target_lang: Target language
-        source_lang: Source language
-        base_url: Override LibreTranslate server URL
-        api_key: Override LibreTranslate API key
-
-    Returns:
-        Translated text or None if translation fails
+    Translate text via LibreTranslate API with error classification.
+    
+    Raises:
+        RateLimitExceededError: 429
+        ServiceUnavailableError: 5xx, network errors, timeout
+        LanguageNotSupportedError: 404 or language not supported
+        ProviderAccessError: 403 (banned, invalid API key, etc.)
+        InvalidRequestError: 400
+        TranslationError: Other errors
     """
     _base_url = (base_url or LIBRETRANSLATE_URL).rstrip('/')
     _api_key = api_key or LIBRETRANSLATE_API_KEY
-
-    lt_source = _normalize_lang_code(source_lang)
-    lt_target = _normalize_lang_code(target_lang)
 
     try:
         url = f"{_base_url}/translate"
 
         request_body = {
             "q": text,
-            "source": lt_source,
-            "target": lt_target,
+            "source": source_lang,
+            "target": target_lang,
             "format": "text"
         }
 
@@ -408,17 +474,17 @@ def _translate_libretranslate(
         request_data = json.dumps(request_body).encode('utf-8')
 
         logger.debug(
-            f"LibreTranslate request: {lt_source}->{lt_target} "
+            f"LibreTranslate request: {source_lang}->{target_lang} "
             f"(api_key={_mask_api_key(_api_key)})"
         )
 
         req = Request(url, data=request_data, headers={
             'Content-Type': 'application/json',
-            'User-Agent': f'Mozilla/5.0 (SHL-Client/{SHL_VERSION})',
+            'User-Agent': f'SHL-Client/{SHL_VERSION}',
             'Accept': 'application/json'
         })
 
-        with urlopen(req, timeout=15) as response:
+        with urlopen(req, timeout=LIBRETRANSLATE_TIMEOUT) as response:
             response_data = json.loads(response.read().decode('utf-8'))
 
             translated = response_data.get("translatedText")
@@ -426,41 +492,184 @@ def _translate_libretranslate(
             if translated and translated != text:
                 logger.debug(f"LibreTranslate success: '{translated[:100]}...'")
                 return translated
-            else:
-                logger.warning("LibreTranslate returned empty or same text")
-                return None
+            
+            logger.warning("LibreTranslate returned empty or same text")
+            return None
 
     except HTTPError as e:
         try:
             error_body = e.read().decode('utf-8')
             logger.debug(f"LibreTranslate error details: {error_body}")
         except Exception:
-            pass
+            error_body = ""
 
         if e.code == 403:
-            logger.error(
-                f"LibreTranslate HTTP 403 Forbidden. "
-                f"This instance requires an API key. "
-                f"Set LIBRETRANSLATE_API_KEY in .env or pass api_key parameter."
-            )
+            raise ProviderAccessError(f"LibreTranslate: Access denied (banned/invalid API key)")
         elif e.code == 429:
-            logger.error(
-                f"LibreTranslate HTTP 429 Too Many Requests. "
-                f"Rate limit exceeded. Consider using an API key for higher limits."
-            )
+            raise RateLimitExceededError("LibreTranslate: Rate limit exceeded")
+        elif e.code >= 500:
+            raise ServiceUnavailableError(f"LibreTranslate: Server error {e.code}")
+        elif e.code == 404:
+            raise LanguageNotSupportedError("LibreTranslate: Language not supported")
+        elif e.code == 400:
+            if "language" in error_body.lower():
+                raise LanguageNotSupportedError("LibreTranslate: Language not supported")
+            raise InvalidRequestError(f"LibreTranslate: Bad request {e.code}")
         else:
-            logger.error(f"LibreTranslate HTTP error: {e.code} - {e.reason}")
-        return None
+            raise TranslationError(f"LibreTranslate HTTP {e.code}")
 
     except URLError as e:
-        logger.error(f"LibreTranslate URL error: {e.reason}")
-        return None
-    except json.JSONDecodeError as e:
-        logger.error(f"LibreTranslate JSON parse error: {e}")
-        return None
+        raise ServiceUnavailableError(f"LibreTranslate network error: {e.reason}")
+    except TimeoutError:
+        raise ServiceUnavailableError("LibreTranslate timeout")
     except Exception as e:
-        logger.error(f"LibreTranslate unexpected error: {type(e).__name__}: {e}")
-        return None
+        # If it's already one of our exceptions, re-raise it
+        if isinstance(e, (RateLimitExceededError, ServiceUnavailableError, 
+                         LanguageNotSupportedError, ProviderAccessError, 
+                         InvalidRequestError, TranslationError)):
+            raise
+        raise TranslationError(f"LibreTranslate unexpected error: {type(e).__name__}: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Main translation function with smart routing
+# ---------------------------------------------------------------------------
+
+def translate_text(
+    text: str,
+    target_lang: str = "fi",
+    source_lang: str = "en",
+    use_cache: bool = True,
+    smart_routing: bool = True,
+    max_retries: int = 2,
+    retry_delay: int = 1,
+    libretranslate_url: Optional[str] = None,
+    libretranslate_api_key: Optional[str] = None,
+    mymemory_email: Optional[str] = None
+) -> str:
+    """
+    Translate text with smart routing and automatic fallback.
+    
+    Translation flow:
+    1. Check cache
+    2. Choose best provider based on language support
+    3. Try primary provider
+    4. If fails (rate limit, downtime, etc.), fallback to secondary
+    5. If all fail, return original text
+    
+    Args:
+        text: Text to translate
+        target_lang: Target language
+        source_lang: Source language (default: "en")
+        use_cache: Use cache (default: True)
+        smart_routing: Choose best provider (default: True)
+        max_retries: Maximum retries per provider (default: 2)
+        retry_delay: Delay between retries in seconds (default: 1)
+        libretranslate_url: Override LibreTranslate server URL
+        libretranslate_api_key: Override LibreTranslate API key
+        mymemory_email: Override MyMemory email for higher daily limits
+    
+    Returns:
+        Translated text or original text if translation fails
+    """
+    if not text or not isinstance(text, str):
+        logger.warning("translate_text: empty or invalid text")
+        return ""
+
+    # Normalize language codes
+    target = base_language(target_lang)
+    source = base_language(source_lang)
+
+    if target == source:
+        return text
+
+    # Check cache
+    if use_cache:
+        cached = _translation_cache.get(text, source, target)
+        if cached is not None:
+            return cached
+
+    # Get supported languages
+    supported_languages = get_all_supported_languages()
+    
+    # Choose provider
+    if smart_routing:
+        provider = get_best_provider(target, source, supported_languages)
+    else:
+        provider = "mymemory"
+
+    # Define provider order with fallback
+    if provider == "mymemory":
+        order = ["mymemory", "libretranslate"]
+    elif provider == "libretranslate":
+        order = ["libretranslate", "mymemory"]
+    elif provider == "none":
+        logger.warning(f"No translation service supports {source}→{target}")
+        return text
+    else:
+        order = ["mymemory", "libretranslate"]
+
+    # Try providers in order
+    translated = None
+    errors = []
+
+    for service in order:
+        for attempt in range(max_retries):
+            try:
+                if service == "mymemory":
+                    translated = _translate_mymemory(text, target, source, mymemory_email)
+                else:  # libretranslate
+                    translated = _translate_libretranslate(
+                        text, target, source,
+                        libretranslate_url, libretranslate_api_key
+                    )
+
+                if translated:
+                    if use_cache:
+                        _translation_cache.set(text, translated, source, target)
+                    return translated
+
+            except RateLimitExceededError as e:
+                logger.warning(f"{service} rate limit exceeded: {e}")
+                errors.append(f"{service}: rate limit")
+                break  # Move to next service
+            
+            except ProviderAccessError as e:
+                logger.warning(f"{service} access denied: {e}")
+                errors.append(f"{service}: access denied")
+                break  # Move to next service
+            
+            except ServiceUnavailableError as e:
+                logger.warning(f"{service} unavailable: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                errors.append(f"{service}: unavailable")
+                break  # Move to next service
+            
+            except LanguageNotSupportedError as e:
+                logger.warning(f"{service} doesn't support language: {e}")
+                errors.append(f"{service}: language not supported")
+                break  # Move to next service
+            
+            except InvalidRequestError as e:
+                logger.warning(f"{service} invalid request: {e}")
+                errors.append(f"{service}: invalid request")
+                break  # Move to next service
+            
+            except TranslationError as e:
+                logger.warning(f"{service} error: {e}")
+                errors.append(f"{service}: {e}")
+                break  # Move to next service
+            
+            except Exception as e:
+                logger.error(f"{service} unexpected error: {e}")
+                errors.append(f"{service}: unexpected")
+                break
+
+    # All providers failed
+    logger.error(f"All translation services failed: {', '.join(errors)}")
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -472,7 +681,7 @@ class AITranslator:
     Extensible AI translator class for future needs.
 
     Supports multiple translation services and provides
-    a unified interface for translations.
+    a unified interface for translations with smart routing.
     """
 
     def __init__(
@@ -482,64 +691,62 @@ class AITranslator:
         libretranslate_api_key: Optional[str] = None,
         mymemory_email: Optional[str] = None
     ):
-        """
-        Initialize AI translator.
-
-        Args:
-            provider: Translation service ("auto", "mymemory", "libretranslate", "none")
-            libretranslate_url: Override LibreTranslate server URL
-            libretranslate_api_key: Override LibreTranslate API key
-            mymemory_email: Override MyMemory email for higher limits
-        """
         self.provider = provider.lower() if provider else "none"
         self.libretranslate_url = libretranslate_url
         self.libretranslate_api_key = libretranslate_api_key
         self.mymemory_email = mymemory_email
         self.cache = TranslationCache()
+        self._supported_languages = None
+        self._last_fetch = 0
+        
         logger.info(f"AITranslator initialized: provider={self.provider}")
 
+    def get_supported_languages(self, force_refresh: bool = False) -> Dict[str, Dict[str, str]]:
+        """Get supported languages from both services with 24h cache."""
+        if not force_refresh and self._supported_languages is not None:
+            if time.time() - self._last_fetch < LANGUAGE_CACHE_TTL:
+                return self._supported_languages
+        
+        self._supported_languages = get_all_supported_languages()
+        self._last_fetch = time.time()
+        return self._supported_languages
+
+    def get_best_provider(self, target_lang: str, source_lang: str = "en") -> str:
+        """Get best provider for language pair."""
+        supported = self.get_supported_languages()
+        return get_best_provider(target_lang, source_lang, supported)
+
+    def is_language_supported(self, lang_code: str) -> bool:
+        """Check if language is supported by any service."""
+        supported = self.get_supported_languages()
+        base = base_language(lang_code)
+        return (base in supported.get("mymemory", {}) or 
+                base in supported.get("libretranslate", {}))
+
     def translate(self, text: str, target_lang: str = "fi", source_lang: str = "en") -> str:
-        """
-        Translate a single text.
-
-        Args:
-            text: Text to translate
-            target_lang: Target language
-            source_lang: Source language
-
-        Returns:
-            Translated text
-        """
+        """Translate a single text with smart routing."""
         if self.provider == "none":
             return text
 
-        cached = self.cache.get(text, source_lang, target_lang)
-        if cached:
-            return cached
-
-        if self.provider == "mymemory":
-            translated = _translate_mymemory(
-                text, target_lang, source_lang, self.mymemory_email
-            )
-        elif self.provider == "libretranslate":
-            translated = _translate_libretranslate(
-                text, target_lang, source_lang,
-                self.libretranslate_url, self.libretranslate_api_key
-            )
-        else:
-            translated = translate_text(
-                text, target_lang, source_lang,
-                use_cache=False,
-                libretranslate_url=self.libretranslate_url,
-                libretranslate_api_key=self.libretranslate_api_key,
-                mymemory_email=self.mymemory_email
-            )
-
-        if translated:
-            self.cache.set(text, translated, source_lang, target_lang)
-            return translated
-
-        return text
+        result = translate_text(
+            text,
+            target_lang,
+            source_lang,
+            use_cache=True,
+            smart_routing=(self.provider == "auto"),
+            max_retries=2,
+            retry_delay=1,
+            libretranslate_url=self.libretranslate_url,
+            libretranslate_api_key=self.libretranslate_api_key,
+            mymemory_email=self.mymemory_email
+        )
+        
+        if result and result != text:
+            target = base_language(target_lang)
+            source = base_language(source_lang)
+            self.cache.set(text, result, source, target)
+        
+        return result
 
     def batch_translate(
         self,
@@ -547,17 +754,7 @@ class AITranslator:
         target_lang: str,
         source_lang: str = "en"
     ) -> Dict[str, str]:
-        """
-        Translate multiple texts at once.
-
-        Args:
-            texts: Dictionary {key: text} of texts to translate
-            target_lang: Target language
-            source_lang: Source language
-
-        Returns:
-            Dictionary {key: translated_text}
-        """
+        """Translate multiple texts at once."""
         if self.provider == "none":
             return texts
 
@@ -600,12 +797,9 @@ def test_translation() -> None:
     print(f"\nCache size: {_translation_cache.size()}")
 
     print("\nFetching supported languages...")
-    langs = get_supported_languages()
-    if langs:
-        print(f"Supported languages: {len(langs)}")
-        sample = list(langs.items())[:5]
-        for code, name in sample:
-            print(f"  {code}: {name}")
+    langs = get_all_supported_languages()
+    print(f"MyMemory: {len(langs.get('mymemory', {}))} languages (static fallback)")
+    print(f"LibreTranslate: {len(langs.get('libretranslate', {}))} languages")
 
     translator = AITranslator(provider="auto")
     batch_result = translator.batch_translate(

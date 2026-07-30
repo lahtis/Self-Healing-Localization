@@ -7,7 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.1.7] - - 2026-07-28 - Test PyPI Preview
+## [0.2.0] - 2026-07-30 - Test PyPI Preview
+
+### Added
+- **Smart translation routing**: Automatically selects the best translation service (MyMemory or LibreTranslate) based on language pair support
+- **Automatic provider fallback**: If primary service fails (rate limit, downtime, etc.), falls back to secondary service
+- **Comprehensive error classification**:
+  - `RateLimitExceededError` - quota or rate limit exceeded
+  - `ServiceUnavailableError` - service down or unreachable
+  - `LanguageNotSupportedError` - language not supported by service
+  - `ProviderAccessError` - access denied (banned, invalid API key)
+  - `InvalidRequestError` - bad request parameters
+  - `TranslationError` - base exception for all translation errors
+- **Static fallback language lists** from JSON files (`data/languages/mymemory_fallback.json` and `libretranslate_fallback.json`)
+- **MyMemory language support detection** via test translation with 24-hour cache
+- **`ai_translation_enabled` config option** (default: `False`) to control AI translation behavior
+- **`get_all_supported_languages()`** function for querying supported languages from both services
+- **`get_best_provider()`** function for provider selection logic
+- **`ProviderAccessError`** and **`InvalidRequestError`** exception classes
+- **`get_mymemory_languages()`** function removed (replaced with test-based detection)
+
+### Changed
+- **LibreTranslate default URL** changed to `https://libretranslate.com` (official instance)
+- **MyMemory `/languages` endpoint removed** - replaced with test-based language support detection
+- **Translation error handling** now uses specific exception types instead of generic `Exception`
+- **`translate_text()`** now supports `smart_routing` parameter (default: `True`) and `max_retries`/`retry_delay` for resilience
+- **`AITranslator`** now uses 24-hour cache for language support detection
+- **`get_supported_languages()`** now falls back to static JSON list if LibreTranslate API is unavailable
+- **`ai_translation_enabled`** default changed from implicit to explicit `False`
+- **`ui_text()`** now only attempts AI translation when `ai_translation_enabled=True`
+- **`get_stats()`** now includes `ai_translation_enabled` status
+- **Version** updated to 0.2.0
+
+### Fixed
+- GLFM fallback now properly stored as `self.glfm_fallback` and used in fallback chain
+- LibreTranslate HTTP error responses now include detailed error classification
+- MyMemory rate limit and quota detection now checks both HTTP status codes and response messages
+- Language code normalization now uses centralized `lang_utils.py` across all modules
+- Removed 6 duplicate `_validate_lang_code()` implementations (DRY principle)
+
+### Removed
+- `_normalize_lang_code()` from `ai_translation.py` (replaced with `base_language()` from `lang_utils.py`)
+- `_validate_lang_code()` from `core.py`, `localizer.py`, and `template_localizer.py`
+- `get_mymemory_languages()` function (replaced with test-based detection)
+- `mymemory_languages` cache key (replaced with `_mymemory_support_cache`)
+
+### Security
+- API keys are now masked in all log messages
+- `.env` file loading with secure key handling
+
+---
+
+## [0.1.7] - 2026-07-28 - Test PyPI Preview
 
 ### Added
 - GLFM (Global Language Family Mapper) integration via `LanguageValidator` class
