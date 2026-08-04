@@ -35,10 +35,17 @@ This library is designed to be **dropped into any project** — from small scrip
 
 ## Key Features
 
+### Base language
+The base language is fully controlled by the developer. 
+It is the language in which you primarily write the application’s texts. 
+SHL uses it as:
+- the fallback when a translation is missing in the target language
+- the source when creating or synchronizing other language files
+
 ### Self‑Healing UI Localization
 - Missing language files are created automatically.  
 - Missing keys are added on the fly.  
-- Base language is used as fallback.  
+- Developer-defined base language is used as fallback.  
 - Region subtags preserved: `zh-TW`, `pt-BR` get their own files.
 
 ### Self‑Healing AI Prompt Template Localization
@@ -56,12 +63,11 @@ The `LocalizationEngine` ties everything together:
 - Provides a single interface for UI text and prompt templates.
 - Optional GLFM language validation with BCP-47 tags.
 
-### Smart Translation Routing (NEW in v0.2.0)
-- Automatically selects the best translation service for each language pair.
-- MyMemory as primary service, LibreTranslate as fallback.
-- Automatic fallback if primary service fails (rate limit, downtime, etc.).
+### Smart Translation Routing (v0.2.0)
+- Automatically selects the best available service (MyMemory → LibreTranslate).
+- Automatic fallback on rate limits or downtime.
 - Language support detection with 24-hour cache.
-- AI translation enabled only when configured (`ai_translation_enabled=False` by default).
+- AI translation is opt-in (`ai_translation_enabled=False` by default).
 
 ### Zero Dependencies
 Pure Python. Works everywhere.
@@ -124,63 +130,61 @@ LIBRETRANSLATE_URL=https://libretranslate.com
 ## Quick Start
 
 ### 1. Basic UI Localization
-
-Initialize the engine and start retrieving text. If the key doesn't exist, it is added to your JSON files automatically.
+Initialize the engine and start retrieving text. Missing keys are added to your JSON files automatically.
 
 ```python
 from shl.engine import LocalizationEngine
 
-# Initialize the engine (e.g., set user language to Finnish)
+# Initialize the engine (user language = Finnish, base language = English)
 engine = LocalizationEngine(lang_code="fi", base_lang="en")
 
-# Retrieve UI text. If 'welcome_msg' is missing, it's created with the default value.
+# If 'welcome_msg' is missing, it is created with the given default value
 title = engine.ui_text("welcome_msg", "Welcome to the App!")
 print(title)
 ```
 
-### 2. Enable AI Translation
+### 2. Configuration via config.conf
+Create a `config.conf` in your project root:
+
+```ini
+[SETTINGS]
+language = fi
+base_lang = en
+ai_translation_enabled = true
+```
 
 ```python
-# Enable AI translations in config
+engine = LocalizationEngine()  # reads language and settings from config.conf
+print(engine.ui_text("welcome", "Welcome!"))
+```
+
+### 3. Enable AI Translation
+AI translation is disabled by default. Enable it when you want missing texts to be translated automatically.
+
+```python
 config = {"ai_translation_enabled": True}
 engine = LocalizationEngine(lang_code="fi", config=config)
 
-# Now missing texts will be automatically translated
 text = engine.ui_text("new_key", "Hello World!")
+
 # → "Hei maailma!" (automatically translated to Finnish)
 
 ```
 
-### 3. Retrieve UI text
+### 4. Prompt Templates
+SHL handles localized AI prompt templates the same way as UI text.
 
 ```python
-title = engine.ui_text("app_title", "My Application")
-```
-
-If `"app_title"` does not exist in `locales/en.json`, it will be added automatically.
-
-### 4. Retrieve prompt templates
-
-```python
-summary_prompt = engine.template("summary_short", "Summarize the text:")
-```
-
-If `prompts/fi.json` does not exist, it will be created automatically using `prompts/en.json` as the base.
-
-## 4.1 AI Prompt Templates
-Keep your AI prompts localized just like your UI strings.
-
-```python
-# Retrieve a localized prompt template
 prompt = engine.template("summarize_task", "Please summarize the following text:")
 ```
 
-### 5. Dynamic Language Switching
+If the template file for the current language does not exist, it is created automatically using the base language as the source.
 
-Switch languages on the fly without restarting your application.
+
+### 5. Dynamic Language Switching
+Switch languages at runtime without restarting the application.
 
 ```python
-# Start in English
 engine = LocalizationEngine(lang_code="en", config={"ai_translation_enabled": True})
 
 # Switch to Finnish
@@ -212,7 +216,7 @@ Sync all keys from the fallback chain (GLFM fallback → base language) to the c
 engine.sync()
 ```
 
-### 8. Using GLFM Language Validation
+### 8. GLFM Language Validation
 ```python
 engine = LocalizationEngine(
     lang_code="fi",
@@ -225,7 +229,7 @@ print(stats["lang_code"])    # fi
 print(stats["glfm_fallback"]) # en (if configured)
 ```
 
-### 9. Direct Translation with Smart Routing
+### 9. Direct Translation (Smart Routing)
 ```python
 from shl.engine.ai_translation import translate_text
 
@@ -273,6 +277,7 @@ self-healing-localization/
 ├── pyproject.toml
 └── README.md
 ```
+Note: Language files (`locales/xx.json`), prompt templates (`prompts/xx.json`) are created in your application, not inside the library.
 
 ---
 
@@ -302,17 +307,39 @@ engine = LocalizationEngine(
 | `engine.ensure_ui_key(key, default="")` | Ensure UI key exists |
 | `engine.ensure_template_key(key, default="")` | Ensure template key exists |
 
+### Language detection priority
+When `lang_code` is not provided to `LocalizationEngine`, the language is resolved in this order:
 
-### Configuration Options (config.conf)
+1. `config.conf` → `[SETTINGS] language`
+2. `SHL_LANGUAGE` environment variable
+3. `LANG` environment variable
+4. Default: `en`
+
+An explicit `lang_code` argument always takes highest priority and skips auto-detection.
+
+### Configuration Options ('''config.conf''')
 ```ini
 [SETTINGS]
-language = fi
-ai_translation_enabled = false   # Enable AI translation (default: false)
-fallback_to_base = true
+language = fi					# Current UI language
+base_lang = en					# Developer-defined base language
+ai_translation_enabled = false  # Enable AI translation (default: false)
+fallback_to_base = true			# Fall back to base language when key is missing
 ```
-If no language is provided programmatically, SHL reads the language from '''config.conf'''.
+If lang_code is not given when creating the engine, SHL reads the language from config.conf. A value in config.conf overrides environment variables.
 
-### AITranslator
+```
+| Key | Description | Default |
+|--------|-------------|-------------|
+| language | Active UI language | auto-detect / en|
+| base_lang | Developer-defined base language | en | 
+| ai_translation_enabled | Enable automatic AI translation | false | 
+| fallback_to_base | Fall back to base language when a key is missing | true | 
+```
+
+Both work without API keys. API key support available via .env file.
+
+
+### AI-Translator
 
 ```python
 from shl.engine.ai_translation import AITranslator
@@ -358,12 +385,14 @@ provider = get_best_provider("fi", "en")  # "mymemory" or "libretranslate"
 
 ### Translation Services
 
-| Service | Role | Limits | Notes
-|--------|-------------|
+| Service | Role | Limits | Notes |
+|--------|-------------|-------------|-------------|
 | MyMemory | Primary | 1,000 chars/day (30,000 with email) | Translation memory + MT fallback |
 | LibreTranslate | Fallback | Public instance, rate limited | Open-source MT engine | 
 
 Both work without API keys. API key support available via .env file.
+
+---
 
 ## Roadmap
 
