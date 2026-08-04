@@ -23,7 +23,7 @@ It provides:
 - Fallback to a base language (default: English).  
 - Unified support for both UI text and optional AI prompt templates.
 - GLFM integration for 7,900+ languages with BCP-47 tags and fallback chains.
-- - **NEW in v0.2.0:** Smart translation routing between MyMemory and LibreTranslate.
+- **NEW in v0.2.0:** Smart translation routing between MyMemory and LibreTranslate.
 
 This library is designed to be **dropped into any project** — from small scripts to full applications — and it will maintain localization files automatically as the project grows.
 
