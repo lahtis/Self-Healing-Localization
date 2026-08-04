@@ -15,7 +15,7 @@
 
 ## Overview
 
-Self‑Healing Localization Layer (SHL) is a lightweight, dependency‑free Python library that eliminates missing translations forever.
+Self-Healing Localization Layer (SHL) is a Python localization engine that automatically creates, synchronizes, and maintains language files throughout the lifetime of your application.
 
 It provides:
 - Automatic creation of missing language files . 
@@ -70,7 +70,7 @@ The `LocalizationEngine` ties everything together:
 - AI translation is opt-in (`ai_translation_enabled=False` by default).
 
 ### Zero Dependencies
-Pure Python. Works everywhere.
+Zero runtime dependencies. Pure Python library. Optional online translation services. Works everywhere.
 
 ---
 
