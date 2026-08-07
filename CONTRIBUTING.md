@@ -17,7 +17,10 @@ Create your own fork and clone it locally:
 ```bash
 git clone https://codeberg.org/lahtis/Self_Healing_Localization
 
-cd Self_Healing_Localization# Contributing to Self-Healing Localization Library (SHL)
+cd Self_Healing_Localization
+```
+
+# Contributing to Self-Healing Localization Library (SHL)
 
 Thank you for your interest in contributing!
 
@@ -75,7 +78,7 @@ pytest
 
 ### 6. Submit a Pull Request
 
-Push your branch and open a pull request.
+Push your branch to Codeberg and open a pull request.
 
 Please:
 
