@@ -13,6 +13,12 @@
 
 ---
 
+## Primary Links
+- Canonical Repository (Codeberg): https://codeberg.org/lahtis/Self_Healing_Localization
+- GitHub Mirror: https://github.com/lahtis/Self-Healing-Localization
+
+---
+
 ## Overview
 
 Self-Healing Localization Layer (SHL) is a Python localization engine that automatically creates, synchronizes, and maintains language files throughout the lifetime of your application.
