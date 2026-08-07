@@ -1,0 +1,26 @@
+name: Mirror Codeberg to GitHub
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone Codeberg repository
+        run: |
+          git clone --mirror https://codeberg.org/lahtis/Self_Healing_Localization.git repo.git
+
+      - name: Push to GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+        run: |
+          cd repo.git
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/lahtis/Self-Healing-Localization.git
+          git push --mirror
