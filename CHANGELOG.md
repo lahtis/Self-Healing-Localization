@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.2.0] - 2026-07-30 - Test PyPI Preview
+## [0.2.0] - 2026-07-30 - dev log
 
 ### Added
 - **Smart translation routing**: Automatically selects the best translation service (MyMemory or LibreTranslate) based on language pair support
