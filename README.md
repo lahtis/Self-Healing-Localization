@@ -16,7 +16,7 @@
 ## Primary Links
 - Canonical Repository (Codeberg): https://codeberg.org/lahtis/Self_Healing_Localization
 - GitHub Mirror: https://github.com/lahtis/Self-Healing-Localization
-- Documentation: https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/doc
+- Documentation: https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/docs
 ---
 
 ## Overview
