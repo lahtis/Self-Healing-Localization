@@ -15,14 +15,14 @@ glfm_lite = true                 # Use GLFM Lite (true) or Full (false)
 
 If lang_code is not given when creating the engine, SHL reads the language from config.conf. A value in config.conf overrides environment variables.
 
-```
+
 | Key | Description | Default |
 |--------|-------------|-------------|
 | language | Active UI language | auto-detect / en|
 | base_lang | Developer-defined base language | en | 
 | ai_translation_enabled | Enable automatic AI translation | false | 
 | fallback_to_base | Fall back to base language when a key is missing | true | 
-```
+
 
 Both work without API keys. API key support available via .env file.
 

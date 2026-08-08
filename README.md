@@ -2,7 +2,7 @@
 ### Automatic, self‑maintaining localization for any Python project  
 **Author:** Tuomas Lähteenmäki  
 **License:** MIT  
-**Version:** 0.2.0 dev
+**Version:** 0.2.0
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -85,7 +85,7 @@ The `LocalizationEngine` ties everything together:
 - Automatically selects the best available service (MyMemory → LibreTranslate).
 - Automatic fallback on rate limits or downtime.
 - Language support detection with 24-hour cache.
-- AI translation is opt-in (`ai_translation_enabled=False` by default).
+- Machine translation is opt-in (`m_translation_enabled=False` by default).
 
 ### Zero Dependencies
 Zero runtime dependencies. Pure Python library. Optional online translation services. Works everywhere.
