@@ -9,9 +9,9 @@ from .router import (
     translate_text,
     get_best_provider,
     get_all_supported_languages,
+    get_libretranslate_mirror_stats,
     clear_unavailable_cache,
     get_unavailable_cache_stats,
-    get_libretranslate_mirror_stats,
 )
 
 # Välimuisti
@@ -30,15 +30,13 @@ from .exceptions import (
     InvalidRequestError,
 )
 
-# Providerit (suoraan käytettäväksi)
+# Providerit
 from .providers.mymemory import MyMemoryAdapter
 from .providers.libretranslate import LibreTranslateAdapter
-
-# Vanha AITranslator (deprecated)
-from .ai_translation_deprecated import AITranslator
-
-# Vanha get_supported_languages (yhteensopivuus)
 from .providers.libretranslate import get_supported_languages
+
+# Deprecated AITranslator (yhteensopivuus)
+from .ai_translation_deprecated import AITranslator
 
 __all__ = [
     "__version__",

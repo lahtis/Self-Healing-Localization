@@ -1,3 +1,9 @@
+
+---
+
+## 📝 Päivitetty `pyproject.toml` (koko tiedosto)
+
+```toml
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
@@ -10,7 +16,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }
 authors = [
-    { name = "Tuomas Lähteenmäki" }
+    { name = "Tuomas Lähteenmäki" },
 ]
 
 keywords = [
@@ -25,8 +31,9 @@ keywords = [
     "l10n",
     "glfm",
     "bcp47",
+    "machine-translation",
     "mymemory",
-    "libretranslate"
+    "libretranslate",
 ]
 
 classifiers = [
@@ -38,9 +45,10 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Internationalization",
-    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Text Processing :: Linguistic",
 ]
 
@@ -51,34 +59,85 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
 ]
+doc = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.0",
+]
 
 [project.urls]
 Homepage = "https://codeberg.org/lahtis/Self_Healing_Localization"
 Repository = "https://codeberg.org/lahtis/Self_Healing_Localization"
 Issues = "https://codeberg.org/lahtis/Self_Healing_Localization/issues"
+Documentation = "https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/doc"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["shl*"]
+[project.scripts]
+shl = "shl.cli:main"
+
+[tool.setuptools]
+packages = ["shl"]
 
 [tool.setuptools.package-data]
-shl = ["data/**/*.json"]
+shl = [
+    "data/**/*.json",
+    "data/**/*.json.gz",
+    "py.typed",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-v --tb=short"
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "unit: unit tests",
+    "integration: integration tests",
+    "glfm: tests requiring GLFM database",
 ]
 
 [tool.coverage.run]
 source = ["shl"]
-omit = ["tests/*"]
+omit = [
+    "tests/*",
+    "*/__init__.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
+    "pass",
+]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pylint.main]
+ignore = ["tests"]
+jobs = 0
+
+[tool.pylint.messages_control]
+disable = [
+    "missing-docstring",
+    "too-many-arguments",
+    "too-many-instance-attributes",
 ]

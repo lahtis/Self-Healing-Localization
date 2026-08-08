@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.0] - 2026-08-08 - dev log
+
+### Added
+- **GLFM (Global Language Family Mapper) integration** via `LanguageValidator` class
+  - 7,900+ language database with BCP-47 tags, fallback chains, and validation
+  - **GLFM Lite mode** (default): ~428 KB, 20 nearest languages for fallback
+  - **Full GLFM mode**: ~925 MB, all 7,900+ languages for research and AI
+- **Smart translation routing**: Automatically selects the best translation service (MyMemory or LibreTranslate) based on language pair support
+- **Automatic provider fallback**: If primary service fails (rate limit, downtime, etc.), falls back to secondary service
+- **LibreTranslate mirror support**: Automatic failover between multiple LibreTranslate instances
+- **Comprehensive error classification**:
+  - `RateLimitExceededError` - quota or rate limit exceeded
+  - `ServiceUnavailableError` - service down or unreachable
+  - `LanguageNotSupportedError` - language not supported by service
+  - `ProviderAccessError` - access denied (banned, invalid API key)
+  - `InvalidRequestError` - bad request parameters
+  - `TranslationError` - base exception for all translation errors
+- **Translation metadata**: `TranslationRequest` and `TranslationResult` dataclasses for future AI providers (DeepL, Google Cloud)
+- **Translation cache**: MD5-based with TTL and size limit
+- **Static fallback language lists** from JSON files (`data/languages/mymemory_fallback.json` and `libretranslate_fallback.json`)
+- **Atomic file saves** with `.tmp` → `os.replace()` pattern
+- **Dirty flag with batch saves** to reduce disk I/O
+- **Language file caching** for performance
+- **`ai_translation_enabled` config option** (default: `False`) to control AI translation behavior
+- **`get_all_supported_languages()`** function for querying supported languages from both services
+- **`get_best_provider()`** function for provider selection logic
+- **`get_libretranslate_mirror_stats()`** for monitoring mirror health
+- **`reload_glfm()`** method for switching between GLFM Lite and Full modes at runtime
+
+### Changed
+- **Complete architectural overhaul**: `ai_translation.py` replaced with modular `translation/` package
+- **Modular provider architecture**: MyMemory and LibreTranslate as separate adapters
+- **LibreTranslate default URL** changed to `https://libretranslate.com` (official instance)
+- **MyMemory `/languages` endpoint removed** - replaced with static fallback list + learning from errors
+- **Translation error handling** now uses specific exception types instead of generic `Exception`
+- **`translate_text()`** now supports `smart_routing` parameter (default: `True`) and `max_retries`/`retry_delay` for resilience
+- **`AITranslator`** is now **deprecated** - use `translate_text()` directly
+- **`base_lang` parameter** changed to `Optional[str] = None` to distinguish from config.conf
+- **`get_stats()`** now returns copies (not references) to prevent mutation
+- **`_get_text_with_fallback()`** and **`_get_template_with_fallback()`** merged into generic `_get_with_fallback()`
+- **Unified language detection** across all modules (config.conf → SHL_LANGUAGE → LANG)
+- **Unified key validation** across all modules
+- **Consistent None vs "" handling** across all modules
+- **`LanguageValidator._find_language()`** optimized from O(n) to O(1) with ISO 639-1 index
+- **Legacy file migration** (`lang_xx.json` → `xx.json`) now preserves legacy files as backups
+- **Version** updated to 0.2.0
+
+### Fixed
+- GLFM fallback now properly stored as `self.glfm_fallback_chain` and used in full fallback chain
+- LibreTranslate HTTP error responses now include detailed error classification
+- MyMemory rate limit and quota detection now checks both HTTP status codes and response messages
+- Language code normalization now uses centralized `lang_utils.py` across all modules
+- Removed duplicate `_validate_key()` and `_detect_language()` implementations (DRY principle)
+- Thread-safety documentation added (file locking not supported)
+- `__del__` replaced with `atexit` for more reliable cleanup
+- `_dirty` flag no longer reset on failed saves
+- `set_language()` now saves pending changes before switching
+- Translation cache now properly distinguishes between `None` (missing/empty) and `{}` (valid empty file)
+
+### Security
+- API keys are now masked in all log messages
+- `.env` file loading with secure key handling
+
+### Removed
+- `ai_translation.py` (replaced with `translation/` package)
+- `_normalize_lang_code()` from `ai_translation.py` (replaced with `base_language()` from `lang_utils.py`)
+- `_validate_key()` duplicates from `core.py`, `localizer.py`, and `template_localizer.py`
+- `_detect_language()` duplicates from `core.py`, `localizer.py`, and `template_localizer.py`
+- `get_mymemory_languages()` function (replaced with static fallback list)
+- Automatic legacy file deletion (files are now preserved as backups)
+
+
 ## [0.2.0] - 2026-07-30 - dev log
 
 ### Added

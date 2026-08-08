@@ -16,9 +16,26 @@ Description:
 
 import os
 import logging
+from typing import Optional, Dict, Any, List, Callable
+
 from shl.engine.localizer import Localizer
 from shl.engine.template_localizer import TemplateLocalizer
-from shl.engine.ai_translation import AITranslator, TranslationCache
+
+# Uusi translation-moduuli (korvaa vanhan ai_translation)
+from shl.engine.translation import (
+    translate_text,
+    TranslationCache,
+    MyMemoryAdapter,
+    LibreTranslateAdapter,
+    # Poikkeukset
+    TranslationError,
+    ServiceUnavailableError,
+    RateLimitExceededError,
+    LanguageNotSupportedError,
+    ProviderAccessError,
+    InvalidRequestError,
+)
+
 from shl.language_validator import LanguageValidator
 from shl.utils.lang_utils import normalize_full_tag, base_language
 
@@ -28,12 +45,18 @@ logger = logging.getLogger(__name__)
 class LocalizationEngine:
     def __init__(
         self,
-        lang_code=None,
-        base_lang="en",
-        ui_folder="locales",
-        template_folder="prompts",
-        config=None,
-        glfm_path=None
+        lang_code: Optional[str] = None,
+        base_lang: Optional[str] = None,  # ← None oletus!
+        ui_folder: str = "locales",
+        template_folder: str = "prompts",
+        config: Optional[Dict[str, Any]] = None,
+        glfm_path: Optional[str] = None,
+        glfm_lite: bool = True,
+        # Translation provider configuration
+        libretranslate_url: Optional[str] = None,
+        libretranslate_api_key: Optional[str] = None,
+        mymemory_email: Optional[str] = None,
+        libretranslate_mirrors: Optional[List[Dict[str, Any]]] = None,
     ):
         # Configuration handling - merge defaults with provided config
         default_config = self._load_default_config()
@@ -41,10 +64,9 @@ class LocalizationEngine:
             default_config.update(config)
         self.config = default_config
 
-        # Allow base_lang to be overridden from config.conf
-        # (only if caller did not explicitly pass a different base_lang)
-        if "base_lang" in self.config and base_lang == "en":
-            base_lang = self.config["base_lang"]
+        # Determine base_lang: explicit parameter > config.conf > "en"
+        if base_lang is None:
+            base_lang = self.config.get("base_lang", "en")
 
         # If lang_code is None, use config or auto-detection
         if lang_code is None:
@@ -56,36 +78,62 @@ class LocalizationEngine:
         self.ui_folder = ui_folder
         self.template_folder = template_folder
 
-        # Initialize GLFM validator if available
-        self.validator = LanguageValidator(glfm_path)
+        # Initialize GLFM validator with Lite mode
+        self.validator = LanguageValidator(
+            glfm_path=glfm_path,
+            base_language=self.base_lang,
+            use_lite=glfm_lite,
+        )
 
         # Get GLFM fallback chain
         self.glfm_fallback = None
+        self.glfm_fallback_chain: List[str] = []
+
         if self.validator.is_loaded:
             # Validate language code against GLFM
             if not self.validator.is_valid(self.lang_code):
                 logger.warning(
                     f"Language '{self.lang_code}' not found in GLFM, "
-                    f"falling back to base language '{self.base_lang}'"
+                    f"using fallback chain"
                 )
-                self.lang_code = self.base_lang
             else:
-                # Get fallback from GLFM
-                fallback = self.validator.get_fallback(self.lang_code)
-                if fallback and fallback != self.lang_code:
-                    self.glfm_fallback = fallback
+                # Get full fallback chain
+                self.glfm_fallback_chain = self.validator.get_fallback_chain(
+                    self.lang_code,
+                    base_language=self.base_lang,
+                    max_nearest=3,
+                )
+                # First fallback is the primary GLFM fallback
+                if len(self.glfm_fallback_chain) > 1:
+                    self.glfm_fallback = self.glfm_fallback_chain[1]
                     logger.debug(
-                        f"GLFM fallback for '{self.lang_code}': '{self.glfm_fallback}'"
+                        f"GLFM fallback chain for '{self.lang_code}': "
+                        f"{self.glfm_fallback_chain}"
+                    )
+                else:
+                    logger.debug(
+                        f"GLFM loaded but no fallback chain for '{self.lang_code}'"
                     )
 
-        # Initialize translation cache and translator
+        # Initialize translation cache
         self.cache = TranslationCache()
-        self.translator = AITranslator(
-            provider="auto",
-            libretranslate_url=os.environ.get("LIBRETRANSLATE_URL"),
-            libretranslate_api_key=os.environ.get("LIBRETRANSLATE_API_KEY"),
-            mymemory_email=os.environ.get("MYMEMORY_EMAIL"),
+
+        # Initialize translation providers
+        self.mymemory_adapter = MyMemoryAdapter(
+            email=mymemory_email or os.environ.get("MYMEMORY_EMAIL")
         )
+
+        self.libretranslate_adapter = LibreTranslateAdapter(
+            base_url=libretranslate_url or os.environ.get("LIBRETRANSLATE_URL"),
+            api_key=libretranslate_api_key or os.environ.get("LIBRETRANSLATE_API_KEY"),
+            mirrors=libretranslate_mirrors,
+        )
+
+        # Store provider configuration for fallback
+        self._libretranslate_url = libretranslate_url or os.environ.get("LIBRETRANSLATE_URL")
+        self._libretranslate_api_key = libretranslate_api_key or os.environ.get("LIBRETRANSLATE_API_KEY")
+        self._mymemory_email = mymemory_email or os.environ.get("MYMEMORY_EMAIL")
+        self._libretranslate_mirrors = libretranslate_mirrors
 
         # Initialize localizers
         self.ui_localizer = Localizer(
@@ -101,18 +149,20 @@ class LocalizationEngine:
 
         logger.info(
             f"LocalizationEngine initialized: lang={self.lang_code}, base={self.base_lang}"
+            f"{' (GLFM Lite)' if glfm_lite else ' (GLFM Full)'}"
         )
 
     # --- Configuration handling ---
 
-    def _load_default_config(self) -> dict:
+    def _load_default_config(self) -> Dict[str, Any]:
         """Load default configuration, optionally from config.conf"""
         config = {
-            "ai_translation_enabled": False,
+            "m_translation_enabled": False,
             "translation_cache_ttl": 3600,
             "fallback_to_base": True,
             "strict_mode": False,
-            "default_language": None,  # None = not set in config.conf
+            "default_language": None,
+            "glfm_lite": True,
         }
 
         # Try reading config.conf
@@ -140,6 +190,12 @@ class LocalizationEngine:
                             "SETTINGS", "fallback_to_base", fallback=True
                         )
 
+                    # GLFM Lite
+                    if parser.has_option("SETTINGS", "glfm_lite"):
+                        config["glfm_lite"] = parser.getboolean(
+                            "SETTINGS", "glfm_lite", fallback=True
+                        )
+
                     # Optional: base_lang from config
                     base = parser.get("SETTINGS", "base_lang", fallback=None)
                     if base:
@@ -151,16 +207,18 @@ class LocalizationEngine:
 
         return config
 
+    # --- Language detection ---
+
     def _detect_language(self) -> str:
         """
         Auto-detect language.
         Priority:
-          1. config.conf → [SETTINGS] language  (via self.config["default_language"])
+          1. config.conf → [SETTINGS] language
           2. SHL_LANGUAGE environment variable
           3. LANG environment variable
           4. Default: "en"
         """
-        # 1. From config.conf (already loaded into self.config)
+        # 1. From config.conf
         if self.config.get("default_language"):
             return self.config["default_language"]
 
@@ -182,9 +240,24 @@ class LocalizationEngine:
         # 4. Default
         return "en"
 
+    # --- Key Validation ---
+
+    def _validate_key(self, key: str) -> str:
+        """Validate and normalize key."""
+        if not isinstance(key, str):
+            logger.warning(f"Invalid key type: {type(key)}, returning ''")
+            return ""
+        normalized = key.strip()
+        if not normalized:
+            logger.debug("Empty key detected")
+            return ""
+        if normalized != key:
+            logger.debug(f"Key normalized: '{key}' → '{normalized}'")
+        return normalized
+
     # --- Language Management ---
 
-    def ensure_language(self, lang_code):
+    def ensure_language(self, lang_code: str) -> None:
         """Ensure language files exist."""
         validated_lang = normalize_full_tag(lang_code)
         logger.debug(f"Ensuring language: {validated_lang}")
@@ -199,56 +272,104 @@ class LocalizationEngine:
             folder=self.template_folder,
         )
 
-    def set_language(self, lang_code: str):
+    def set_language(self, lang_code: str) -> None:
         """Dynamically switch active language"""
         validated_lang = normalize_full_tag(lang_code)
         self.lang_code = validated_lang
         self.ui_localizer.set_language(validated_lang)
         self.template_localizer.set_language(validated_lang)
+
+        # Update GLFM fallback chain for new language
+        if self.validator.is_loaded:
+            self.glfm_fallback_chain = self.validator.get_fallback_chain(
+                validated_lang,
+                base_language=self.base_lang,
+                max_nearest=3,
+            )
+            if len(self.glfm_fallback_chain) > 1:
+                self.glfm_fallback = self.glfm_fallback_chain[1]
+            else:
+                self.glfm_fallback = None
+
         logger.info(f"Language switched to: {validated_lang}")
-
-    # --- Key Validation ---
-
-    def _validate_key(self, key: str) -> str:
-        """Validate and normalize key - consistent None vs '' handling"""
-        if not isinstance(key, str):
-            logger.warning(f"Invalid key type: {type(key)}, returning ''")
-            return ""
-        normalized = key.strip()
-        if not normalized:
-            logger.debug("Empty key detected")
-            return ""
-        if normalized != key:
-            logger.debug(f"Key normalized: '{key}' → '{normalized}'")
-        return normalized
 
     # --- Key Management ---
 
-    def ensure_ui_key(self, key, default=""):
+    def ensure_ui_key(self, key: str, default: str = "") -> str:
         """Ensure UI key exists."""
         validated_key = self._validate_key(key)
         if not validated_key:
             return ""
-        text = self._get_text_with_fallback(validated_key)
+        text = self._get_with_fallback(
+            self.ui_localizer.get_text,
+            validated_key,
+        )
         if text is None or text == "":
             self.ui_localizer.set_text(validated_key, default)
             return default
         return text
 
-    def ensure_template_key(self, key, default=""):
+    def ensure_template_key(self, key: str, default: str = "") -> str:
         """Ensure prompt template key exists."""
         validated_key = self._validate_key(key)
         if not validated_key:
             return ""
-        text = self.template_localizer.get_template(validated_key)
+        text = self._get_with_fallback(
+            self.template_localizer.get_template,
+            validated_key,
+        )
         if text is None or text == "":
             self.template_localizer.set_template(validated_key, default)
             return default
         return text
 
+    # --- DRY: Generic fallback ---
+
+    def _get_with_fallback(
+        self,
+        getter: Callable[[str, Optional[str], bool], Optional[str]],
+        key: str,
+    ) -> Optional[str]:
+        """
+        Generic fallback chain for UI texts and templates.
+
+        Args:
+            getter: Function to get text from a specific language
+            key: Key to look up
+
+        Returns:
+            Text if found, None otherwise
+        """
+        fallback_enabled = self.config.get("fallback_to_base", True)
+
+        # 1. Own language
+        text = getter(key, self.lang_code, fallback=False)
+        if text and text.strip():
+            return text
+
+        # 2. GLFM fallback chain
+        if self.glfm_fallback_chain and len(self.glfm_fallback_chain) > 1:
+            for fallback_lang in self.glfm_fallback_chain[1:]:
+                if fallback_lang != self.lang_code:
+                    logger.debug(
+                        f"Fallback: '{key}' → GLFM fallback ({fallback_lang})"
+                    )
+                    text = getter(key, fallback_lang, fallback=False)
+                    if text and text.strip():
+                        return text
+
+        # 3. Base language - only if fallback_to_base is True
+        if fallback_enabled and self.lang_code != self.base_lang:
+            logger.debug(f"Fallback: '{key}' → base_lang ({self.base_lang})")
+            text = getter(key, self.base_lang, fallback=False)
+            if text and text.strip():
+                return text
+
+        return None
+
     # --- Retrieval & Self-Healing ---
 
-    def ui_text(self, key, default_value=""):
+    def ui_text(self, key: str, default_value: str = "") -> str:
         """
         Retrieve UI text with self-healing and fallback chain.
 
@@ -258,41 +379,56 @@ class LocalizationEngine:
         if not validated_key:
             return default_value
 
-        cached = self.cache.get(validated_key, "ui", self.lang_code)
+        # Check cache
+        cached = self.cache.get(default_value, self.base_lang, self.lang_code)
         if cached:
             return cached
 
-        text = self._get_text_with_fallback(validated_key)
+        text = self._get_with_fallback(
+            self.ui_localizer.get_text,
+            validated_key,
+        )
 
         if text is None:
             # AI translation only if enabled in config
             if (
-                self.config.get("ai_translation_enabled", False)
+                self.config.get("m_translation_enabled", False)
                 and self.lang_code != self.base_lang
                 and default_value
             ):
-                translated = self.translator.translate(
-                    default_value, self.lang_code, self.base_lang
-                )
-                if translated and translated != default_value:
-                    self.ui_localizer.set_text(validated_key, translated)
-                    self.cache.set(validated_key, translated, "ui", self.lang_code)
-                    return translated
+                try:
+                    translated = translate_text(
+                        default_value,
+                        target_lang=self.lang_code,
+                        source_lang=self.base_lang,
+                        libretranslate_url=self._libretranslate_url,
+                        libretranslate_api_key=self._libretranslate_api_key,
+                        mymemory_email=self._mymemory_email,
+                    )
+                    if translated and translated != default_value:
+                        self.ui_localizer.set_text(validated_key, translated)
+                        self.cache.set(validated_key, translated, self.base_lang, self.lang_code)
+                        return translated
+                except Exception as e:
+                    logger.warning(f"AI translation failed: {e}")
 
             self.ui_localizer.set_text(validated_key, default_value)
-            self.cache.set(validated_key, default_value, "ui", self.lang_code)
+            self.cache.set(validated_key, default_value, self.base_lang, self.lang_code)
             return default_value
 
-        self.cache.set(validated_key, text, "ui", self.lang_code)
+        self.cache.set(validated_key, text, self.base_lang, self.lang_code)
         return text
 
-    def template(self, key, default="", **kwargs):
+    def template(self, key: str, default: str = "", **kwargs) -> str:
         """Retrieve prompt template with self-healing and variable substitution"""
         validated_key = self._validate_key(key)
         if not validated_key:
             return default if default else key
 
-        text = self._get_template_with_fallback(validated_key)
+        text = self._get_with_fallback(
+            self.template_localizer.get_template,
+            validated_key,
+        )
 
         if text is None:
             logger.info(f"Template '{validated_key}' missing, using default")
@@ -308,84 +444,6 @@ class LocalizationEngine:
         except (KeyError, ValueError) as e:
             logger.warning(f"Template '{validated_key}' format error: {e}")
             return text
-
-    # --- Fallback mechanisms ---
-
-    def _get_text_with_fallback(self, key: str) -> str:
-        """
-        Get UI text with fallback chain:
-        lang_code → GLFM fallback → base_lang → None
-
-        Respects fallback_to_base config setting.
-        """
-        fallback_enabled = self.config.get("fallback_to_base", True)
-
-        # 1. Own language (no fallback at Localizer level)
-        text = self.ui_localizer.get_text(key, self.lang_code, fallback=False)
-        if text and text.strip():
-            return text
-
-        # 2. GLFM fallback (if available)
-        if self.glfm_fallback and self.glfm_fallback != self.lang_code:
-            logger.debug(
-                f"UI fallback: '{key}' → GLFM fallback ({self.glfm_fallback})"
-            )
-            text = self.ui_localizer.get_text(
-                key, self.glfm_fallback, fallback=False
-            )
-            if text and text.strip():
-                return text
-
-        # 3. Base language - only if fallback_to_base is True
-        if fallback_enabled and self.lang_code != self.base_lang:
-            logger.debug(f"UI fallback: '{key}' → base_lang ({self.base_lang})")
-            text = self.ui_localizer.get_text(
-                key, self.base_lang, fallback=False
-            )
-            if text and text.strip():
-                return text
-
-        return None
-
-    def _get_template_with_fallback(self, key: str) -> str:
-        """
-        Get template with fallback chain:
-        lang_code → GLFM fallback → base_lang → None
-
-        Respects fallback_to_base config setting.
-        """
-        fallback_enabled = self.config.get("fallback_to_base", True)
-
-        # 1. Own language (no fallback at Localizer level)
-        text = self.template_localizer.get_template(
-            key, self.lang_code, fallback=False
-        )
-        if text and text.strip():
-            return text
-
-        # 2. GLFM fallback (if available)
-        if self.glfm_fallback and self.glfm_fallback != self.lang_code:
-            logger.debug(
-                f"Template fallback: '{key}' → GLFM fallback ({self.glfm_fallback})"
-            )
-            text = self.template_localizer.get_template(
-                key, self.glfm_fallback, fallback=False
-            )
-            if text and text.strip():
-                return text
-
-        # 3. Base language - only if fallback_to_base is True
-        if fallback_enabled and self.lang_code != self.base_lang:
-            logger.debug(
-                f"Template fallback: '{key}' → base_lang ({self.base_lang})"
-            )
-            text = self.template_localizer.get_template(
-                key, self.base_lang, fallback=False
-            )
-            if text and text.strip():
-                return text
-
-        return None
 
     # --- Synchronization ---
 
@@ -451,7 +509,7 @@ class LocalizationEngine:
         Synchronize all keys from fallback chain to current language.
 
         Fallback chain order:
-        1. GLFM fallback (if available and different from current)
+        1. GLFM fallback chain (all)
         2. Base language
 
         Returns:
@@ -461,10 +519,12 @@ class LocalizationEngine:
 
         total_synced = 0
 
-        # 1. Sync from GLFM fallback (if available)
-        if self.glfm_fallback and self.glfm_fallback != self.lang_code:
-            logger.info(f"Syncing from GLFM fallback: '{self.glfm_fallback}'")
-            total_synced += self._sync_from_lang(self.glfm_fallback)
+        # 1. Sync from GLFM fallback chain (if available)
+        if self.glfm_fallback_chain and len(self.glfm_fallback_chain) > 1:
+            for fallback_lang in self.glfm_fallback_chain[1:]:
+                if fallback_lang != self.lang_code:
+                    logger.info(f"Syncing from GLFM fallback: '{fallback_lang}'")
+                    total_synced += self._sync_from_lang(fallback_lang)
 
         # 2. Sync from base language (always)
         if self.base_lang != self.lang_code:
@@ -480,20 +540,74 @@ class LocalizationEngine:
 
     # --- Statistics and diagnostics ---
 
-    def get_stats(self) -> dict:
-        """Return engine statistics"""
+    def get_stats(self) -> Dict[str, Any]:
+        """Return engine statistics (copy to prevent mutation)."""
         return {
             "lang_code": self.lang_code,
             "base_lang": self.base_lang,
             "glfm_fallback": self.glfm_fallback,
+            "glfm_fallback_chain": self.glfm_fallback_chain.copy(),
+            "glfm_lite": self.validator.is_lite if self.validator else True,
+            "glfm_loaded": self.validator.is_loaded if self.validator else False,
             "ui_keys_count": len(self.ui_localizer.texts),
             "template_keys_count": len(self.template_localizer.templates),
-            "cache_size": len(self.cache.cache)
-            if hasattr(self.cache, "cache")
-            else 0,
-            "glfm_loaded": self.validator.is_loaded if self.validator else False,
+            "cache_size": self.cache.size(),
             "ai_translation_enabled": self.config.get(
                 "ai_translation_enabled", False
             ),
-            "config": self.config,
+            "config": self.config.copy(),
         }
+
+    # --- Mirror statistics ---
+
+    def get_mirror_stats(self) -> List[Dict[str, Any]]:
+        """Get LibreTranslate mirror statistics."""
+        return self.libretranslate_adapter.get_mirror_stats()
+
+    def clear_mirror_cache(self) -> None:
+        """Clear LibreTranslate mirror cache."""
+        self.libretranslate_adapter.clear_mirror_cache()
+
+    # --- GLFM management ---
+
+    def reload_glfm(
+        self,
+        glfm_path: Optional[str] = None,
+        glfm_lite: Optional[bool] = None
+    ) -> bool:
+        """
+        Reload GLFM database with new settings.
+
+        Args:
+            glfm_path: Custom path to GLFM database
+            glfm_lite: Use GLFM Lite (True) or Full (False)
+
+        Returns:
+            True if reloaded successfully
+        """
+        if glfm_lite is None:
+            glfm_lite = self.config.get("glfm_lite", True)
+
+        self.validator = LanguageValidator(
+            glfm_path=glfm_path,
+            base_language=self.base_lang,
+            use_lite=glfm_lite,
+        )
+
+        if self.validator.is_loaded:
+            self.glfm_fallback_chain = self.validator.get_fallback_chain(
+                self.lang_code,
+                base_language=self.base_lang,
+                max_nearest=3,
+            )
+            if len(self.glfm_fallback_chain) > 1:
+                self.glfm_fallback = self.glfm_fallback_chain[1]
+            else:
+                self.glfm_fallback = None
+            logger.info(f"GLFM reloaded: {len(self.validator.languages)} languages")
+            return True
+        else:
+            self.glfm_fallback = None
+            self.glfm_fallback_chain = []
+            logger.warning("GLFM reload failed")
+            return False

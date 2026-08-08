@@ -1,16 +1,28 @@
+# Documentation
 include README.md
 include LICENSE
 include CHANGELOG.md
 include CONTRIBUTING.md
+include SECURITY.md
 
 # SHL source code
 recursive-include shl *.py
 recursive-include shl *.json
+recursive-include shl *.json.gz
+recursive-include shl *.txt
 
-# Tests (if you want them in the package)
+# Tests (included in sdist, not installed)
 recursive-include tests *.py
 
+# Documentation sources
+recursive-include doc *.md
+recursive-include doc *.py
+recursive-include doc *.yml
+recursive-include doc *.yaml
+
 # Example data (optional - for users to see structure)
+recursive-include examples *.py
+recursive-include examples *.json
 recursive-include locales *.json
 recursive-include prompts *.json
 
@@ -22,3 +34,16 @@ global-exclude .DS_Store
 global-exclude .git*
 global-exclude .env
 global-exclude *.bak
+global-exclude *.tmp
+global-exclude .coverage
+global-exclude coverage.xml
+global-exclude *.log
+
+# Exclude development files
+global-exclude .mypy_cache
+global-exclude .pytest_cache
+global-exclude .ruff_cache
+global-exclude .tox
+global-exclude build/
+global-exclude dist/
+global-exclude *.egg-info/

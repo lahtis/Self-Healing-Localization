@@ -1,7 +1,7 @@
 """
 File: logging_config.py
 Author: Tuomas Lähteenmäki
-Version: 0.1.8
+Version: 0.2.0
 License: MIT
 Description:
     Unified logging configuration for the Self-Healing Localization Layer.
@@ -24,8 +24,9 @@ Usage:
 import logging
 import sys
 import os
+import glob
 from logging.handlers import RotatingFileHandler
-from typing import Optional
+from typing import Optional, List
 
 
 # Default log levels
@@ -37,6 +38,9 @@ DEFAULT_BACKUP_COUNT = 3
 
 # Whether logging has been initialized
 _logging_initialized = False
+
+# Store active log file for stats
+_active_log_files: List[str] = []
 
 
 def setup_logging(
@@ -68,7 +72,7 @@ def setup_logging(
         >>> setup_logging()
         >>> setup_logging(console_level=logging.DEBUG, force=True)
     """
-    global _logging_initialized
+    global _logging_initialized, _active_log_files
     
     if _logging_initialized and not force:
         return logging.getLogger()
@@ -80,6 +84,7 @@ def setup_logging(
     # Remove old handlers (if force=True)
     if force:
         root_logger.handlers.clear()
+        _active_log_files.clear()
     
     # === Console handler ===
     console_handler = logging.StreamHandler(sys.stdout)
@@ -109,6 +114,10 @@ def setup_logging(
         ))
         root_logger.addHandler(file_handler)
         
+        # Store active log file for stats
+        if log_file not in _active_log_files:
+            _active_log_files.append(log_file)
+        
     except Exception as e:
         # If file handler creation fails, log to console
         root_logger.warning(f"Log file handler creation failed: {e}")
@@ -126,20 +135,24 @@ def setup_logging(
     _logging_initialized = True
     
     # Log initialization
-    root_logger.info(f"SHL logging initialized (console={logging.getLevelName(console_level)}, "
-                     f"file={logging.getLevelName(file_level)}, path='{log_file}')")
+    root_logger.info(
+        f"SHL logging initialized (console={logging.getLevelName(console_level)}, "
+        f"file={logging.getLevelName(file_level)}, path='{log_file}')"
+    )
     
     return root_logger
 
 
-def get_logger(name: str) -> logging.Logger:
+def get_logger(
+    name: str,
+    add_shl_prefix: bool = True
+) -> logging.Logger:
     """
     Return a logger for the named module.
     
-    Ensures the logger follows SHL namespace.
-    
     Args:
         name: Module name (typically __name__)
+        add_shl_prefix: If True, ensure logger is in SHL namespace
     
     Returns:
         Logger object
@@ -147,15 +160,18 @@ def get_logger(name: str) -> logging.Logger:
     Example:
         >>> logger = get_logger(__name__)
         >>> logger.info("Message")
+        >>> logger = get_logger("my_module", add_shl_prefix=False)
     """
-    # Ensure logger is in SHL namespace
-    if not name.startswith('shl'):
+    if add_shl_prefix and not name.startswith('shl'):
         name = f'shl.{name}'
     
     return logging.getLogger(name)
 
 
-def set_level(level: int, logger_name: str = None):
+def set_level(
+    level: int,
+    logger_name: Optional[str] = None
+) -> None:
     """
     Change log level on the fly.
     
@@ -172,6 +188,50 @@ def set_level(level: int, logger_name: str = None):
     logging.getLogger().info(f"Log level changed: {logging.getLevelName(level)}")
 
 
+def remove_handler(
+    handler_type: str,
+    logger_name: Optional[str] = None
+) -> int:
+    """
+    Remove handlers of a specific type from a logger.
+    
+    Args:
+        handler_type: Handler class name (e.g., 'StreamHandler', 'RotatingFileHandler')
+        logger_name: Logger name (None = root)
+    
+    Returns:
+        Number of handlers removed
+    
+    Example:
+        >>> remove_handler('StreamHandler')  # Remove console logging
+        >>> remove_handler('RotatingFileHandler')  # Remove file logging
+    """
+    logger = logging.getLogger(logger_name) if logger_name else logging.getLogger()
+    removed = 0
+    handlers_to_remove = []
+    
+    for handler in logger.handlers:
+        if handler.__class__.__name__ == handler_type:
+            handlers_to_remove.append(handler)
+    
+    for handler in handlers_to_remove:
+        logger.removeHandler(handler)
+        removed += 1
+        
+        # Also remove from active log files if it's a file handler
+        if handler_type == 'RotatingFileHandler':
+            global _active_log_files
+            if hasattr(handler, 'baseFilename'):
+                filename = handler.baseFilename
+                if filename in _active_log_files:
+                    _active_log_files.remove(filename)
+    
+    if removed > 0:
+        logging.getLogger().info(f"Removed {removed} {handler_type} handler(s)")
+    
+    return removed
+
+
 def get_log_stats() -> dict:
     """
     Return logging statistics.
@@ -181,24 +241,51 @@ def get_log_stats() -> dict:
     
     Example:
         >>> stats = get_log_stats()
-        >>> print(stats['log_file'])
+        >>> print(stats['log_files'])
     """
-    import glob
-    
     stats = {
         'initialized': _logging_initialized,
-        'log_file': DEFAULT_LOG_FILE,
-        'handlers': len(logging.getLogger().handlers)
+        'handlers': len(logging.getLogger().handlers),
+        'log_files': list(_active_log_files),
     }
     
-    # Check error.log and its backups
-    if os.path.exists(DEFAULT_LOG_FILE):
-        stats['log_file_size'] = os.path.getsize(DEFAULT_LOG_FILE)
+    # Check first active log file
+    if _active_log_files and os.path.exists(_active_log_files[0]):
+        log_file = _active_log_files[0]
+        stats['log_file_size'] = os.path.getsize(log_file)
         
-        backup_files = glob.glob(f"{DEFAULT_LOG_FILE}.*")
+        backup_files = glob.glob(f"{log_file}.*")
         stats['backup_files'] = len(backup_files)
+    else:
+        stats['log_file_size'] = 0
+        stats['backup_files'] = 0
+    
+    # Handler types
+    handler_types = []
+    for handler in logging.getLogger().handlers:
+        handler_types.append(handler.__class__.__name__)
+    stats['handler_types'] = handler_types
     
     return stats
+
+
+def reset_logging() -> None:
+    """
+    Reset logging configuration.
+    
+    This removes all handlers and resets the initialized state.
+    Useful for testing or reconfiguration.
+    
+    Example:
+        >>> reset_logging()
+        >>> setup_logging(console_level=logging.DEBUG)
+    """
+    global _logging_initialized, _active_log_files
+    
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    _active_log_files.clear()
+    _logging_initialized = False
 
 
 # --- Test and example ---
@@ -229,3 +316,9 @@ if __name__ == "__main__":
         print(f"  {key}: {value}")
     
     print(f"\n=== Check '{DEFAULT_LOG_FILE}' to see all logs ===")
+    
+    # Test remove_handler
+    print("\n=== Testing remove_handler ===")
+    print(f"Handlers before: {len(logging.getLogger().handlers)}")
+    remove_handler('StreamHandler')
+    print(f"Handlers after removing StreamHandler: {len(logging.getLogger().handlers)}")

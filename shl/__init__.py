@@ -3,7 +3,12 @@ Self-Healing Localization Layer (SHL)
 A lightweight, dependency-free Python library that eliminates missing translations forever.
 """
 
-from shl.logging_config import setup_logging, get_logger
+from shl.logging_config import (
+    setup_logging,
+    get_logger,
+    set_level,
+    get_log_stats,
+)
 from shl.language_validator import LanguageValidator
 from shl.utils.lang_utils import (
     parse_bcp47,
@@ -13,19 +18,35 @@ from shl.utils.lang_utils import (
     get_parent,
     split_tag
 )
-from shl.engine.ai_translation import (
+
+# Uusi translation-moduuli
+from shl.engine.translation import (
+    # Pääfunktiot
     translate_text,
-    AITranslator,
-    TranslationCache,
-    get_supported_languages,
-    get_all_supported_languages,
     get_best_provider,
+    get_all_supported_languages,
+    get_supported_languages,
+    get_libretranslate_mirror_stats,
+    # Välimuisti
+    TranslationCache,
+    # Metadata
+    TranslationRequest,
+    TranslationResult,
+    # Apufunktiot
+    clear_unavailable_cache,
+    get_unavailable_cache_stats,
+    # Providerit (suoraan)
+    MyMemoryAdapter,
+    LibreTranslateAdapter,
+    # Deprecated (säilytetään yhteensopivuus)
+    AITranslator,
+    # Poikkeukset
+    TranslationError,
     RateLimitExceededError,
     ServiceUnavailableError,
     LanguageNotSupportedError,
     ProviderAccessError,
     InvalidRequestError,
-    TranslationError
 )
 
 __version__ = "0.2.0"
@@ -33,29 +54,48 @@ __author__ = "Tuomas Lähteenmäki"
 __license__ = "MIT"
 
 __all__ = [
+    # Versio
+    "__version__",
+    "__author__",
+    "__license__",
+    # Logging
+    "setup_logging",
+    "get_logger",
+    "set_level",
+    "get_log_stats",
     # Core
-    'LanguageValidator',
-    'setup_logging',
-    'get_logger',
+    "LanguageValidator",
     # Lang utils
-    'parse_bcp47',
-    'normalize_full_tag',
-    'base_language',
-    'has_region',
-    'get_parent',
-    'split_tag',
-    # Translation
-    'translate_text',
-    'AITranslator',
-    'TranslationCache',
-    'get_supported_languages',
-    'get_all_supported_languages',
-    'get_best_provider',
-    # Errors
-    'RateLimitExceededError',
-    'ServiceUnavailableError',
-    'LanguageNotSupportedError',
-    'ProviderAccessError',
-    'InvalidRequestError',
-    'TranslationError',
+    "parse_bcp47",
+    "normalize_full_tag",
+    "base_language",
+    "has_region",
+    "get_parent",
+    "split_tag",
+    # Translation - pääfunktiot
+    "translate_text",
+    "get_best_provider",
+    "get_all_supported_languages",
+    "get_supported_languages",
+    "get_libretranslate_mirror_stats",
+    # Translation - cache
+    "TranslationCache",
+    # Translation - metadata
+    "TranslationRequest",
+    "TranslationResult",
+    # Translation - apufunktiot
+    "clear_unavailable_cache",
+    "get_unavailable_cache_stats",
+    # Translation - providerit
+    "MyMemoryAdapter",
+    "LibreTranslateAdapter",
+    # Translation - deprecated
+    "AITranslator",
+    # Translation - poikkeukset
+    "TranslationError",
+    "RateLimitExceededError",
+    "ServiceUnavailableError",
+    "LanguageNotSupportedError",
+    "ProviderAccessError",
+    "InvalidRequestError",
 ]
