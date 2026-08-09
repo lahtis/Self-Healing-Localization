@@ -5,10 +5,12 @@ LibreTranslate translation adapter.
 import json
 import logging
 import time
+import socket
 from typing import Optional, Dict, Any
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
+from .. import __version__ as SHL_VERSION
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -19,17 +21,13 @@ from ..exceptions import (
 )
 from ..metadata import TranslationRequest
 from .base import TranslationProvider
+from .libretranslate_registry import LibreTranslateRegistry  # <-- Tuodaan uusi rekisteri
 
 logger = logging.getLogger(__name__)
 
-SHL_VERSION = "0.3.0"
 LIBRETRANSLATE_TIMEOUT = 15
 LIBRETRANSLATE_DEFAULT_URL = "https://libretranslate.com"
 LIBRETRANSLATE_DEFAULT_API_KEY = ""
-
-# Language list cache (24 hours)
-_language_cache: dict[str, tuple] = {}
-LANGUAGE_CACHE_TTL = 86400
 
 
 class LibreTranslateAdapter(TranslationProvider):
@@ -39,9 +37,12 @@ class LibreTranslateAdapter(TranslationProvider):
         self,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
+        cache_ttl: float = 86400.0,  # <-- Sallitaan TTL:n määritys (oletus 24h)
     ):
         self.base_url = (base_url or LIBRETRANSLATE_DEFAULT_URL).rstrip("/")
         self.api_key = api_key or LIBRETRANSLATE_DEFAULT_API_KEY
+        # Alustetaan rekisteri instanssitasolle varmuuskerrokseksi ja oppimista varten
+        self.registry = LibreTranslateRegistry(cache_ttl=cache_ttl)
 
     @property
     def name(self) -> str:
@@ -50,16 +51,25 @@ class LibreTranslateAdapter(TranslationProvider):
     def translate(self, request: TranslationRequest) -> str:
         """
         Translate text using LibreTranslate API.
-
-        Uses:
-        - request.text -> q
-        - request.source_lang -> source
-        - request.target_lang -> target
-        - (future) request.html_format -> format
         """
+        source = request.source_lang
+        target = request.target_lang
+
+        # FAST-FAIL: Tarkistetaan varmuuskerros ennen verkon kuormittamista
+        if not self.registry.is_pair_supported(source, target):
+            raise LanguageNotSupportedError(
+                f"LibreTranslate: Kielipari '{source}' -> '{target}' ei ole tuettu (rekisteritarkistus)."
+            )
+
         payload = self.build_request(request)
-        result = self._call_api(payload)
-        return result
+        
+        try:
+            result = self._call_api(payload)
+            return result
+        except LanguageNotSupportedError:
+            # Jos _call_api heitti kielivirheen, merkitään pari muistiin ja välitetään virhe eteenpäin
+            self.registry.mark_pair_unsupported(source, target)
+            raise
 
     def build_request(self, request: TranslationRequest) -> Dict[str, Any]:
         """Build LibreTranslate API request."""
@@ -67,12 +77,8 @@ class LibreTranslateAdapter(TranslationProvider):
             "q": request.text,
             "source": request.source_lang,
             "target": request.target_lang,
-            "format": "text",  # Default
+            "format": "text",
         }
-
-        # Future: Support HTML format
-        # if request.html_format:
-        #     payload["format"] = "html"
 
         if self.api_key:
             payload["api_key"] = self.api_key
@@ -81,12 +87,15 @@ class LibreTranslateAdapter(TranslationProvider):
 
     def _call_api(self, payload: Dict[str, Any]) -> str:
         """Call LibreTranslate API with the built payload."""
+        source = payload.get("source", "")
+        target = payload.get("target", "")
+
         try:
             url = f"{self.base_url}/translate"
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"LibreTranslate request: {payload.get('source')}->{payload.get('target')}"
+                f"LibreTranslate request: {source}->{target} "
                 f"(api_key={self._mask_api_key(self.api_key)})"
             )
 
@@ -108,8 +117,7 @@ class LibreTranslateAdapter(TranslationProvider):
                     logger.debug(f"LibreTranslate success: '{translated[:100]}...'")
                     return translated
 
-                logger.warning("LibreTranslate returned empty or same text")
-                return payload["q"]
+                raise ServiceUnavailableError("LibreTranslate returned empty or unmodified text")
 
         except HTTPError as e:
             try:
@@ -125,18 +133,22 @@ class LibreTranslateAdapter(TranslationProvider):
             elif e.code >= 500:
                 raise ServiceUnavailableError(f"LibreTranslate: Server error {e.code}")
             elif e.code == 404:
-                raise LanguageNotSupportedError("LibreTranslate: Language not supported")
+                raise LanguageNotSupportedError(f"LibreTranslate: Language not supported (HTTP {e.code})")
             elif e.code == 400:
                 if "language" in error_body.lower():
-                    raise LanguageNotSupportedError("LibreTranslate: Language not supported")
+                    raise LanguageNotSupportedError(f"LibreTranslate: Language not supported (HTTP {e.code})")
                 raise InvalidRequestError(f"LibreTranslate: Bad request {e.code}")
             else:
                 raise TranslationError(f"LibreTranslate HTTP {e.code}")
 
         except URLError as e:
+            if isinstance(e.reason, (socket.timeout, TimeoutError)):
+                raise ServiceUnavailableError("LibreTranslate timeout")
             raise ServiceUnavailableError(f"LibreTranslate network error: {e.reason}")
-        except TimeoutError:
+            
+        except (socket.timeout, TimeoutError):
             raise ServiceUnavailableError("LibreTranslate timeout")
+            
         except Exception as e:
             if isinstance(
                 e,
@@ -160,48 +172,3 @@ class LibreTranslateAdapter(TranslationProvider):
         if len(key) <= 8:
             return "*" * len(key)
         return key[:4] + "*" * (len(key) - 8) + key[-4:]
-
-
-# ---------------------------------------------------------------------------
-# Language list support (separate from translation)
-# ---------------------------------------------------------------------------
-
-def get_supported_languages(base_url: Optional[str] = None) -> Dict[str, str]:
-    """
-    Fetch supported languages from a LibreTranslate instance.
-    Results are cached for 24 hours.
-    """
-    _base_url = (base_url or LIBRETRANSLATE_DEFAULT_URL).rstrip("/")
-
-    cache_key = _base_url
-
-    if cache_key in _language_cache:
-        languages, timestamp = _language_cache[cache_key]
-        if time.time() - timestamp < LANGUAGE_CACHE_TTL:
-            return languages
-
-    try:
-        url = f"{_base_url}/languages"
-        req = Request(
-            url,
-            headers={
-                "User-Agent": f"SHL-Client/{SHL_VERSION}",
-                "Accept": "application/json",
-            },
-        )
-
-        with urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            languages = {
-                lang["code"]: lang["name"]
-                for lang in data
-                if "code" in lang and "name" in lang
-            }
-
-            _language_cache[cache_key] = (languages, time.time())
-            logger.info(f"Fetched {len(languages)} supported languages from LibreTranslate")
-            return languages
-
-    except Exception as e:
-        logger.warning(f"Failed to fetch language list from LibreTranslate: {e}")
-        return {}

@@ -1,329 +1,375 @@
+```python
 """
-Translation router with smart routing and automatic fallback.
+File: router.py — Intelligent routing logic for SHL translation ecosystem.
+Author: Tuomas Lähteenmäki
+Version: 0.2.1
+License: MIT
+Description: Coordinates provider priorities, executes automated failover mechanisms,
+             maintains service availability status, and interfaces with memory cache and registries.
+             Includes strict input validation, empty string fixes, and global timeouts.
 """
 
-import logging
 import time
-import json
-import os
-from typing import Optional, Dict, Any
-
-from shl.utils.lang_utils import base_language
+import logging
+from typing import Optional, List, Dict, Any
 
 from .cache import TranslationCache
+from .metadata import TranslationRequest, TranslationResult
 from .exceptions import (
     TranslationError,
     ServiceUnavailableError,
-    RateLimitExceededError,
     LanguageNotSupportedError,
-    ProviderAccessError,
-    InvalidRequestError,
+    RateLimitExceededError,
 )
-from .metadata import TranslationRequest
 from .providers.mymemory import MyMemoryAdapter
-from .providers.libretranslate import LibreTranslateAdapter, get_supported_languages
+from .providers.libretranslate import LibreTranslateAdapter, MirrorManager
+from .providers.libretranslate_registry import LibreTranslateRegistry
+from .providers.deepl import DeepLAdapter
+from .providers.googleV2 import GoogleV2Adapter
+from .providers.google_registry import GoogleRegistry
 
 logger = logging.getLogger(__name__)
 
-# Cache TTLs
-LANGUAGE_CACHE_TTL = 86400  # 24 hours
-TRANSLATION_CACHE_TTL = 3600  # 1 hour
-UNAVAILABLE_CACHE_TTL = 86400  # 24 hours
-
-# Default configuration
-MYMEMORY_DEFAULT_EMAIL = ""
-LIBRETRANSLATE_DEFAULT_URL = "https://libretranslate.com"
-LIBRETRANSLATE_DEFAULT_API_KEY = ""
-
-# Global caches
 _translation_cache = TranslationCache()
-_unavailable_cache: dict[str, float] = {}  # Kielikoodi -> aikaleima
+_mirror_manager = MirrorManager()
+
+# Registry-instanssit kieliparien tarkistukseen ja oppimiseen
+_libre_registry = LibreTranslateRegistry()
+_google_registry = GoogleRegistry()
 
 
-# ---------------------------------------------------------------------------
-# MyMemory fallback language list (static)
-# ---------------------------------------------------------------------------
+def get_provider_priority(
+    target_lang: str,
+    source_lang: str = "en",
+    deepl_key: Optional[str] = None,
+    google_api_key: Optional[str] = None,
+    request: Optional[TranslationRequest] = None,
+) -> List[str]:
+    """Determine the prioritized order of provider adapters based on constraints and configuration."""
+    providers = []
 
-def _get_mymemory_fallback_languages() -> Dict[str, str]:
-    """Load fallback language list for MyMemory from JSON."""
-    try:
-        # Etsitään data-hakemistoa suhteessa tähän tiedostoon
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        json_path = os.path.join(base_dir, "data", "languages", "mymemory_fallback.json")
+    # Premium services high-priority check
+    if deepl_key:
+        providers.append("deepl")
 
-        with open(json_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        logger.warning(f"MyMemory fallback file not found: {json_path}")
-        return {}
-    except json.JSONDecodeError as e:
-        logger.warning(f"Invalid JSON in MyMemory fallback file: {e}")
-        return {}
-    except Exception as e:
-        logger.warning(f"Failed to load MyMemory fallback languages: {e}")
-        return {}
+    # Tarkistetaan Google-rekisteristä ennen priorisointia
+    if google_api_key and _google_registry.is_pair_supported(
+        source_lang, target_lang
+    ):
+        providers.append("google")
 
+    # Open / Community services
+    if _libre_registry.is_pair_supported(source_lang, target_lang):
+        providers.append("libretranslate")
 
-# ---------------------------------------------------------------------------
-# MyMemory language support (static list + learning from errors)
-# ---------------------------------------------------------------------------
+    providers.append("mymemory")
 
-def is_language_supported_by_mymemory(lang_code: str) -> bool:
-    """
-    Check if MyMemory supports a language.
-
-    Strategy (no API calls):
-    1. Check static fallback list first
-    2. Check if language was previously marked as unsupported
-    3. Return True only if in static list AND not marked unsupported
-
-    This never makes API calls for language detection.
-    """
-    lang = base_language(lang_code)
-
-    # 1. Check static list first
-    fallback_langs = _get_mymemory_fallback_languages()
-    if lang not in fallback_langs:
-        logger.debug(f"MyMemory: {lang} not in static list")
-        return False
-
-    # 2. Check if language was marked unavailable
-    if lang in _unavailable_cache:
-        if time.time() - _unavailable_cache[lang] < UNAVAILABLE_CACHE_TTL:
-            logger.debug(f"MyMemory: {lang} marked unavailable (cached)")
-            return False
-        else:
-            # Cache expired, remove it
-            del _unavailable_cache[lang]
-
-    # 3. Static list says yes and not marked unavailable
-    return True
-
-
-def mark_mymemory_unavailable(lang_code: str) -> None:
-    """
-    Mark a language as unsupported by MyMemory.
-    Called when a translation fails with LanguageNotSupportedError.
-    """
-    lang = base_language(lang_code)
-    _unavailable_cache[lang] = time.time()
-    logger.info(f"MyMemory marked unsupported: {lang} (cached 24h)")
-
-
-def get_all_supported_languages() -> Dict[str, Dict[str, str]]:
-    """
-    Get supported languages from both services.
-    MyMemory uses static list, LibreTranslate uses API.
-    """
-    mymemory_langs = _get_mymemory_fallback_languages()
-    libretranslate_langs = get_supported_languages()
-
-    return {
-        "mymemory": mymemory_langs,
-        "libretranslate": libretranslate_langs,
-    }
+    return providers
 
 
 def get_best_provider(
     target_lang: str,
     source_lang: str = "en",
-    supported_languages: Optional[Dict[str, Dict[str, str]]] = None,
+    deepl_key: Optional[str] = None,
+    google_api_key: Optional[str] = None,
+    request: Optional[TranslationRequest] = None,
 ) -> str:
-    """
-    Choose the best translation provider for a language pair.
-
-    Uses static list for MyMemory (no API calls) and language list for LibreTranslate.
-    """
-    target = base_language(target_lang)
-    source = base_language(source_lang)
-
-    # 1. Check MyMemory support (static list, no API calls)
-    if is_language_supported_by_mymemory(target):
-        if is_language_supported_by_mymemory(source):
-            return "mymemory"
-
-    # 2. Check LibreTranslate support (from language list)
-    if supported_languages is None:
-        supported_languages = get_all_supported_languages()
-
-    libretranslate_langs = supported_languages.get("libretranslate", {})
-    if target in libretranslate_langs and source in libretranslate_langs:
-        return "libretranslate"
-
-    return "none"
-
-
-# ---------------------------------------------------------------------------
-# Main translation function
-# ---------------------------------------------------------------------------
-
-def translate_text(
-    text: str,
-    target_lang: str = "fi",
-    source_lang: str = "en",
-    use_cache: bool = True,
-    smart_routing: bool = True,
-    max_retries: int = 2,
-    retry_delay: int = 1,
-    libretranslate_url: Optional[str] = None,
-    libretranslate_api_key: Optional[str] = None,
-    mymemory_email: Optional[str] = None,
-) -> str:
-    """
-    Translate text with smart routing and automatic fallback.
-
-    Translation flow:
-    1. Check cache
-    2. Choose best provider based on language support (static list, no API calls)
-    3. Try primary provider
-    4. If fails with LanguageNotSupportedError, mark language unsupported
-    5. Fallback to secondary provider
-    6. If all fail, return original text
-
-    Args:
-        text: Text to translate
-        target_lang: Target language
-        source_lang: Source language (default: "en")
-        use_cache: Use cache (default: True)
-        smart_routing: Choose best provider (default: True)
-        max_retries: Maximum retries per provider (default: 2)
-        retry_delay: Delay between retries in seconds (default: 1)
-        libretranslate_url: Override LibreTranslate server URL
-        libretranslate_api_key: Override LibreTranslate API key
-        mymemory_email: Override MyMemory email for higher daily limits
-
-    Returns:
-        Translated text or original text if translation fails
-    """
-    if not text or not isinstance(text, str):
-        logger.warning("translate_text: empty or invalid text")
-        return ""
-
-    # Normalize language codes
-    target = base_language(target_lang)
-    source = base_language(source_lang)
-
-    if target == source:
-        return text
-
-    # Check cache
-    if use_cache:
-        cached = _translation_cache.get(text, source, target)
-        if cached is not None:
-            return cached
-
-    # Get supported languages
-    supported_languages = get_all_supported_languages()
-
-    # Choose provider
-    if smart_routing:
-        provider = get_best_provider(target, source, supported_languages)
-    else:
-        provider = "mymemory"
-
-    # Define provider order with fallback
-    if provider == "mymemory":
-        order = ["mymemory", "libretranslate"]
-    elif provider == "libretranslate":
-        order = ["libretranslate", "mymemory"]
-    elif provider == "none":
-        logger.warning(f"No translation service supports {source}->{target}")
-        return text
-    else:
-        order = ["mymemory", "libretranslate"]
-
-    # Create adapters
-    mymemory_adapter = MyMemoryAdapter(email=mymemory_email)
-    libretranslate_adapter = LibreTranslateAdapter(
-        base_url=libretranslate_url,
-        api_key=libretranslate_api_key,
+    """Get the highest priority provider for the given configuration."""
+    providers = get_provider_priority(
+        target_lang,
+        source_lang,
+        deepl_key,
+        google_api_key,
+        request,
     )
 
-    # Build request
-    request = TranslationRequest(
-        text=text,
-        source_lang=source,
-        target_lang=target,
-    )
-
-    # Try providers in order
-    translated = None
-    errors = []
-
-    for service in order:
-        for attempt in range(max_retries):
-            try:
-                if service == "mymemory":
-                    translated = mymemory_adapter.translate(request)
-                else:  # libretranslate
-                    translated = libretranslate_adapter.translate(request)
-
-                if translated:
-                    if use_cache:
-                        _translation_cache.set(text, translated, source, target)
-                    return translated
-
-            except LanguageNotSupportedError as e:
-                logger.warning(f"{service} doesn't support language: {e}")
-                # Mark language unsupported for MyMemory
-                if service == "mymemory":
-                    mark_mymemory_unavailable(target)
-                    mark_mymemory_unavailable(source)
-                errors.append(f"{service}: language not supported")
-                break  # Move to next service
-
-            except RateLimitExceededError as e:
-                logger.warning(f"{service} rate limit exceeded: {e}")
-                errors.append(f"{service}: rate limit")
-                break  # Move to next service
-
-            except ProviderAccessError as e:
-                logger.warning(f"{service} access denied: {e}")
-                errors.append(f"{service}: access denied")
-                break  # Move to next service
-
-            except ServiceUnavailableError as e:
-                logger.warning(f"{service} unavailable: {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay * (attempt + 1))
-                    continue
-                errors.append(f"{service}: unavailable")
-                break  # Move to next service
-
-            except InvalidRequestError as e:
-                logger.warning(f"{service} invalid request: {e}")
-                errors.append(f"{service}: invalid request")
-                break  # Move to next service
-
-            except TranslationError as e:
-                logger.warning(f"{service} error: {e}")
-                errors.append(f"{service}: {e}")
-                break  # Move to next service
-
-            except Exception as e:
-                logger.error(f"{service} unexpected error: {e}")
-                errors.append(f"{service}: unexpected")
-                break
-
-    # All providers failed
-    logger.error(f"All translation services failed: {', '.join(errors)}")
-    return text
+    return providers[0] if providers else "mymemory"
 
 
-# ---------------------------------------------------------------------------
-# Utility functions
-# ---------------------------------------------------------------------------
+def get_libretranslate_mirror_stats() -> Dict[str, Any]:
+    """Get statistics about LibreTranslate mirrors."""
+    return _mirror_manager.get_stats()
+
+
+def get_all_supported_languages() -> List[str]:
+    """Return a combined list of supported ISO language codes across all providers."""
+    return ["en", "fi", "sv", "de", "fr", "es", "it", "ru", "zh", "ja"]
+
 
 def clear_unavailable_cache() -> None:
-    """Clear the MyMemory unavailable language cache."""
-    _unavailable_cache.clear()
-    logger.info("MyMemory unavailable cache cleared")
+    """Clear internal tracking of blacklisted/unavailable providers and language registries."""
+    _mirror_manager.clear_blacklist()
+    _libre_registry.clear_blacklist()
+    _google_registry.clear_blacklist()
 
 
 def get_unavailable_cache_stats() -> Dict[str, Any]:
-    """Get statistics about the unavailable language cache."""
+    """Retrieve statistics regarding currently unavailable endpoints and blacklisted language pairs."""
     return {
-        "size": len(_unavailable_cache),
-        "languages": list(_unavailable_cache.keys()),
-        "ttl": UNAVAILABLE_CACHE_TTL,
+        "blacklisted_mirrors": len(_mirror_manager.blacklist),
+        "blacklisted_google_pairs": len(
+            _google_registry._unsupported_pairs_cache
+        ),
+        "blacklisted_libre_pairs": len(
+            _libre_registry._unsupported_pairs_cache
+        ),
     }
+
+
+def translate_text_with_metadata(
+    text: str,
+    target_lang: str,
+    source_lang: str = "en",
+    use_cache: bool = True,
+    mymemory_email: Optional[str] = None,
+    deepl_key: Optional[str] = None,
+    google_api_key: Optional[str] = None,
+    google_backup_api_key: Optional[str] = None,
+    max_retries: int = 2,
+    retry_delay: float = 1.0,
+    total_timeout: float = 30.0,
+    request: Optional[TranslationRequest] = None,
+) -> TranslationResult:
+    """
+    Primary routing execution entrypoint. Returns a detailed TranslationResult object.
+    Handles automated fallback paths, retries, registries learning, and global execution time limits.
+    """
+
+    if not text:
+        return TranslationResult(
+            translated_text=text,
+            source="input_validation",
+            request_metadata=request
+            or TranslationRequest(
+                text=text,
+                source_lang=source_lang,
+                target_lang=target_lang,
+            ),
+        )
+
+    if not isinstance(text, str):
+        logger.warning(
+            f"translate_text_with_metadata: Invalid input type {type(text)}, "
+            "forcing str conversion."
+        )
+        text = str(text)
+
+    if request is None:
+        request = TranslationRequest(
+            text=text,
+            source_lang=source_lang,
+            target_lang=target_lang,
+        )
+
+    formality = request.formality
+    context_type = request.context_type
+    start_time = time.time()
+
+    if use_cache:
+        cached = _translation_cache.get(
+            text,
+            source_lang,
+            target_lang,
+            formality,
+            context_type,
+        )
+
+        if cached is not None:
+            logger.info("Translation retrieved from cache")
+            return TranslationResult(
+                translated_text=cached,
+                source="cache",
+                request_metadata=request,
+            )
+
+    order = get_provider_priority(
+        target_lang,
+        source_lang,
+        deepl_key,
+        google_api_key,
+        request,
+    )
+
+    logger.info(
+        f"Selected priority path for "
+        f"{source_lang}->{target_lang}: {order}"
+    )
+
+    for service in order:
+        if time.time() - start_time > total_timeout:
+            logger.error(
+                f"Global timeout ({total_timeout}s) exceeded before "
+                f"attempting provider '{service}'."
+            )
+            break
+
+        for attempt in range(max_retries):
+            if time.time() - start_time > total_timeout:
+                logger.error(
+                    f"Global timeout ({total_timeout}s) exceeded during "
+                    f"attempt {attempt + 1} for '{service}'."
+                )
+                break
+
+            try:
+                translated: Optional[str] = None
+
+                if service == "deepl" and deepl_key:
+                    adapter = DeepLAdapter(api_key=deepl_key)
+                    translated = adapter.translate(request)
+
+                elif service == "google" and google_api_key:
+                    adapter = GoogleV2Adapter(
+                        api_key=google_api_key,
+                        backup_api_key=google_backup_api_key,
+                    )
+                    translated = adapter.translate(request)
+
+                elif service == "libretranslate":
+                    adapter = LibreTranslateAdapter(
+                        mirror_manager=_mirror_manager
+                    )
+                    translated = adapter.translate(request)
+
+                elif service == "mymemory":
+                    adapter = MyMemoryAdapter(
+                        email=mymemory_email
+                    )
+                    translated = adapter.translate(request)
+
+                if translated is not None:
+                    logger.info(
+                        f"Successfully translated '{text[:20]}...' "
+                        f"({source_lang}->{target_lang}) using provider: "
+                        f"'{service}'"
+                    )
+
+                    if use_cache:
+                        _translation_cache.set(
+                            text,
+                            translated,
+                            source_lang,
+                            target_lang,
+                            formality,
+                            context_type,
+                        )
+
+                    return TranslationResult(
+                        translated_text=translated,
+                        source=service,
+                        request_metadata=request,
+                    )
+
+            except LanguageNotSupportedError as e:
+                logger.warning(
+                    f"Provider '{service}' does not support pair "
+                    f"{source_lang}->{target_lang}. "
+                    "Updating registry blacklist."
+                )
+
+                # Opetetaan rekisterille, että tämä kielipari ei ole tuettu
+                if service == "google":
+                    _google_registry.mark_pair_unsupported(
+                        source_lang,
+                        target_lang,
+                    )
+                elif service == "libretranslate":
+                    _libre_registry.mark_pair_unsupported(
+                        source_lang,
+                        target_lang,
+                    )
+
+                break
+
+            except RateLimitExceededError as e:
+                logger.warning(
+                    f"Provider '{service}' hit rate limit: {e}. "
+                    "Shifting to fallback."
+                )
+                break
+
+            except TranslationError as e:
+                backoff = retry_delay * (attempt + 1)
+
+                logger.warning(
+                    f"Provider '{service}' failed attempt "
+                    f"{attempt + 1}/{max_retries}: {e}"
+                )
+
+                if (time.time() - start_time) + backoff > total_timeout:
+                    logger.error(
+                        "Next retry delay would exceed global timeout "
+                        "limit. Skipping retry."
+                    )
+                    break
+
+                if attempt < max_retries - 1:
+                    time.sleep(backoff)
+
+                continue
+
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error with provider '{service}': {e}",
+                    exc_info=True,
+                )
+                break
+
+    raise ServiceUnavailableError(
+        f"All available translation services failed or timed out "
+        f"within {total_timeout}s."
+    )
+
+
+def translate_text(
+    text: str,
+    target_lang: str,
+    source_lang: str = "en",
+    use_cache: bool = True,
+    mymemory_email: Optional[str] = None,
+    deepl_key: Optional[str] = None,
+    google_api_key: Optional[str] = None,
+    google_backup_api_key: Optional[str] = None,
+    max_retries: int = 2,
+    retry_delay: float = 1.0,
+    total_timeout: float = 30.0,
+    request: Optional[TranslationRequest] = None,
+) -> str:
+    """
+    Convenience wrapper returning raw translated text string.
+    Returns original string as fallback on total failure to avoid breaking calling application.
+    """
+
+    try:
+        result = translate_text_with_metadata(
+            text=text,
+            target_lang=target_lang,
+            source_lang=source_lang,
+            use_cache=use_cache,
+            mymemory_email=mymemory_email,
+            deepl_key=deepl_key,
+            google_api_key=google_api_key,
+            google_backup_api_key=google_backup_api_key,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            total_timeout=total_timeout,
+            request=request,
+        )
+
+        return result.translated_text
+
+    except ServiceUnavailableError as e:
+        logger.error(
+            f"translate_text wrapper: {e} "
+            "Returning original text as robust fallback."
+        )
+        return text
+
+    except Exception as e:
+        logger.error(
+            f"Unexpected failure in routing wrapper: {e}. "
+            "Returning original text."
+        )
+        return text
+```
+

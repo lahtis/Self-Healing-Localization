@@ -1,7 +1,7 @@
 """
 File: language_validator.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.0
+Version: 0.2.1
 License: MIT
 Description:
     Optional language validation using GLFM (Global Language Family Mapper).
@@ -9,9 +9,9 @@ Description:
     
     Two modes:
     1. GLFM Lite (default): Uses languages_top20.json.gz (~428 KB)
-       - Fallback: 20 lähintä sukulaiskieltä
-    2. Full GLFM: Uses unified_languages.json.gz (~800 MB)
-       - Fallback: Kaikki 7 900+ sukulaiskieltä
+       - Fallback: 20 nearest related languages
+    2. Full GLFM: Uses unified_languages.json.gz (~51.6 MB)
+       - Fallback: All 7,900+ related languages
     
     The full GLFM database can be enabled via configuration.
 """
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from shl.utils.lang_utils import (
-    base_language,
+    base_language as extract_base_language,
     normalize_full_tag,
     parse_bcp47,
     split_tag,
@@ -142,7 +142,7 @@ class LanguageValidator:
             return None
 
         # Get base language (strip script/region)
-        base = base_language(lang_code)
+        base = extract_base_language(lang_code)
 
         # 1. O(1) lookup by ISO 639-1
         if base in self._iso1_index:
@@ -192,8 +192,8 @@ class LanguageValidator:
             return None
         
         info = self._find_language(lang_code)
-        if info:
-            return info.get('bcp47')
+        if info and info.get('bcp47'):
+            return info['bcp47']
         
         return normalize_full_tag(lang_code)
 
@@ -296,12 +296,13 @@ class LanguageValidator:
         Get complete fallback chain for a language.
         
         Order:
-        1. Current language itself
-        2. GLFM fallback (if defined)
-        3. Nearest languages (max_nearest: 20 for Lite, all for Full)
-        4. ISO 639-5 family (if available)
-        5. User's base_language (from SHL)
-        6. English (absolute last resort)
+        1. Full normalized tag (e.g., 'zh-TW')
+        2. Base language (e.g., 'zh')
+        3. GLFM fallback (if defined)
+        4. Nearest languages (max_nearest: 20 for Lite, all for Full)
+        5. ISO 639-5 family (if available)
+        6. User's base_language (from SHL)
+        7. English (absolute last resort)
         
         Args:
             lang_code: Language to find fallback for
@@ -318,22 +319,28 @@ class LanguageValidator:
         chain = []
         seen = set()
         
-        # 1. Normalize
-        current = base_language(lang_code)
-        if current not in seen:
-            chain.append(current)
-            seen.add(current)
+        # 1. Full normalized tag first
+        full_tag = normalize_full_tag(lang_code)
+        if full_tag and full_tag not in seen:
+            chain.append(full_tag)
+            seen.add(full_tag)
+
+        # 2. Base language (e.g., 'zh-TW' -> 'zh')
+        base_tag = extract_base_language(lang_code)
+        if base_tag and base_tag not in seen:
+            chain.append(base_tag)
+            seen.add(base_tag)
         
         info = self.get_language_info(lang_code)
         
-        # 2. GLFM fallback
+        # 3. GLFM fallback
         if info:
             fallback = info.get('fallback', '')
             if fallback and fallback not in seen:
                 chain.append(fallback)
                 seen.add(fallback)
         
-        # 3. Nearest languages
+        # 4. Nearest languages
         # Lite: max 20, Full: all (None = all)
         limit = max_nearest if max_nearest is not None else self._max_nearest
         if info and 'nearest_languages' in info:
@@ -347,20 +354,22 @@ class LanguageValidator:
                     chain.append(lang)
                     seen.add(lang)
         
-        # 4. ISO 639-5 family
+        # 5. ISO 639-5 family
         if info and info.get('iso639_5'):
             family = info['iso639_5']
             if family and family not in seen:
                 chain.append(family)
                 seen.add(family)
         
-        # 5. Developer's base_language (MOST IMPORTANT)
+        # 6. Developer's base_language
         fallback_lang = base_language or self.base_language
-        if fallback_lang and fallback_lang not in seen:
-            chain.append(fallback_lang)
-            seen.add(fallback_lang)
+        if fallback_lang:
+            fallback_base = extract_base_language(fallback_lang)
+            if fallback_base and fallback_base not in seen:
+                chain.append(fallback_base)
+                seen.add(fallback_base)
         
-        # 6. English (absolute last resort)
+        # 7. English (absolute last resort)
         if 'en' not in seen:
             chain.append('en')
         

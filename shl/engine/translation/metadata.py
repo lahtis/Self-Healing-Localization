@@ -1,5 +1,10 @@
 """
-Metadata for translation requests.
+File: metadata.py — metadata for translation requests.
+Author: Tuomas Lähteenmäki
+Version: 0.2.0
+License: MIT
+Description: Data transfer objects (DTO) for standardizing localized text payloads,
+             context preservation markers, and external provider results.
 """
 
 from dataclasses import dataclass, field
@@ -9,39 +14,39 @@ from typing import Optional, Dict, Any
 @dataclass
 class TranslationRequest:
     """
-    Translation request with metadata.
+    Translation request schema with multi-level metadata execution context.
 
-    Three levels of metadata:
-    1. All providers: text, source_lang, target_lang
-    2. Some providers: context_type, domain, screen, component, formality, glossary, html_format
-    3. SHL internal: key, source_id, metadata
+    Three tiers of attributes:
+    1. Core Pipeline: text, source_lang, target_lang (All adapters)
+    2. Context Controls: context_type, domain, formality, glossary, html_format (Advanced adapters)
+    3. Engine Internal: key, screen, component, source_id, metadata (SHL tracking layer)
     """
 
-    # Taso 1: Kaikki palvelut
+    # Tier 1: Core Pipeline (All providers)
     text: str
     source_lang: str
     target_lang: str
 
-    # Taso 2: Osa palveluista (DeepL, Google, OpenAI)
-    context_type: Optional[str] = None      # "button", "label", "menu", "tooltip"
-    domain: Optional[str] = None            # "desktop_ui", "web", "mobile"
-    formality: Optional[str] = None         # "formal", "informal" (DeepL)
-    glossary: Optional[Dict[str, str]] = None  # {"Save": "Tallenna"}
-    html_format: bool = False               # LibreTranslate, DeepL, Google
+    # Tier 2: Context Controls (DeepL, Google Cloud, and LLM-backed routers)
+    context_type: Optional[str] = None      # e.g., "button", "label", "menu", "tooltip"
+    domain: Optional[str] = None            # e.g., "desktop_ui", "web", "mobile"
+    formality: Optional[str] = None         # e.g., "formal", "informal"
+    glossary: Optional[Dict[str, str]] = None  # e.g., {"Save": "Tallenna"}
+    html_format: bool = False               # Explicit markup protection handling
 
-    # Taso 3: SHL:n sisäinen metadata
-    key: Optional[str] = None               # "settings.save"
-    screen: Optional[str] = None            # "settings", "main", "login"
-    component: Optional[str] = None         # "save_button"
-    source_id: Optional[str] = None         # "shl://settings/save_button"
-    metadata: Dict[str, Any] = field(default_factory=dict)  # Joustava lisätieto
+    # Tier 3: Engine Internal Tracking
+    key: Optional[str] = None               # e.g., "settings.save"
+    screen: Optional[str] = None            # e.g., "settings", "main", "login"
+    component: Optional[str] = None         # e.g., "save_button"
+    source_id: Optional[str] = None         # e.g., "shl://settings/save_button"
+    metadata: Dict[str, Any] = field(default_factory=dict)  # Flexible extension dict
 
 
 @dataclass
 class TranslationResult:
-    """Translation result with metadata."""
+    """Standardized output container enclosing evaluated strings and transaction analytics."""
     translated_text: str
-    source: str                              # "mymemory", "libretranslate", "deepl"
+    source: str                             # e.g., "mymemory", "libretranslate", "deepl", "google"
     confidence: Optional[float] = None
     raw_response: Optional[Dict[str, Any]] = None
-    request_metadata: Optional[TranslationRequest] = None  # Säilytetään metadata
+    request_metadata: Optional[TranslationRequest] = None  # Retained execution footprint

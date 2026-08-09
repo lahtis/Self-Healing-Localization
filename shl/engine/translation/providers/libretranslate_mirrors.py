@@ -1,23 +1,28 @@
 """
 LibreTranslate mirror management for SHL.
+file: libretranslate_mirrors.py
 """
 
 import json
 import logging
+import os
 import time
 from typing import List, Dict, Optional, Any
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
+from .. import __version__ as SHL_VERSION
+from shl.utils.lang_utils import base_language
+
 logger = logging.getLogger(__name__)
 
-# Peilin tilat
+# Mirror statuses
 MIRROR_STATUS_UNKNOWN = "unknown"
 MIRROR_STATUS_AVAILABLE = "available"
 MIRROR_STATUS_UNAVAILABLE = "unavailable"
 MIRROR_STATUS_DEGRADED = "degraded"
 
-# Oletuspeililista (voidaan ylikirjoittaa .env-tiedostossa tai konfiguraatiossa)
+# Default mirror list
 DEFAULT_MIRRORS = [
     {"url": "https://libretranslate.com", "weight": 5, "api_key_env": "LIBRETRANSLATE_API_KEY"},
     {"url": "https://libretranslate.de", "weight": 4},
@@ -27,7 +32,7 @@ DEFAULT_MIRRORS = [
 
 
 class LibreTranslateMirror:
-    """Yksittäinen LibreTranslate-peili."""
+    """Represents a single LibreTranslate mirror instance."""
 
     def __init__(
         self,
@@ -36,12 +41,15 @@ class LibreTranslateMirror:
         api_key_env: Optional[str] = None,
         timeout: int = 5,
     ):
+        if not url:
+            raise ValueError("Mirror URL cannot be empty")
+
         self.url = url.rstrip("/")
         self.weight = weight
         self.api_key_env = api_key_env
         self.timeout = timeout
 
-        # Tila
+        # State initialization
         self.status = MIRROR_STATUS_UNKNOWN
         self.last_check = 0.0
         self.last_latency = 0.0
@@ -49,26 +57,23 @@ class LibreTranslateMirror:
         self.supported_languages: Dict[str, str] = {}
 
     def is_available(self) -> bool:
-        """Onko peili saatavilla (välimuistin perusteella)."""
+        """Check if the mirror is available based on cached status."""
         if self.status == MIRROR_STATUS_AVAILABLE:
             return True
         if self.status == MIRROR_STATUS_UNKNOWN:
-            # Tuntematon peili katsotaan käytettäväksi, mutta testataan ennen käyttöä
             return True
         return False
 
     def get_api_key(self) -> Optional[str]:
-        """Hae API-avain ympäristömuuttujasta."""
+        """Retrieve the API key from environment variables."""
         if self.api_key_env:
-            import os
             return os.environ.get(self.api_key_env)
         return None
 
     def test(self) -> bool:
         """
-        Testaa peilin saatavuus ja nopeus.
-
-        Palauttaa True, jos peili on käytettävissä.
+        Test the availability and latency of the mirror.
+        Returns True if the mirror is operational and responsive.
         """
         try:
             start_time = time.time()
@@ -76,27 +81,29 @@ class LibreTranslateMirror:
             req = Request(
                 url,
                 headers={
-                    "User-Agent": "SHL-Client/0.3.0",
+                    "User-Agent": f"SHL-Client/{SHL_VERSION}",
                     "Accept": "application/json",
                 },
             )
 
             with urlopen(req, timeout=self.timeout) as response:
                 data = json.loads(response.read().decode("utf-8"))
+                
+                # Normalize supported languages to base_language format
                 self.supported_languages = {
-                    lang["code"]: lang["name"]
+                    base_language(lang["code"]): lang["name"]
                     for lang in data
-                    if "code" in lang and "name" in lang
+                    if isinstance(lang, dict) and "code" in lang and "name" in lang
                 }
 
-                self.last_latency = (time.time() - start_time) * 1000  # ms
+                self.last_latency = (time.time() - start_time) * 1000  # in ms
                 self.status = MIRROR_STATUS_AVAILABLE
                 self.last_check = time.time()
                 self.last_error = ""
                 logger.debug(f"Mirror {self.url} available: {len(self.supported_languages)} languages")
                 return True
 
-        except Exception as e:
+        except (URLError, Exception) as e:
             self.status = MIRROR_STATUS_UNAVAILABLE
             self.last_check = time.time()
             self.last_error = str(e)
@@ -104,7 +111,7 @@ class LibreTranslateMirror:
             return False
 
     def to_dict(self) -> Dict[str, Any]:
-        """Muunna sanakirjaksi tallennusta varten."""
+        """Convert mirror metadata to a dictionary for persistence or stats."""
         return {
             "url": self.url,
             "weight": self.weight,
@@ -117,30 +124,29 @@ class LibreTranslateMirror:
 
 
 class LibreTranslateMirrorManager:
-    """Hallitsee LibreTranslate-peilejä."""
+    """Manages pool distribution, routing, and health checks for LibreTranslate mirrors."""
 
     def __init__(
         self,
         mirrors: Optional[List[Dict[str, Any]]] = None,
-        test_interval: int = 300,  # 5 minuuttia
+        test_interval: int = 300,  # 5 minutes
         max_failures: int = 3,
     ):
         self.mirrors: List[LibreTranslateMirror] = []
         self.test_interval = test_interval
         self.max_failures = max_failures
-        self._current_mirror_index = 0
 
-        # Lataa peilit
+        # Load mirrors from dynamic sources
         if mirrors is None:
             mirrors = self._load_mirrors_from_env()
         self._load_mirrors(mirrors)
 
     def _load_mirrors_from_env(self) -> List[Dict[str, Any]]:
-        """Lataa peilit ympäristömuuttujista."""
-        import os
+        """Load unique mirror configurations from .env file and environment variables."""
+        found_urls = set()
         mirrors = []
 
-        # Lue .env-tiedosto (jos olemassa)
+        # 1. Parse local .env file if it exists
         env_file = os.path.join(os.getcwd(), ".env")
         if os.path.exists(env_file):
             try:
@@ -148,30 +154,42 @@ class LibreTranslateMirrorManager:
                     for line in f:
                         line = line.strip()
                         if line.startswith("LIBRETRANSLATE_MIRROR_"):
-                            key, value = line.split("=", 1)
-                            # LIBRETRANSLATE_MIRROR_1=https://libretranslate.de
-                            mirrors.append({"url": value.strip().strip('"').strip("'")})
-            except Exception:
-                pass
+                            _, value = line.split("=", 1)
+                            clean_url = value.strip().strip('"').strip("'")
+                            if clean_url and clean_url not in found_urls:
+                                found_urls.add(clean_url)
+                                mirrors.append({"url": clean_url})
+            except Exception as e:
+                logger.warning(f"Error reading .env for mirrors: {e}")
 
-        # Ympäristömuuttujat
+        # 2. Check active process environment variables
         for key, value in os.environ.items():
             if key.startswith("LIBRETRANSLATE_MIRROR_"):
-                mirrors.append({"url": value})
+                clean_url = value.strip().strip('"').strip("'")
+                if clean_url and clean_url not in found_urls:
+                    found_urls.add(clean_url)
+                    mirrors.append({"url": clean_url})
 
-        # Oletuspeilit
+        # 3. Fallback to hardcoded defaults if no custom mirrors are discovered
         if not mirrors:
             mirrors = DEFAULT_MIRRORS
 
         return mirrors
 
     def _load_mirrors(self, mirrors: List[Dict[str, Any]]) -> None:
-        """Luo peilioliot listasta."""
+        """Safely instantiate LibreTranslateMirror instances from a raw list."""
         self.mirrors = []
         for mirror_data in mirrors:
+            if isinstance(mirror_data, str):
+                mirror_data = {"url": mirror_data}
+
+            url = mirror_data.get("url")
+            if not url:
+                continue
+
             self.mirrors.append(
                 LibreTranslateMirror(
-                    url=mirror_data.get("url"),
+                    url=url,
                     weight=mirror_data.get("weight", 1),
                     api_key_env=mirror_data.get("api_key_env"),
                     timeout=mirror_data.get("timeout", 5),
@@ -179,25 +197,15 @@ class LibreTranslateMirrorManager:
             )
 
     def get_best_mirror(self, force_test: bool = False) -> Optional[LibreTranslateMirror]:
-        """
-        Hae paras peili saatavuuden ja painon perusteella.
-
-        Args:
-            force_test: Testataanko peilit ennen valintaa.
-
-        Returns:
-            Paras peili tai None.
-        """
-        # Testaa peilit, jos aika on kulunut
+        """Select the optimal mirror based on status, weight, and latency boundaries."""
         for mirror in self.mirrors:
             if force_test or (time.time() - mirror.last_check > self.test_interval):
                 mirror.test()
 
-        # Suodatetaan käytettävissä olevat peilit
         available = [m for m in self.mirrors if m.is_available()]
 
         if not available:
-            # Kaikki peilit epäonnistuivat, yritä testata uudelleen
+            # Re-test failed targets if the pool appears completely exhausted
             for mirror in self.mirrors:
                 mirror.test()
             available = [m for m in self.mirrors if m.is_available()]
@@ -206,40 +214,37 @@ class LibreTranslateMirrorManager:
             logger.warning("No LibreTranslate mirrors available")
             return None
 
-        # Järjestä peilit painon mukaan (korkein ensin)
+        # Primary sorting by weight (descending), secondary by negative latency (faster responses first)
         available.sort(key=lambda m: (m.weight, -m.last_latency if m.last_latency > 0 else 0), reverse=True)
-
-        # Palauta paras
-        best = available[0]
-        logger.debug(f"Best mirror: {best.url} (weight={best.weight}, latency={best.last_latency:.0f}ms)")
-        return best
+        return available[0]
 
     def get_mirror_for_language(
         self,
         target_lang: str,
         source_lang: str = "en",
     ) -> Optional[LibreTranslateMirror]:
-        """
-        Hae peili, joka tukee kieliparia.
+        """Find the highest priority mirror supporting the requested language pair."""
+        target = base_language(target_lang)
+        source = base_language(source_lang)
 
-        Returns:
-            Sopiva peili tai None.
-        """
-        target = target_lang.lower()
-        source = source_lang.lower()
-
-        # Testaa kaikki peilit, jos aika on kulunut
+        # Re-verify stale mirrors if necessary
         for mirror in self.mirrors:
             if time.time() - mirror.last_check > self.test_interval:
                 mirror.test()
 
-        # Etsi peili, joka tukee kieliparia
-        for mirror in sorted(self.mirrors, key=lambda m: (m.weight, -m.last_latency if m.last_latency > 0 else 0), reverse=True):
+        sorted_mirrors = sorted(
+            self.mirrors,
+            key=lambda m: (m.weight, -m.last_latency if m.last_latency > 0 else 0),
+            reverse=True,
+        )
+
+        # 1. Look through currently available mirrors
+        for mirror in sorted_mirrors:
             if mirror.is_available():
                 if target in mirror.supported_languages and source in mirror.supported_languages:
                     return mirror
 
-        # Jos mikään peili ei tue kieliparia, yritä uudelleentestaus
+        # 2. Fallback: Force global retry if no available mirrors support the pair
         for mirror in self.mirrors:
             mirror.test()
             if mirror.is_available():
@@ -249,19 +254,20 @@ class LibreTranslateMirrorManager:
         return None
 
     def update_mirror_status(self, url: str, available: bool) -> None:
-        """Päivitä yksittäisen peilin tila."""
+        """Explicitly overwrite a specific mirror's runtime status."""
+        clean_url = url.rstrip("/")
         for mirror in self.mirrors:
-            if mirror.url == url:
+            if mirror.url == clean_url:
                 mirror.status = MIRROR_STATUS_AVAILABLE if available else MIRROR_STATUS_UNAVAILABLE
                 mirror.last_check = time.time()
                 break
 
     def get_mirror_stats(self) -> List[Dict[str, Any]]:
-        """Hae tilastot kaikista peileistä."""
+        """Collect current structural performance metrics across the cluster."""
         return [m.to_dict() for m in self.mirrors]
 
     def clear_cache(self) -> None:
-        """Tyhjennä peilien välimuisti."""
+        """Reset internal availability cache and forced status tracking flags."""
         for mirror in self.mirrors:
             mirror.status = MIRROR_STATUS_UNKNOWN
             mirror.last_check = 0.0
