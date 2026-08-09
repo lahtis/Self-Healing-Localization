@@ -1,7 +1,7 @@
 """
 File: language_validator.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.1
+Version: 0.2.0
 License: MIT
 Description:
     Optional language validation using GLFM (Global Language Family Mapper).

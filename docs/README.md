@@ -1,6 +1,14 @@
-# Self-Healing Localization (SHL) Documentation
+# SHL — Self-Healing Localization Documentation
+## Complete Technical API Reference
 
-Welcome to the Self-Healing Localization (SHL) documentation. SHL is a smart, zero-overhead localization library featuring automated missing-key translation and robust language fallback chains.
+> **Version:** 0.2.0  
+> **Author:** Tuomas Lähteenmäki  
+> **License:** MIT  
+> **Scope:** Core engine, translation subsystem, providers, utilities, and GLFM integration.
+
+---
+
+Welcome to the Self-Healing Localization Library documentation. SHL is a smart, zero-overhead localization library featuring automated missing-key translation and robust language fallback chains.
 
 ## Quick Links
 
@@ -8,6 +16,7 @@ Welcome to the Self-Healing Localization (SHL) documentation. SHL is a smart, ze
 - [Configuration Guide](guides/configuration.md)
 - [Usage Guide](guides/usage.md)
 - [API Reference](api/engine.md)
+- [Full Guide] (SHL_Complete_API_Reference.md)
 
 ---
 
