@@ -1,30 +1,26 @@
-## `doc/guides/configuration.md`
-
 # Configuration
 
 ## config.conf
 
 ```ini
 [SETTINGS]
-language = fi                    # Current UI language
-base_lang = en                   # Developer-defined base language
-m_translation_enabled = false    # Enable AI translation (default: false)
+language = fi                    # Active UI target language
+base_lang = en                   # Developer-defined source code language
+m_translation_enabled = false    # Enable Machine translation (default: false)
 fallback_to_base = true          # Fall back to base language when key is missing
 glfm_lite = true                 # Use GLFM Lite (true) or Full (false)
 ```
 
-If lang_code is not given when creating the engine, SHL reads the language from config.conf. A value in config.conf overrides environment variables.
+If lang_code is not explicitly provided when initializing the engine, SHL automatically reads the configuration from config.conf. Values defined in config.conf take precedence over environment variables.
 
 
 | Key | Description | Default |
 |--------|-------------|-------------|
-| language | Active UI language | auto-detect / en|
-| base_lang | Developer-defined base language | en | 
-| ai_translation_enabled | Enable automatic AI translation | false | 
-| fallback_to_base | Fall back to base language when a key is missing | true | 
-
-
-Both work without API keys. API key support available via .env file.
+| language | Active UI language | en (or auto-detected) |
+| base_lang | Developer-defined source code language | en | 
+| m_translation_enabled | Enable automatic machine translation | false | 
+| fallback_to_base | Fall back to base language when a key is missing | true |
+| glfm_lite | Use GLFM Lite (true) or Full (false) | true | 
 
 ---
 
@@ -37,14 +33,23 @@ LIBRETRANSLATE_URL=https://libretranslate.com
 ---
 
 ## Language Detection Priority
-When `lang_code` is not provided to `LocalizationEngine`, the language is resolved in this order:
+When lang_code is not provided directly to LocalizationEngine, the target language is resolved using the following priority order:
 
 1. config.conf → [SETTINGS] language
 2. SHL_LANGUAGE environment variable
 3. LANG environment variable
-4. Default: "en"
+4. Default fallback: "en"
 
-An explicit `lang_code` argument always takes highest priority and skips auto-detection.
+Note: Providing an explicit lang_code argument during initialization always takes the highest priority and bypasses this detection chain completely.
 
 ---
 
+## Translation Services
+Both integrated services can be used out of the box without any API keys. Optional API keys and service-specific configurations can be provided via environment variables or a .env file.
+
+| Service | Role | Limits | Notes |
+|---------|------|--------|-------|
+| MyMemory | Primary provider | 1,000 chars/day (30,000 with email) | Translation memory with machine-translation fallback |
+| LibreTranslate | Fallback provider | Public instances are rate-limited | Open-source machine-translation service |
+
+---

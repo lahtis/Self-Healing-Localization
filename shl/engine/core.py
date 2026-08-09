@@ -6,11 +6,11 @@ License: MIT
 Description:
     Central engine that unifies the Self-Healing Localization Layer.
     - Manages UI localization (Localizer)
-    - Manages AI prompt template localization (TemplateLocalizer)
+    - Manages Machine prompt template localization (TemplateLocalizer)
     - Ensures languages exist across both systems
     - Optional GLFM language validation with fallback chains
     - Smart translation routing with automatic fallback
-    - AI translation only when enabled (ai_translation_enabled=False by default)
+    - Machine translation only when enabled (m_translation_enabled=False by default)
     - Provides a clean API for higher-level applications
 """
 
@@ -21,7 +21,7 @@ from typing import Optional, Dict, Any, List, Callable
 from shl.engine.localizer import Localizer
 from shl.engine.template_localizer import TemplateLocalizer
 
-# Uusi translation-moduuli (korvaa vanhan ai_translation)
+# Uusi translation-moduuli 
 from shl.engine.translation import (
     translate_text,
     TranslationCache,
@@ -178,10 +178,10 @@ class LocalizationEngine:
                     if lang:
                         config["default_language"] = lang.strip()
 
-                    # AI translation
-                    if parser.has_option("SETTINGS", "ai_translation_enabled"):
-                        config["ai_translation_enabled"] = parser.getboolean(
-                            "SETTINGS", "ai_translation_enabled", fallback=False
+                    # Machine translation
+                    if parser.has_option("SETTINGS", "m_translation_enabled"):
+                        config["m_translation_enabled"] = parser.getboolean(
+                            "SETTINGS", "m_translation_enabled", fallback=False
                         )
 
                     # Fallback to base
@@ -373,7 +373,7 @@ class LocalizationEngine:
         """
         Retrieve UI text with self-healing and fallback chain.
 
-        If text is missing and ai_translation_enabled=True, attempts AI translation.
+        If text is missing and m_translation_enabled=True, attempts Machine translation.
         """
         validated_key = self._validate_key(key)
         if not validated_key:
@@ -390,7 +390,7 @@ class LocalizationEngine:
         )
 
         if text is None:
-            # AI translation only if enabled in config
+            # Machine translation only if enabled in config
             if (
                 self.config.get("m_translation_enabled", False)
                 and self.lang_code != self.base_lang
@@ -410,7 +410,7 @@ class LocalizationEngine:
                         self.cache.set(validated_key, translated, self.base_lang, self.lang_code)
                         return translated
                 except Exception as e:
-                    logger.warning(f"AI translation failed: {e}")
+                    logger.warning(f"Machine translation failed: {e}")
 
             self.ui_localizer.set_text(validated_key, default_value)
             self.cache.set(validated_key, default_value, self.base_lang, self.lang_code)
@@ -552,8 +552,8 @@ class LocalizationEngine:
             "ui_keys_count": len(self.ui_localizer.texts),
             "template_keys_count": len(self.template_localizer.templates),
             "cache_size": self.cache.size(),
-            "ai_translation_enabled": self.config.get(
-                "ai_translation_enabled", False
+            "m_translation_enabled": self.config.get(
+                "m_translation_enabled", False
             ),
             "config": self.config.copy(),
         }

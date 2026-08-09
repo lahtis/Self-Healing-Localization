@@ -1,42 +1,44 @@
-# SHL Documentation
+# Self-Healing Localization (SHL) Documentation
 
-Welcome to the Self-Healing Localization (SHL) documentation.
+Welcome to the Self-Healing Localization (SHL) documentation. SHL is a smart, zero-overhead localization library featuring automated missing-key translation and robust language fallback chains.
 
 ## Quick Links
 
 - [Getting Started](guides/getting_started.md)
-- [API Reference](api/index.md)
-- [Examples](examples/)
-- [Configuration](guides/configuration.md)
+- [Configuration Guide](guides/configuration.md)
+- [Usage Guide](guides/usage.md)
+- [API Reference](api/engine.md)
+
+---
 
 ## Contents
 
 ### Guides
-- [Getting Started](guides/getting_started.md) - First steps with SHL
-- [Configuration](guides/configuration.md) - Configuring SHL
-- [Translation Services](guides/translation.md) - Using MyMemory, LibreTranslate, and mirrors
-- [GLFM Integration](guides/glfm.md) - Language validation and fallback chains
+- [Getting Started](guides/getting_started.md) - Installation and basic code integration.
+- [Configuration](guides/configuration.md) - Setting up `config.conf`, environment variables, and translation providers.
+- [Usage Guide](guides/usage.md) - Deep dive into dynamic switching, prompt templates, and GLFM data modes.
 
 ### API Reference
-- [LocalizationEngine](api/engine.md) - Main engine
-- [Localizer](api/localizer.md) - UI text localization
-- [TemplateLocalizer](api/template_localizer.md) - AI prompt templates
-- [Translation Module](api/translation.md) - Translation services
-- [LanguageValidator](api/language_validator.md) - Language validation with GLFM
+- [LocalizationEngine API](api/engine.md) - Main interface for UI text, templates, and runtime state.
+- [Translation API](api/translation.md) - Standalone translation utilities, smart routing, and error boundaries.
 
 ### Examples
-- [Basic Usage](examples/basic_usage.py)
-- [Custom Language](examples/custom_language.py)
-- [Translation Services](examples/translation_services.py)
+- [Basic Usage](examples/basic_usage.py) - Quick-start setup example.
+- [Dynamic Configuration](examples/configuration_setup.py) - Working with local config files and environment variables.
+- [Direct Translation](examples/translation_services.py) - Utilizing the smart provider routing standalone.
 
-## Building Documentation
+---
+
+## Building Documentation Locally
+
+The documentation is built using MkDocs and the Material theme.
 
 ```bash
-# Install dependencies
+# Install required dependencies
 pip install mkdocs mkdocs-material
 
-# Serve locally
+# Preview and serve the documentation locally (updates in real-time)
 mkdocs serve
 
-# Build
+# Build static HTML site for deployment
 mkdocs build

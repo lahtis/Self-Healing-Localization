@@ -1,101 +1,6 @@
-## `doc/guides/usage.md`
-
 # Usage Guide
 
-## Synchronize All Languages
-
-Synchronize all localization keys from the fallback chain to the current
-language.
-
-```python
-engine.sync()
-```
-
----
-
-## GLFM Language Validation
-
-```python
-from shl.engine.core import LocalizationEngine
-
-engine = LocalizationEngine(lang_code="fi")
-
-stats = engine.get_stats()
-
-print(stats["glfm_loaded"])    # True if GLFM data is available
-print(stats["glfm_lite"])      # True when GLFM Lite is active
-print(stats["lang_code"])      # fi
-print(stats["glfm_fallback"])  # en or another GLFM fallback language
-```
-
----
-
-## GLFM Lite
-
-GLFM Lite is the default mode.
-
-```python
-from shl.engine.core import LocalizationEngine
-
-engine = LocalizationEngine(
-    lang_code="fi",
-    glfm_lite=True,
-)
-
-stats = engine.get_stats()
-
-print(stats["glfm_loaded"])    # True if GLFM data is available
-print(stats["glfm_lite"])      # True
-print(stats["lang_code"])      # fi
-print(stats["glfm_fallback"])  # en or another GLFM fallback language
-```
-
----
-
-## GLFM Full
-
-Use GLFM Full when complete fallback information is required.
-
-```python
-from shl.engine.core import LocalizationEngine
-
-engine = LocalizationEngine(
-    lang_code="fi",
-    glfm_lite=False,
-)
-```
-
----
-
-## Custom GLFM Path
-
-Use a custom path to load a specific GLFM data file.
-
-```python
-from shl.engine.core import LocalizationEngine
-
-engine = LocalizationEngine(
-    lang_code="fi",
-    glfm_path="/path/to/your/glfm.json.gz",
-)
-```
-
----
-
-## Language Data Modes
-
-Both modes contain language data for all 7,900+ languages. The difference is
-the amount of fallback information stored for each language.
-
-| Mode | File | Size | Fallback data |
-|---|---|---:|---|
-| **Lite (default)** | `languages_top20.json.gz` | ~428 KB | Up to 20 fallback candidates per language |
-| **Full** | `unified_languages.json.gz` | ~925 MB | Complete fallback information |
-
----
-
 ## Direct Translation
-
 Use `translate_text()` for direct translation with smart provider routing.
 
 ```python
@@ -105,38 +10,77 @@ result = translate_text(
     "Hello world",
     target_lang="fi",
 )
-
 print(result)  # "Hei maailma"
 ```
 
----
+## Engine Initialization & Synchronization
 
-## Region Subtag Support
+### Region Subtag Support
+SHL supports BCP-47 language tags with region subtags, allowing you to target specific locales.
 
-SHL supports BCP-47 language tags with region subtags.
+```python
+from shl.engine.core import LocalizationEngine
+
+# Uses pt-br.json
+engine_br = LocalizationEngine(lang_code="pt-BR")
+
+# Uses pt-pt.json
+engine_pt = LocalizationEngine(lang_code="pt-PT")
+```
+
+### Synchronize All Languages
+Synchronize all localization keys from the fallback chain to the current language.
+
+```python
+engine_br.sync()
+```
+
+## GLFM Configuration & Data Modes
+Both GLFM modes contain language data for all 7,900+ languages. The difference is the amount of fallback information stored for each language.
+
+| Mode | File | Size packed | Unpacked | Fallback data |
+| :--- | :--- | :---: | :---: | :--- |
+| **Lite (default)** | `languages_top20.json.gz` | ~428 KB | 9.2 MB | Up to 20 fallback candidates per language |
+| **Full** | `unified_languages.json.gz` | ~51.6 MB | 924.7 MB | Complete fallback information |
+
+
+### 1. Default Mode (GLFM Lite)
+GLFM Lite is active by default and lightweight.
 
 ```python
 from shl.engine.core import LocalizationEngine
 
 engine = LocalizationEngine(
-    lang_code="pt-BR",
+    lang_code="fi",
+    glfm_lite=True,  # Default behavior
 )
-# Uses pt-br.json
-
-engine = LocalizationEngine(
-    lang_code="pt-PT",
-)
-# Uses pt-pt.json
 ```
 
----
+### 2. Advanced Configuration (GLFM Full & Custom Path)
+> **⚠️ Production Note:**  The Full data mode unpacks to nearly 1 GB. It is strictly recommended for AI applications, NLP data centers, backend services, or heavy data-science pipelines where complete linguistic fallback accuracy is required. For desktop or standard consumer applications, always use the default Lite mode.
 
-## Translation Services
+Configure the engine to use the full dataset or point it to a specific custom GLFM file.
 
-| Service | Role | Limits | Notes |
-|---|---|---|---|
-| MyMemory | Primary provider | 1,000 characters per day, or 30,000 with an email address | Translation memory with machine-translation fallback |
-| LibreTranslate | Fallback provider | Public instances are rate-limited | Open-source machine-translation service |
+```python
+from shl.engine.core import LocalizationEngine
 
-Both services can be used without an API key. API keys and service-specific
-configuration can be provided through environment variables or a `.env` file.
+# Load full fallback data from a custom path
+engine = LocalizationEngine(
+    lang_code="fi",
+    glfm_lite=False,
+    glfm_path="/path/to/your/glfm.json.gz",
+)
+```
+
+### 3. GLFM Language Validation & Stats
+You can inspect the engine's state and validate the loaded GLFM setup using `get_stats()`.
+
+```python
+stats = engine.get_stats()
+
+print(stats["glfm_loaded"])    # True if GLFM data is available
+print(stats["glfm_lite"])      # True when GLFM Lite is active, False if Full
+print(stats["lang_code"])      # fi
+print(stats["glfm_fallback"])  # en or another GLFM fallback language
+```
+

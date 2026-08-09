@@ -1,5 +1,3 @@
-## `doc/api/translation.md`
-
 # Translation API
 
 ## translate_text()
@@ -10,9 +8,9 @@ from shl.engine.translation import translate_text
 result = translate_text(
     text="Hello",
     target_lang="fi",
-    source_lang="en",
-    use_cache=True,
-    smart_routing=True,
+    source_lang="en",		# Optional, auto-detected if omitted
+    use_cache=True,			# Cache results to reduce API calls
+    smart_routing=True,		# Route request dynamically to best provider
     max_retries=2,
     retry_delay=1,
 )
@@ -24,10 +22,10 @@ result = translate_text(
 
 | Function | Description |
 |---|---|
-| `translate_text()` | Main translation function with smart routing. |
-| `get_best_provider()` | Select the best provider for a language pair. |
-| `get_all_supported_languages()` | Get supported languages from all providers. |
-| `get_supported_languages()` | Get supported languages from LibreTranslate. |
+| `translate_text()` | Main translation function with smart provider routing and caching. |
+| `get_best_provider()` | Select the best available translation provider for a language pair. |
+| `get_all_supported_languages()` | Get combined list of supported languages from all configured providers. |
+| `get_supported_languages()` | Get list of supported languages specifically from LibreTranslate. |
 
 ---
 
@@ -35,11 +33,11 @@ result = translate_text(
 
 | Exception | Description |
 |---|---|
-| `TranslationError` | Base exception for translation errors. |
-| `RateLimitExceededError` | Raised when a provider rate limit or quota is exceeded. |
-| `ServiceUnavailableError` | Raised when a translation provider is unavailable. |
-| `LanguageNotSupportedError` | Raised when the requested language is not supported. |
-| `ProviderAccessError` | Raised when access to a provider is denied or authentication fails. |
-| `InvalidRequestError` | Raised when the translation request is invalid. |
+| `TranslationError` | Base exception for all translation-related errors. |
+| `RateLimitExceededError` | Raised when a provider rate limit or daily character quota is exceeded. |
+| `ServiceUnavailableError` | Raised when a translation provider or mirror is completely unreachable. |
+| `LanguageNotSupportedError` | Raised when the requested language pair is not supported by available providers. |
+| `ProviderAccessError` | Raised when access to a provider is denied or API key authentication fails. |
+| `InvalidRequestError` | Raised when the translation payload or parameters are malformed. |
 
 ---

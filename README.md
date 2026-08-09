@@ -1,8 +1,10 @@
 # Self‑Healing Localization
 ### Automatic, self‑maintaining localization for any Python project  
-**Author:** Tuomas Lähteenmäki  
+**Type:**    Library
+**Author:**  Tuomas Lähteenmäki  
 **License:** MIT  
 **Version:** 0.2.0
+
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
