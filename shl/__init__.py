@@ -3,6 +3,12 @@ Self-Healing Localization Layer (SHL)
 A lightweight, dependency-free Python library that eliminates missing translations forever.
 """
 
+from shl._version import (
+    __version__,
+    __author__,
+    __license__,
+)
+
 from shl.logging_config import (
     setup_logging,
     get_logger,
@@ -38,8 +44,6 @@ from shl.engine.translation import (
     # Providerit (suoraan)
     MyMemoryAdapter,
     LibreTranslateAdapter,
-    # Deprecated (säilytetään yhteensopivuus)
-    AITranslator,
     # Poikkeukset
     TranslationError,
     RateLimitExceededError,
@@ -48,10 +52,6 @@ from shl.engine.translation import (
     ProviderAccessError,
     InvalidRequestError,
 )
-
-__version__ = "0.2.0"
-__author__ = "Tuomas Lähteenmäki"
-__license__ = "MIT"
 
 __all__ = [
     # Versio
@@ -76,7 +76,6 @@ __all__ = [
     "translate_text",
     "get_best_provider",
     "get_all_supported_languages",
-    "get_supported_languages",
     "get_libretranslate_mirror_stats",
     # Translation - cache
     "TranslationCache",
@@ -89,8 +88,6 @@ __all__ = [
     # Translation - providerit
     "MyMemoryAdapter",
     "LibreTranslateAdapter",
-    # Translation - deprecated
-    "AITranslator",
     # Translation - poikkeukset
     "TranslationError",
     "RateLimitExceededError",

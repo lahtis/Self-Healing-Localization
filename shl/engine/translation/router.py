@@ -1,4 +1,3 @@
-```python
 """
 File: router.py — Intelligent routing logic for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
@@ -22,16 +21,23 @@ from .exceptions import (
     RateLimitExceededError,
 )
 from .providers.mymemory import MyMemoryAdapter
-from .providers.libretranslate import LibreTranslateAdapter, MirrorManager
+from .providers.libretranslate import (
+    LibreTranslateAdapter,
+)
+
+from .providers.libretranslate_mirrors import (
+    LibreTranslateMirrorManager,
+)
+
 from .providers.libretranslate_registry import LibreTranslateRegistry
 from .providers.deepl import DeepLAdapter
-from .providers.googleV2 import GoogleV2Adapter
+from .providers.googlev2 import GoogleV2Adapter
 from .providers.google_registry import GoogleRegistry
 
 logger = logging.getLogger(__name__)
 
 _translation_cache = TranslationCache()
-_mirror_manager = MirrorManager()
+_mirror_manager = LibreTranslateMirrorManager()
 
 # Registry-instanssit kieliparien tarkistukseen ja oppimiseen
 _libre_registry = LibreTranslateRegistry()
@@ -371,5 +377,3 @@ def translate_text(
             "Returning original text."
         )
         return text
-```
-

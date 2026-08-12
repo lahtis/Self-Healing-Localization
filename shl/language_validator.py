@@ -28,6 +28,8 @@ from shl.utils.lang_utils import (
     split_tag,
 )
 
+from shl.utils.glfm_load_database import load_language_data
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,7 +68,7 @@ class LanguageValidator:
     def _load_glfm(self) -> None:
         """Load GLFM database from gzipped JSON."""
         try:
-            from shl.data.glfm_load_database import load_language_data
+            from shl.utils.glfm_load_database import load_language_data
             
             # Determine which database to load
             if self._glfm_path:

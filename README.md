@@ -3,7 +3,8 @@
 **Type:**    Library
 **Author:**  Tuomas Lähteenmäki  
 **License:** MIT  
-**Version:** 0.2.0
+**Version:** 0.2.1
+**Status:** Development
 
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
@@ -91,33 +92,6 @@ The `LocalizationEngine` ties everything together:
 
 ### Zero Dependencies
 Zero runtime dependencies. Pure Python library. Optional online translation services. Works everywhere.
-
----
-
-## What's New in v0.2.0
-
-### Added
-- **Smart Translation Routing** – Automatically selects MyMemory or LibreTranslate based on language support.
-- **Automatic Provider Fallback** – If one service fails, automatically switches to the other.
-- **Comprehensive Error Classification** – 6 specific exception types for different error scenarios.
-- **GLFM Integration** – 7,900+ languages with BCP-47 tags, fallback chains, and validation.
-- **GLFM Lite Mode** – ~428 KB, 20 nearest languages for fallback (default).
-- **Full GLFM Mode** – ~925 MB, all 7,900+ languages for research.
-- **LibreTranslate Mirror Support** – Automatic failover between multiple LibreTranslate instances.
-- **Atomic File Saves** – `.tmp` → `os.replace()` pattern prevents corruption.
-- **Dirty Flag with Batch Saves** – Reduces disk I/O.
-- **Language File Caching** – Improves performance.
-
-### Changed
-- **Complete Architectural Overhaul** – `ai_translation.py` replaced with modular `translation/` package.
-- **LibreTranslate Default URL** – Changed to `https://libretranslate.com` (official instance).
-- **DRY Architecture** – Centralized language code handling in `lang_utils.py`.
-- **`base_lang` Parameter** – Now `Optional[str] = None` to distinguish from config.conf.
-
-### Fixed
-- **Performance**: O(n) → O(1) language lookups.
-- **Reliability**: `__del__` replaced with `atexit` for more reliable cleanup.
-- **Data Safety**: `_dirty` flag no longer reset on failed saves.
 
 ---
 

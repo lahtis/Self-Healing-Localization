@@ -1,16 +1,10 @@
-
----
-
-## 📝 Päivitetty `pyproject.toml` (koko tiedosto)
-
-```toml
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "self-healing-localization"
-version = "0.2.0"
+version = "0.2.1"
 description = "A self-healing localization layer for Python applications, automatically creating missing language files and keys."
 readme = "README.md"
 requires-python = ">=3.8"

@@ -1,0 +1,11 @@
+{
+    "test_key": "Default value",
+    "integration_test": "Hei maailma -ohjelma",
+    "existing_key": "Existing value",
+    "base_only": "Default",
+    "translation_test": "Hei maailma",
+    "translation_test_disabled": "Hello World",
+    "cached_key": "Cached value",
+    "glfm_sync_test": "GLFM value",
+    "new_key": "Default value"
+}

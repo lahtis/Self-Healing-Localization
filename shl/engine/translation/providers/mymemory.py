@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 from urllib.parse import quote
 from urllib.error import URLError, HTTPError
 
-from .. import __version__ as SHL_VERSION
+from shl._version import __version__ as SHL_VERSION
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,

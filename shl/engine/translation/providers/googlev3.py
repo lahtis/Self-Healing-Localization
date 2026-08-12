@@ -24,7 +24,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
-from .. import __version__ as SHL_VERSION
+from shl._version import __version__ as SHL_VERSION
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,

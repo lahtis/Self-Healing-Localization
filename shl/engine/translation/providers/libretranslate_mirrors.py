@@ -11,7 +11,7 @@ from typing import List, Dict, Optional, Any
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
-from .. import __version__ as SHL_VERSION
+from shl._version import __version__ as SHL_VERSION
 from shl.utils.lang_utils import base_language
 
 logger = logging.getLogger(__name__)

@@ -8,7 +8,7 @@ Description: Central export manifest for the SHL translation subsystem.
              and exception taxonomy under a unified public API namespace.
 """
 
-from shl import __version__
+from shl._version import __version__
 
 # Core Routing Functions
 from .router import (
@@ -40,12 +40,12 @@ from .exceptions import (
 
 # Provider Adapters and Language Utilities
 from .providers.mymemory import MyMemoryAdapter
-from .providers.libretranslate import LibreTranslateAdapter, get_supported_languages
+from .providers.libretranslate import (
+    LibreTranslateAdapter,
+    get_supported_languages,
+)
 from .providers.deepl import DeepLAdapter
-from .providers.google import GoogleAdapter
-
-# Deprecated Translation Interface (Backward Compatibility)
-from .ai_translation_deprecated import AITranslator
+from .providers.googlev2 import GoogleV2Adapter
 
 __all__ = [
     "__version__",
@@ -72,11 +72,8 @@ __all__ = [
     "MyMemoryAdapter",
     "LibreTranslateAdapter",
     "DeepLAdapter",
-    "GoogleAdapter",
-    
-    # Deprecated Compatibility Layer
-    "AITranslator",
-    
+    "GoogleV2Adapter",
+        
     # Exception Taxonomy
     "TranslationError",
     "ServiceUnavailableError",

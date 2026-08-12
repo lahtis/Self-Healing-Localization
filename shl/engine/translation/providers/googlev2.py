@@ -1,5 +1,5 @@
 """
-File: googleV2.py — Google Cloud Translation adapter (Basic v2, API-key auth).
+File: googlev2.py — Google Cloud Translation adapter (Basic v2, API-key auth).
 Author: Tuomas Lähteenmäki
 Version: 0.2.0
 License: MIT
@@ -18,7 +18,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
-from .. import __version__ as SHL_VERSION
+from shl._version import __version__ as SHL_VERSION
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -118,4 +118,4 @@ class GoogleV2Adapter(TranslationProvider):
 
         request_data = json.dumps(payload).encode("utf-8")
         target_type = "Backup" if is_backup else "Primary"
-        logger.debug(f"{target_type} Google
+        logger.debug(f"{target_type} Google translation request")

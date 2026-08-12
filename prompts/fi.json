@@ -1,0 +1,6 @@
+{
+    "test_template": "Default template",
+    "welcome_template": "Welcome {name}!",
+    "existing_template": "Existing template",
+    "new_template": "Default template"
+}
