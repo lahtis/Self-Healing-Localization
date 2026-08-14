@@ -107,7 +107,7 @@ class LocalizationEngine:
                     self.validator.get_fallback_chain(
                         self.lang_code,
                         base_language=self.base_lang,
-                        max_nearest=3,
+                        max_nearest=20,
                     )
                 )
 
@@ -403,7 +403,7 @@ class LocalizationEngine:
                 self.validator.get_fallback_chain(
                     validated_lang,
                     base_language=self.base_lang,
-                    max_nearest=3,
+                    max_nearest=20,
                 )
             )
 
@@ -908,7 +908,7 @@ class LocalizationEngine:
             self.validator.get_fallback_chain(
                 self.lang_code,
                 base_language=self.base_lang,
-                max_nearest=3,
+                max_nearest=20,
             )
         )
 
