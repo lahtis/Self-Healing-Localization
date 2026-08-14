@@ -3,8 +3,8 @@
 **Type:**    Library
 **Author:**  Tuomas Lähteenmäki  
 **License:** MIT  
-**Version:** 0.2.2
-**Status:** test_PyPi
+**Version:** 0.2.3
+**Status:** development
 
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
