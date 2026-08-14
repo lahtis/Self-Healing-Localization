@@ -133,9 +133,62 @@ engine = LocalizationEngine(lang_code="fi", base_lang="en")
 
 # If 'welcome_msg' is missing, it is created with the given default value
 title = engine.ui_text("welcome_msg", "Welcome to the App!")
+
 print(title)  # "Tervetuloa sovellukseen!" (if translation exists)
 ```
+SHL interprets this as:
 
+* base_lang="en" → source code strings are English
+* lang_code="fi" → user wants Finnish UI
+
+So SHL does:
+* 1. Look for welcome_msg in fi.json
+* 2. If missing:
+- Create the key in fi.json
+- Use the default value "Welcome to the App!" as the English source
+- Translate English → Finnish
+
+* 3. Return the Finnish result
+
+#### Core takeaway
+
+- base_lang = the language your source JSON files are written in  
+- lang_code = the language the user wants to see in the UI right now
+Everything else in SHL’s behavior flows from that.
+
+#### How SHL interprets these two parameters
+
+##### 1) base_lang
+
+This is the language of your canonical UI strings — the language your codebase “speaks”.
+
+Examples:
+* If your app is written in English → base_lang="en"
+* If your app is written in Finnish → base_lang="fi"
+* If your app is written in Italian → base_lang="it"
+
+SHL uses base_lang to:
+* now which JSON file is the authoritative source
+* know what language missing keys should be stored in
+* know what language to translate from when generating other languages
+
+##### 2) lang_code
+
+This is the language the user wants to see.
+
+Examples:
+* Finnish user → lang_code="fi"
+* English user → lang_code="en"
+* Italian user → lang_code="it"
+
+SHL uses lang_code to:
+
+* decide which JSON file to read from
+* decide which JSON file to write new keys into
+* decide which language to translate to
+
+--- 
+ 
 ### 2. Configuration via config.conf
 Create a `config.conf` in your project root:
 
