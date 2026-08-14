@@ -1,7 +1,7 @@
 # SHL — Self-Healing Localization Library Documentation
 ## Complete Technical API Reference
 
-> **Version:** 0.2.0  
+> **Version:** 0.2.2  
 > **Author:** Tuomas Lähteenmäki  
 > **License:** MIT  
 > **Scope:** Core engine, translation subsystem, providers, utilities, and GLFM integration.
@@ -12,20 +12,20 @@ Welcome to the Self-Healing Localization Library documentation. SHL is a smart, 
 
 ## Quick Links
 
-- [Getting Started](guides/getting_started.md)
-- [Configuration Guide](guides/configuration.md)
-- [Usage Guide](guides/usage.md)
+- [Getting Started](guides/v0_2_0/getting_started.md)
+- [Configuration Guide](guides/v0_2_0/configuration.md)
+- [Usage Guide](guides/v0_2_0/usage.md)
 - [API Reference](api/v0_2_0/engine.md)
-- [Full Guide] (api/v0_2_0/SHL_Complete_API_Reference_v020.md)
-- [Development] (development/readme.md)
+- [Full Guide](api/v0_2_0/SHL_Complete_API_Reference_v020.md)
+- [Development](development/readme.md)
 ---
 
 ## Contents
 
 ### Guides
-- [Getting Started](guides/getting_started.md) - Installation and basic code integration.
-- [Configuration](guides/configuration.md) - Setting up `config.conf`, environment variables, and translation providers.
-- [Usage Guide](guides/usage.md) - Deep dive into dynamic switching, prompt templates, and GLFM data modes.
+- [Getting Started](guides/v0_2_0/getting_started.md) - Installation and basic code integration.
+- [Configuration](guides/v0_2_0/configuration.md) - Setting up `config.conf`, environment variables, and translation providers.
+- [Usage Guide](guides/v0_2_0/usage.md) - Deep dive into dynamic switching, prompt templates, and GLFM data modes.
 
 ### API Reference
 - [LocalizationEngine API](api/v0_2_0/engine.md) - Main interface for UI text, templates, and runtime state.
