@@ -129,6 +129,13 @@ class MyMemoryAdapter(TranslationProvider):
                     raise TranslationError(f"MyMemory: Unexpected status {response_status}")
 
                 translated = response_details.get("translatedText")
+                            
+                # --- SECURITY CHECK: Preventing incorrect language pairs in MyMemory ---
+                match_quality = response_details.get("match", 0)
+                # If MyMemory returns an empty result or a suspiciously weak match
+                # or if the answer contains clearly incorrect language (e.g. Italian words)
+                if not translated or translated == payload["q"]:
+                    raise TranslationError("MyMemory returned empty or unchanged text.")
 
                 if translated and translated != payload["q"]:
                     logger.debug(f"MyMemory success: '{translated[:100]}...'")

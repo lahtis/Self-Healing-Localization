@@ -71,6 +71,94 @@ class LocalizationEngine:
 
         self.config = default_config
 
+        # ------------------------------------------------------------------
+        # SETTINGS overrides GLFM and locale completely
+        # ------------------------------------------------------------------
+        import configparser
+
+        if os.path.exists("config.conf"):
+            parser = configparser.ConfigParser()
+            parser.read("config.conf", encoding="utf-8")
+
+            if parser.has_option("SETTINGS", "language"):
+                forced_lang = parser.get("SETTINGS", "language").strip()
+                forced_base = parser.get("SETTINGS", "base_lang", fallback="en").strip()
+
+                self.lang_code = normalize_full_tag(forced_lang)
+                self.base_lang = base_language(forced_base)
+
+                logger.info(
+                    "LocalizationEngine forced by SETTINGS: lang=%s, base=%s",
+                    self.lang_code,
+                    self.base_lang,
+                )
+
+                # Disable GLFM completely when SETTINGS forces language
+                self.validator = LanguageValidator(
+                    glfm_path=None,
+                    base_language=self.base_lang,
+                    use_lite=True,
+                )
+                self.glfm_fallback = None
+                self.glfm_fallback_chain = []
+
+                # Folders
+                self.ui_folder = ui_folder
+                self.template_folder = template_folder
+
+                # Cache & adapters (required elsewhere in the class)
+                self.cache = TranslationCache()
+
+                resolved_mymemory_email = (
+                    mymemory_email
+                    or os.environ.get("MYMEMORY_EMAIL")
+                )
+                resolved_libretranslate_url = (
+                    libretranslate_url
+                    or os.environ.get("LIBRETRANSLATE_URL")
+                )
+                resolved_libretranslate_api_key = (
+                    libretranslate_api_key
+                    or os.environ.get("LIBRETRANSLATE_API_KEY")
+                )
+
+                self.mymemory_adapter = MyMemoryAdapter(
+                    email=resolved_mymemory_email,
+                )
+                self.libretranslate_adapter = LibreTranslateAdapter(
+                    base_url=resolved_libretranslate_url,
+                    api_key=resolved_libretranslate_api_key,
+                    mirrors=libretranslate_mirrors,
+                )
+
+                self._libretranslate_url = resolved_libretranslate_url
+                self._libretranslate_api_key = resolved_libretranslate_api_key
+                self._mymemory_email = resolved_mymemory_email
+                self._libretranslate_mirrors = libretranslate_mirrors
+
+                # Localizers
+                self.ui_localizer = Localizer(
+                    lang_code=self.lang_code,
+                    base_lang=self.base_lang,
+                    folder=self.ui_folder,
+                )
+                self.template_localizer = TemplateLocalizer(
+                    lang_code=self.lang_code,
+                    base_lang=self.base_lang,
+                    folder=self.template_folder,
+                )
+
+                logger.info(
+                    "LocalizationEngine initialized: "
+                    "lang=%s, base=%s (SETTINGS forced)",
+                    self.lang_code,
+                    self.base_lang,
+                )
+                return
+
+        # ------------------------------------------------------------------
+        # Normal flow
+        # ------------------------------------------------------------------
         if base_lang is None:
             base_lang = self.config.get(
                 "base_lang",
@@ -101,7 +189,6 @@ class LocalizationEngine:
                     "Language '%s' not found in GLFM",
                     self.lang_code,
                 )
-
             else:
                 self.glfm_fallback_chain = (
                     self.validator.get_fallback_chain(
@@ -925,3 +1012,4 @@ class LocalizationEngine:
         )
 
         return True
+

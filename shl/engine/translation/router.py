@@ -245,7 +245,7 @@ def translate_text_with_metadata(
 
                 if translated is not None:
                     logger.info(
-                        f"Successfully translated '{text[:20]}...' "
+                        f"Successfully translated '{translated[:20]}...' "
                         f"({source_lang}->{target_lang}) using provider: "
                         f"'{service}'"
                     )
