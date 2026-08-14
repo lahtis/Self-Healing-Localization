@@ -12,8 +12,8 @@ Welcome to the Self-Healing Localization Library development. SHL is a smart, ze
 
 ## Contents
 
-- [Structure] (structure.md)
-- [Roadmap] (roadmap.md)
+- [Structure](structure.md)
+- [Roadmap](roadmap.md)
 
 
 ---
