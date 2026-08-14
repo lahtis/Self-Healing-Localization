@@ -29,12 +29,12 @@ Self-Healing Localization Layer (SHL) is a Python localization engine that autom
 
 ### What makes SHL different?
 
-| Feature | SHL | Traditional i18n |
-|---------|-----|------------------|
+| Feature | SHL | Traditional i18n | other |
+|---------|-----|------------------|-----|
 | Missing keys created automatically | + | - |
 | Missing language files created automatically | + | - |
-| Zero runtime dependencies | + | - (often require gettext, Babel, etc.) |
-| BCP-47 region subtag support | + | ~ (limited) |
+| Zero runtime dependencies | + | - | (often require gettext, Babel, etc.) |
+| BCP-47 region subtag support | + | ~ | (limited) |
 | GLFM language validation (7,900+ languages) | + | - |
 | Self-healing fallback chains | + | - |
 | Smart translation routing | + | - |
