@@ -1,7 +1,7 @@
 """
 File: core.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.0
+Version: 0.2.2
 License: MIT
 Description:
     Central engine that unifies the Self-Healing Localization Layer.
@@ -107,7 +107,7 @@ class LocalizationEngine:
                     self.validator.get_fallback_chain(
                         self.lang_code,
                         base_language=self.base_lang,
-                        max_nearest=20,
+                        max_nearest=None,
                     )
                 )
 
@@ -403,7 +403,7 @@ class LocalizationEngine:
                 self.validator.get_fallback_chain(
                     validated_lang,
                     base_language=self.base_lang,
-                    max_nearest=20,
+                    max_nearest=None,
                 )
             )
 
@@ -908,7 +908,7 @@ class LocalizationEngine:
             self.validator.get_fallback_chain(
                 self.lang_code,
                 base_language=self.base_lang,
-                max_nearest=20,
+                max_nearest=None,
             )
         )
 
