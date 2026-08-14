@@ -3,8 +3,8 @@
 **Type:**    Library
 **Author:**  Tuomas Lähteenmäki  
 **License:** MIT  
-**Version:** 0.2.1
-**Status:** Development
+**Version:** 0.2.2
+**Status:** test_PyPi
 
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
@@ -31,13 +31,13 @@ Self-Healing Localization Layer (SHL) is a Python localization engine that autom
 
 | Feature | SHL | Traditional i18n |
 |---------|-----|------------------|
-| Missing keys created automatically | ✅ | ❌ |
-| Missing language files created automatically | ✅ | ❌ |
-| Zero runtime dependencies | ✅ | ❌ (often require gettext, Babel, etc.) |
-| BCP-47 region subtag support | ✅ | 🟡 (limited) |
-| GLFM language validation (7,900+ languages) | ✅ | ❌ |
-| Self-healing fallback chains | ✅ | ❌ |
-| Smart translation routing | ✅ | ❌ |
+| Missing keys created automatically | + | - |
+| Missing language files created automatically | + | - |
+| Zero runtime dependencies | + | - (often require gettext, Babel, etc.) |
+| BCP-47 region subtag support | + | ~ (limited) |
+| GLFM language validation (7,900+ languages) | + | - |
+| Self-healing fallback chains | + | - |
+| Smart translation routing | + | - |
 
 ### Key Benefits
 

@@ -1,4 +1,4 @@
-# SHL — Self-Healing Localization Layer
+# SHL — Self-Healing Localization Library
 ## Complete Technical API Reference
 
 > **Version:** 0.2.0  

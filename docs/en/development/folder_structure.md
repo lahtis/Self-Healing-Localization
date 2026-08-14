@@ -1,4 +1,4 @@
-**docs/ Folder Structure**
+**docs/en/ Folder Structure**
 
 Here’s a future‑proof documentation structure that scales as the project grows.
 
@@ -6,7 +6,7 @@ You can create this as:
 
 ```bash
 
-docs/
+docs/en/
 │
 ├─ index.md
 ├─ installation.md

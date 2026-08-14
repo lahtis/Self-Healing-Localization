@@ -1,4 +1,4 @@
-# SHL — Self-Healing Localization Documentation
+# SHL — Self-Healing Localization Library Documentation
 ## Complete Technical API Reference
 
 > **Version:** 0.2.0  
@@ -15,9 +15,9 @@ Welcome to the Self-Healing Localization Library documentation. SHL is a smart, 
 - [Getting Started](guides/getting_started.md)
 - [Configuration Guide](guides/configuration.md)
 - [Usage Guide](guides/usage.md)
-- [API Reference](api/engine.md)
-- [Full Guide] (SHL_Complete_API_Reference.md)
-
+- [API Reference](api/v0_2_0/engine.md)
+- [Full Guide] (api/v0_2_0/SHL_Complete_API_Reference_v020.md)
+- [Development] (development/readme.md)
 ---
 
 ## Contents
@@ -28,8 +28,8 @@ Welcome to the Self-Healing Localization Library documentation. SHL is a smart, 
 - [Usage Guide](guides/usage.md) - Deep dive into dynamic switching, prompt templates, and GLFM data modes.
 
 ### API Reference
-- [LocalizationEngine API](api/engine.md) - Main interface for UI text, templates, and runtime state.
-- [Translation API](api/translation.md) - Standalone translation utilities, smart routing, and error boundaries.
+- [LocalizationEngine API](api/v0_2_0/engine.md) - Main interface for UI text, templates, and runtime state.
+- [Translation API](api/v0_2_0/translation.md) - Standalone translation utilities, smart routing, and error boundaries.
 
 ### Examples
 - [Basic Usage](examples/basic_usage.py) - Quick-start setup example.
