@@ -20,6 +20,8 @@ prompts/
 
 # Test cache
 .pytest_cache/
+main.py
+error.log
 
 # Type checker cache
 .mypy_cache/
