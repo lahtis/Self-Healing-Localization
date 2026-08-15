@@ -12,14 +12,17 @@ venv/
 build/
 dist/
 *.egg-info/
-locales/
-prompts/
+
 
 # Backup files
 *.bak
 
 # Test cache
 .pytest_cache/
+
+# Test program
+locales/
+prompts/
 main.py
 error.log
 

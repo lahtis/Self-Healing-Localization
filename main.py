@@ -13,13 +13,14 @@ config = {
     "m_translation_provider_blacklist": ["libretranslate"]
 }
 
-engine = LocalizationEngine(lang_code="en", base_lang="fi-FI", config=config)
+engine = LocalizationEngine(lang_code="es", base_lang="en", config=config)
 
-text = engine.ui_text("new_key1", "Hei maailma.")
-engine.ui_text("new_key2", "Hyvää huomenta")
-text = engine.ui_text("new_key3", "Hei tyttö! Mennään puistoon")
-text = engine.ui_text("new_key4", "Hei mies, älä huido! Ota off.")
-text = engine.ui_text("new_key5", "Hei älä tee mitään, koska en ole valmis!")
-text = engine.ui_text("new_key6", "Hei tee jotain! Tämä on false tila")
+text = engine.ui_text("new_key1", "Hello world.")
+text = engine.ui_text("new_key2", "Good morning.")
+text = engine.ui_text("new_key3", "Hey girl! Let's go to the park.")
+text = engine.ui_text("new_key4", "Hey man, don't shout! Calm down.")
+text = engine.ui_text("new_key5", "Hey don't do anything, I'm not ready!")
+text = engine.ui_text("new_key6", "Hey do something! This is a false state.")
+
 
 

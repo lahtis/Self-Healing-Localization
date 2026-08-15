@@ -111,3 +111,25 @@
 2026-08-15 00:44:27 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
 2026-08-15 00:44:28 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
 2026-08-15 00:44:30 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:291 | Provider 'libretranslate' hit rate limit: LibreTranslate: rate limit exceeded. Shifting to fallback.
+2026-08-15 15:57:42 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 15:57:43 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 15:57:46 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 15:57:47 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 15:57:48 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 15:57:50 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 15:57:51 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 15:57:52 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 15:57:53 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 15:57:54 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 15:57:55 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:291 | Provider 'libretranslate' hit rate limit: LibreTranslate: rate limit exceeded. Shifting to fallback.
+2026-08-15 16:10:51 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 16:10:52 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 16:10:54 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 16:10:55 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 16:10:57 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 16:10:58 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 16:10:59 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 16:11:00 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 16:11:01 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 1/2: LibreTranslate: bad request 400
+2026-08-15 16:11:02 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:300 | Provider 'libretranslate' failed attempt 2/2: LibreTranslate: bad request 400
+2026-08-15 16:11:03 | WARNING  | shl.engine.translation.router | translate_text_with_metadata:291 | Provider 'libretranslate' hit rate limit: LibreTranslate: rate limit exceeded. Shifting to fallback.
