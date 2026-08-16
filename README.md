@@ -1,9 +1,10 @@
 # Self‑Healing Localization (SHL) Library
 ### Automatic, self‑maintaining localization for any Python project  
-**Type:**    Library
+
 **Author:**  Tuomas Lähteenmäki  
 **License:** MIT  
 **Version:** 0.2.4
+**Type:**    Library
 **Status:** in development
 
 
