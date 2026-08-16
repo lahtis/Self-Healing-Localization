@@ -673,6 +673,7 @@ PapagoAdapter(
 
 ### Fallback Flow
 
+```text
 Request Translation
     ↓
 Try Provider 1 (DeepL)
@@ -697,6 +698,7 @@ Success? → Return & Cache
     ↓
 Fail? → Return original text (with warning)
 
+```
 Why LibreTranslate Fails Intentionally
 
 LibreTranslate is configured to fail with:
