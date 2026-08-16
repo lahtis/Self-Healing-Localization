@@ -1080,6 +1080,8 @@ These belong in separate adapters, providers, or integration modules.
 
 SHL is designed for UI localization with self-healing capabilities.
 
+
+#### Option 1: Using SHL's Built-in Engine (Recommended)
 ```python
 from shl.engine import LocalizationEngine
 
@@ -1096,7 +1098,8 @@ engine.set_language("sv")
 title = engine.ui_text("welcome_msg", "Welcome to the App!")  # "Välkommen!"
 ```
 
-or you can also make this.
+#### Option 2: Custom Implementation (Advanced)
+For full control, you can implement your own UI localization provider following SHL's architecture:
 
 ```python
 from shl import LanguageValidator, setup_logging
