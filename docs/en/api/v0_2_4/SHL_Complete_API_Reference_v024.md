@@ -726,7 +726,6 @@ INFO: Successfully translated using provider: 'mymemory'
 ### Provider Fallback Architecture
 Prioritety
 
-```text
 * 1. DeepL (if API key provided)
 * 2. Papago (if API key provided)
 * 3. Google Translate v2 (if API key provided)
