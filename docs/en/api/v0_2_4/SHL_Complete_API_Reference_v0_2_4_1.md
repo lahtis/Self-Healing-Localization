@@ -162,9 +162,9 @@ The language-distance data is calculated before runtime and stored in the databa
 ### Database Models
 
 | Mode | File | Description |
-|---|---|---|
-| Lite | languages_top20.json.gz | Covers approximately 4,700 languages. Each language contains its 20 nearest related languages. |
-| Full | unified_languages.json.gz | Contains approximately 4,200 languages with broad language-to-language comparison data. |
+|:-----|:-----|:------------|
+| Lite | `languages_top20.json.gz` | Covers approximately 4,700 languages. Each language contains its 20 nearest related languages. |
+| Full | `unified_languages.json.gz` | Contains approximately 4,200 languages with broad language-to-language comparison data. |
 
 Lite is not a small language list. It covers the full language set but stores a limited nearest-language neighborhood for each language.
 
