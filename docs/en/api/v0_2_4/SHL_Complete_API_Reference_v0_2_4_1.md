@@ -172,23 +172,23 @@ Lite is not a small language list. It covers the full language set but stores a 
 
 ```json
 {
-  "id": "fin",
-  "iso639_1": "fi",
-  "iso639_3": "fin",
-  "bcp47": "fi-Latn-FI",
-  "default_region": "FI",
-  "default_script": "Latn",
-  "distance_source": "lang2vec / URIEL",
-  "distance_type": "fam",
-  "written": true,
-  "written_scripts": ["Latn"],
-  "nearest_languages": [
+  "id":"fin",
+  "iso639_1":"fi",
+  "iso639_3":"fin",
+  "bcp47":"fi-Latn-FI",
+  "default_region":"FI",
+  "default_script":"Latn",
+  "distance_source":"lang2vec / URIEL",
+  "distance_type":"fam",
+  "written":true,
+  "written_scripts":["Latn"],
+  "nearest_languages":[
     {
-      "lang": "est",
+      "lang":"est",
       "distance": 0.0003
     },
     {
-      "lang": "izh",
+      "lang":"izh",
       "distance": 0.0003
     }
   ]
