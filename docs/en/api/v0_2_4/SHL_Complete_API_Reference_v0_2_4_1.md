@@ -123,12 +123,12 @@ lang_utils.py is the shared source of truth for BCP-47 parsing and language-code
 ### BCP-47 Pattern
 
 The utility layer supports language tags with:
-```text
-language
-language-script
-language-region
-language-script-region
-```
+
+- language
+- language-script
+- language-region
+- language-script-region
+
 
 Example:
 ```python
@@ -141,7 +141,6 @@ Normalization is performed before language lookup where appropriate. GLFM lookup
 ## 4. GLFM Database Loader (utils/glfm_load_database.py)
 
 GLFM is a separate MIT-licensed project providing language metadata, language relationships, and precomputed fallback information.
-
 SHL uses GLFM as a language and fallback data source. GLFM does not perform the actual translation.
 
 ### GLFM Responsibilities
