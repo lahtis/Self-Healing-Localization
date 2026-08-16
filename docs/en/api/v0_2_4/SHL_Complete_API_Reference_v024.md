@@ -697,8 +697,8 @@ Fail? → Try Provider 5 (LibreTranslate)
 Success? → Return & Cache
     ↓
 Fail? → Return original text (with warning)
-
 ```
+
 Why LibreTranslate Fails Intentionally
 
 LibreTranslate is configured to fail with:
