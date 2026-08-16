@@ -45,13 +45,22 @@ pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.3
 ```
 
 ## Environment Variables (.env)
-
-Create a .env file in your project root (optional):
+Create a `.env` file in your project root (optional):
 
 ```ini
 MYMEMORY_EMAIL=your@email.com
 LIBRETRANSLATE_API_KEY=your-api-key
 LIBRETRANSLATE_URL=https://libretranslate.com
+```
+
+## Configuration via config.conf
+Create a `config.conf` in your project root:
+
+```ini
+[SETTINGS]
+language = fi
+base_lang = en
+m_translation_enabled = true
 ```
 
 ## Quick Start
@@ -62,15 +71,18 @@ Initialize the engine and start retrieving text. Missing keys are added to your 
 ```python
 from shl.engine import LocalizationEngine
 
+shl.setup_logging("DEBUG")
+
 # Initialize the engine (user language = Finnish, base = English)
-engine = LocalizationEngine(lang_code="fi", base_lang="en")
+engine = LocalizationEngine(base_lang="en")
 
 # If 'welcome_msg' is missing, it is created with the given default value
 title = engine.ui_text("welcome_msg", "Welcome to the App!")
 
 print(title)  # "Tervetuloa sovellukseen!" (if translation exists)
 ```
-SHL interprets this as:
+
+#### SHL interprets this as:
 
 * base_lang="en" → source code strings are English
 * lang_code="fi" → user wants Finnish UI
@@ -123,26 +135,11 @@ SHL uses lang_code to:
 
 --- 
  
-### 2. Configuration via config.conf
-Create a `config.conf` in your project root:
-
-```ini
-[SETTINGS]
-language = fi
-base_lang = en
-m_translation_enabled = true
-```
-
-```python
-engine = LocalizationEngine()  # reads language and settings from config.conf
-print(engine.ui_text("welcome", "Welcome!"))
-```
-
 ### 3. Enable Machine Translation
 Machine translation is disabled by default. Enable it when you want missing texts to be translated automatically.
 
 ```python
-config = {"m_translation_enabled": True}
+config = {"m_translation_enabled": True} 					# you can overwrite config in code
 engine = LocalizationEngine(lang_code="fi", config=config)
 
 text = engine.ui_text("new_key", "Hello World!")
@@ -196,6 +193,10 @@ from shl.engine.translation import translate_text
 result = translate_text("Hello World", target_lang="fi")
 print(result)  # "Hei maailma"
 ```
+
+### 8. UI translations
+Check the latest documentation files.
+
 ---
 
 ## Contributing

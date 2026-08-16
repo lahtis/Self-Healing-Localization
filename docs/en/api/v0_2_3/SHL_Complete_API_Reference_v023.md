@@ -25,7 +25,7 @@
 
 ---
 
-# 1. Version (`shl/_version.py`)
+# 0. Version (`shl/_version.py`)
 
 | Category | Symbols |
 | :-- | :-- |
