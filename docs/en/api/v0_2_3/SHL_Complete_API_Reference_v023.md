@@ -21,6 +21,7 @@
 9. [Provider Capability Matrix](#9-provider-capability-matrix)
 10. [Fallback and AI Audit Design](#10-fallback-and-ai-audit-design)
 11. [Quick Start Examples](#11-quick-start-examples)
+11.1 [UI Localization Guide](11.1-UI-Localization-Guide)
 12. [Self-Healing Features](#12-self-healing-features)
 
 ---
