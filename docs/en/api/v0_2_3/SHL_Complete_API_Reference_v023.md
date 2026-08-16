@@ -809,7 +809,6 @@ TranslationError
 Provider-native errors are mapped into this hierarchy.
 
 ## 8.4 Translation Cache
-
 The cache prevents redundant provider calls.
 
 ```python
@@ -870,6 +869,7 @@ result = cache.get("Hello", "en", "fi")
 │  │  - Only for missing translations                    │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
+```
 
 ### Cache Behavior
 
