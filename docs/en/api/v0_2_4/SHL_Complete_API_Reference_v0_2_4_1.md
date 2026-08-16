@@ -51,7 +51,6 @@ The shl package root aggregates the public API into a single importable namespac
 
 **Example:**
 ```python
-
 import shl
 
 shl.setup_logging("DEBUG")
@@ -86,8 +85,8 @@ Unified, dependency-free logging layer for SHL.
 ### API Key Masking
 
 SHL provides automatic API key masking for secure logging:
-```python
 
+```python
 from shl.logging_config import mask_api_key
 
 logger.debug(f"API key: {mask_api_key(api_key)}")
@@ -224,8 +223,8 @@ Lite is the default because it is always distributed with the package and is sub
 ### Runtime Language Lookup
 
 The validator uses the supplied lang_code dynamically:
-```python
 
+```python
 info = validator.get_language_info(lang_code)
 ```
 It does not assume that the requested language is Finnish or use fin as a hard-coded key.
@@ -274,7 +273,6 @@ The current order is:
 
 Example:
 ```python
-
 chain = validator.get_fallback_chain(
     lang_code="fin",
     base_language="en",
@@ -282,12 +280,10 @@ chain = validator.get_fallback_chain(
 ```
 The nearest-language records are read from:
 ```python
-
 info["nearest_languages"]
 
 Each item contains a language code and a precomputed distance:
 ```python
-
 {
     "lang": "est",
     "distance": 0.0003,
@@ -298,7 +294,6 @@ The public fallback chain currently returns language codes. Distance values rema
 
 ## 6. Translation Subsystem Overview
 ```text
-
 translation/
 ├── __init__.py
 ├── router.py
@@ -347,7 +342,6 @@ All providers implement the TranslationProvider abstraction.
 
 ### 7.2 Providers Package
 ```python
-
 from shl.engine.translation.providers import (
     TranslationProvider,
     MyMemoryAdapter,
@@ -360,7 +354,6 @@ from shl.engine.translation.providers import (
 
 ### 7.3 DeepL Adapter
 ```python
-
 DeepLAdapter(
     api_key: Optional[str] = None,
 )
@@ -401,7 +394,6 @@ DeepLAdapter(
 
 ### 7.4 Google Cloud v2 Adapter
 ```python
-
 GoogleV2Adapter(
     api_key: Optional[str] = None,
     backup_api_key: Optional[str] = None,
@@ -432,7 +424,6 @@ Google v2 does not expose the glossary and labels functionality of the advanced 
 
 ### Google Registry
 ```python
-
 registry = GoogleRegistry(cache_ttl=86400.0)
 
 registry.is_pair_supported("en", "fi")
@@ -444,7 +435,6 @@ The registry performs local language-pair checks and caches unsupported pairs.
 
 ## 7.5 LibreTranslate Adapter
 ```python
-
 LibreTranslateAdapter(
     base_url: Optional[str] = None,
     api_key: Optional[str] = None,
@@ -484,8 +474,8 @@ API keys are masked in logs.
 The registry validates language pairs against the Argos/OpenNMT support index and maintains a TTL-based unsupported-pair cache.
 
 Special normalized codes include:
-```text
 
+```text
 pb
 zh
 zt
@@ -523,7 +513,6 @@ degraded
 
 ### 7.6 MyMemory Adapter
 ```python
-
 MyMemoryAdapter(
     email: Optional[str] = None,
     cache_ttl: Optional[float] = None,
@@ -551,7 +540,6 @@ pt-br
 
 ## 7.7 Papago Adapter
 ```python
-
 PapagoAdapter(
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
@@ -600,7 +588,6 @@ Default Fallback Flow
 
 Fallback Flow
 ```text
-
 Request Translation
     ↓
 Try Provider 1 (DeepL)
@@ -667,7 +654,6 @@ SHL uses .env files for secure API key management.
 
 ### Example .env File
 ```env
-
 # ./.env/shl/.env
 MYMEMORY_EMAIL=lahtis@gmail.com
 DEEPL_API_KEY=your-deepl-api-key
@@ -685,7 +671,6 @@ All adapters automatically load environment variables from .env/shl/.env when in
 
 **Example:**
 ```python
-
 # Load from .env
 deepl = DeepLAdapter()
 
@@ -726,7 +711,6 @@ TranslationRequest is a dataclass containing three metadata levels.
 
 GLFM information can be stored in metadata without coupling core DTO fields directly to the GLFM schema:
 ```python
-
 request.metadata["glfm"] = {
     "requested_language": "fin",
     "fallback_language": "est",
@@ -744,7 +728,6 @@ request.metadata["glfm"] = {
 | `raw_response`     | `Optional[Dict]`               | Raw provider response.         |
 | `request_metadata` | `Optional[TranslationRequest]` | Original request.              |
 
-```
 
 ### Possible Future Source Labels
 ```text
@@ -763,7 +746,6 @@ These labels should be introduced consistently if AI routing is implemented.
 
 ## 9.3 Exception Taxonomy
 ```text
-
 TranslationError
 ├── ServiceUnavailableError
 ├── RateLimitExceededError
@@ -778,7 +760,6 @@ Provider-native errors are mapped into this hierarchy.
 
 The cache prevents redundant provider calls.
 ```python
-
 from shl.engine.translation.cache import TranslationCache
 
 cache = TranslationCache(
@@ -805,7 +786,6 @@ result = cache.get("Hello", "en", "fi")
 
 Cache Architecture
 ```text
-
 ┌─────────────────────────────────────────────────────────────┐
 │                    SHL CACHE ARCHITECTURE                  │
 │                                                             │
@@ -873,7 +853,6 @@ Cache Architecture
 
 The intended translation pipeline is:
 ```text
-
 Router
     ↓
 Google / DeepL / Papago / LibreTranslate / MyMemory
@@ -892,7 +871,6 @@ GLFM supplies language and fallback information. It does not translate text.
 
 For an unsupported or unavailable requested language:
 ```text
-
 requested language
     ↓
 GLFM language record
@@ -904,7 +882,6 @@ provider-supported candidate
 
 The GLFM distance value describes the precomputed language relationship and can be carried through the pipeline:
 ```json
-
 {
   "requested_language": "fin",
   "fallback_language": "est",
@@ -942,7 +919,6 @@ The AI may:
 
 An AI audit request may contain:
 ```json
-
 {
   "source_text": "Save",
   "source_language": "en",
@@ -979,7 +955,6 @@ The AI must be allowed to return an uncertain result rather than inventing a con
 
 ### Possible Result States
 ```text
-
 accepted
 corrected
 ai_generated
@@ -989,7 +964,6 @@ unavailable
 
 Example:
 ```json
-
 {
   "translated_text": "...",
   "source": "ai_generated",
@@ -1022,7 +996,6 @@ SHL is designed for UI localization with self-healing capabilities.
 
 ### Option 1: Using SHL's Built-in Engine (Recommended)
 ```python
-
 from shl.engine import LocalizationEngine
 
 # Initialize engine
@@ -1041,7 +1014,6 @@ title = engine.ui_text("welcome_msg", "Welcome to the App!")  # "Välkommen!"
 
 For full control, you can implement your own UI localization provider following SHL's architecture.
 ```python
-
 # The user implements their own UILocalizationProvider class
 # Here is an example of the architecture:
 
@@ -1106,7 +1078,6 @@ class UILocalizationProvider:
 
 ### Example Application
 ```python
-
 from shl.engine import LocalizationEngine
 
 # Initialize
@@ -1123,7 +1094,6 @@ user_message = "Hello world"  # Stays "Hello world"
 
 ## 12.2 Basic Translation
 ```python
-
 from shl import translate_text
 
 result = translate_text("Hello world", "fi")
@@ -1155,7 +1125,6 @@ print(result.confidence)
 ## 12.4 Direct Provider Usage
 ### DeepL
 ```python
-
 from shl.engine.translation.providers import DeepLAdapter
 from shl.engine.translation.metadata import TranslationRequest
 
@@ -1176,7 +1145,6 @@ print(result)
 ```
 ### Papago
 ```python
-
 from shl.engine.translation.providers import PapagoAdapter
 from shl.engine.translation.metadata import TranslationRequest
 
@@ -1202,7 +1170,6 @@ print(result)
 
 ## 12.5 Logging
 ```python
-
 from shl import setup_logging, get_logger
 import logging
 
@@ -1217,7 +1184,6 @@ logger.info("SHL ready")
 
 ## 12.6 Language Utilities
 ```python
-
 from shl import (
     parse_bcp47,
     base_language,
@@ -1236,7 +1202,6 @@ print(normalize_full_tag("EN-us"))
 
 ## 12.7 GLFM Loader
 ```python
-
 from shl.utils.glfm_load_database import (
     load_language_data,
     find_language,
@@ -1253,7 +1218,6 @@ if language:
 
 ## 12.8 LanguageValidator with Dynamic lang_code
 ```python
-
 from shl.language_validator import LanguageValidator
 
 validator = LanguageValidator(
@@ -1277,7 +1241,6 @@ The implementation uses the supplied lang_code. The example uses fin only as a s
 
 ## 12.9 Best Available Fallback
 ```python
-
 from shl.language_validator import LanguageValidator
 
 validator = LanguageValidator()
@@ -1297,7 +1260,6 @@ Provider integrations should normalize identifiers before matching fin, fi, and 
 
 ## 12.10 Exception Handling
 ```python
-
 from shl import translate_text
 from shl.engine.translation.exceptions import (
     TranslationError,
@@ -1317,7 +1279,6 @@ except TranslationError as error:
 
 ## 12.11 Translation Cache Behavior
 ```python
-
 from shl.engine.translation.cache import TranslationCache
 
 # Create cache with 1 hour TTL
@@ -1336,7 +1297,6 @@ result = cache.get("Hello", "en", "fi")
 ```
 ## 12.12 Cache Persistence
 ```python
-
 # Memory cache (RAM)
 # - TTL: 3600 seconds (1 hour)
 # - Cleared on application restart
@@ -1357,7 +1317,6 @@ result = cache.get("Hello", "en", "fi")
 
 ## 12.13 Provider Fallback Example
 ```python
-
 from shl import translate_text
 
 # SHL automatically handles provider fallback
@@ -1374,7 +1333,6 @@ result = translate_text("Hello", target_lang="fi")
 
 ## 12.14 BCP-47 Region Support
 ```python
-
 from shl import parse_bcp47, base_language, normalize_full_tag
 
 # Full BCP-47 support
@@ -1392,7 +1350,6 @@ normalize_full_tag("FI_fi")   # "fi-fi"
 ```
 ## 12.15 GLFM Language Validation
 ```python
-
 from shl.language_validator import LanguageValidator
 
 validator = LanguageValidator(base_language="en", use_lite=True)
@@ -1432,7 +1389,6 @@ best = validator.get_best_available_fallback(
 
 New texts are automatically translated when encountered.
 ```python
-
 # No manual preparation needed
 title = loc.L("New Feature")  # → Auto-translated!
 ```
@@ -1450,7 +1406,6 @@ loc.L("Save")  # → "Tallenna" + saved to disk
 
 Users can correct translations by editing JSON files.
 ```json
-
 // locales/fi.json
 {
   "Empty": "Tyhjennä"  // ← Manual correction
@@ -1461,7 +1416,6 @@ Users can correct translations by editing JSON files.
 
 SHL never overwrites manual changes.
 ```python
-
 loc.L("Empty")  # → "Tyhjennä" (uses manual edit, always!)
 ```
 
@@ -1469,7 +1423,6 @@ loc.L("Empty")  # → "Tyhjennä" (uses manual edit, always!)
 
 Translations are created only when needed.
 ```python
-
 # "Cancel" only translated when first used
 loc.L("Cancel")  # → First time → API → Saved
 loc.L("Cancel")  # → Second time → Immediate
@@ -1479,7 +1432,6 @@ loc.L("Cancel")  # → Second time → Immediate
 
 Always finds a way to translate.
 ```text
-
 vot → izh → liv → est → en
 ```
 
@@ -1487,7 +1439,6 @@ vot → izh → liv → est → en
 
 Automatic provider switching when one fails.
 ```text
-
 DeepL (fail) → Papago (fail) → Google (fail) → MyMemory (success)
 ```
 
@@ -1495,7 +1446,6 @@ DeepL (fail) → Papago (fail) → Google (fail) → MyMemory (success)
 
 Automatic translation correction with context awareness.
 ```text
-
 "Empty" (button) → AI detects context → "Tyhjennä" (not "Tyhjä")
 ```
 
@@ -1503,14 +1453,12 @@ Automatic translation correction with context awareness.
 
 API keys are loaded from .env/shl/.env and masked in logs.
 ```text
-
 DEEPL_API_KEY=dee****************2345  # In logs
 NAVER_CLIENT_ID=naver****************1234  # In logs
 ```
 
 ## The Self-Healing Loop
 ```text
-
 API Translation → Human Review → Correction → Persistence → Improvement
      ↑                                                      ↓
      └──────────────────────────────────────────────────────┘
@@ -1548,7 +1496,6 @@ Version 0.2.4 provides:
 The current architecture intentionally separates:
 
 ```text
-
 Core engine
     ↓
 Translation providers (DeepL, Google, Papago, LibreTranslate, MyMemory)
@@ -1591,9 +1538,9 @@ Documentation Updates:
 
 Security:
 
-    API keys are automatically masked in logs
+* API keys are automatically masked in logs
 
-    Credentials loaded from .env/shl/.env
+* Credentials loaded from .env/shl/.env
 
 ## 0.2.3
 
