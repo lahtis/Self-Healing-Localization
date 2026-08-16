@@ -1429,7 +1429,7 @@ best = validator.get_best_available_fallback(
     available_languages=available,
     base_language="en"
 )
-# Returns "best" (nearest available)
+# Returns "est" (nearest available)
 ```
 
 ---
