@@ -28,17 +28,62 @@
 Self-Healing Localization Layer (SHL) is a Python localization engine that automatically creates, synchronizes, and maintains language files throughout the lifetime of your application.
 
 
-### What makes SHL different?
+# What Makes SHL Different?
 
-| Feature | SHL | Traditional i18n | other |
-|---------|-----|------------------|-----|
-| Missing keys created automatically | + | - |
-| Missing language files created automatically | + | - |
-| Zero runtime dependencies | + | - | (often require gettext, Babel, etc.) |
-| BCP-47 region subtag support | + | ~ | (limited) |
-| GLFM language validation (7,900+ languages) | + | - |
-| Self-healing fallback chains | + | - |
-| Smart translation routing | + | - |
+## Feature Comparison
+
+| Feature | SHL | Traditional i18n | Other (gettext, Babel) |
+|---------|-----|------------------|------------------------|
+| Missing keys created automatically | ✅ Yes | ❌ No | ❌ No |
+| Missing language files created automatically | ✅ Yes | ❌ No | ❌ No |
+| Zero runtime dependencies | ✅ Yes | ❌ No | ❌ No (often require gettext, Babel, etc.) |
+| BCP-47 region subtag support | ✅ Yes | ⚠️ Limited | ⚠️ Limited |
+| GLFM language validation (7,900+ languages) | ✅ Yes | ❌ No | ❌ No |
+| Self-healing fallback chains | ✅ Yes | ❌ No | ❌ No |
+| Smart translation routing | ✅ Yes | ❌ No | ❌ No |
+| Provider-agnostic architecture | ✅ Yes | ❌ No | ❌ No |
+| DeepL, Google, Papago, MyMemory support | ✅ Yes | ❌ No | ❌ No |
+| AI-powered quality validation (future) | ✅ Planned | ❌ No | ❌ No |
+| Human-editable translation files | ✅ Yes | ✅ Yes | ✅ Yes |
+| No translation memory (TM) required | ✅ Yes | ⚠️ Optional | ⚠️ Optional |
+
+---
+
+## Translation Capabilities
+
+| Feature | SHL | Traditional i18n | Other |
+|---------|-----|------------------|-------|
+| Single words | ✅ Yes | ✅ Yes | ✅ Yes |
+| Complete sentences | ✅ Yes | ❌ No | ❌ No |
+| Dynamic text | ✅ Yes | ❌ No | ❌ No |
+| Questions | ✅ Yes | ❌ No | ❌ No |
+| Error messages | ✅ Yes | ❌ No | ❌ No |
+| Placeholders and variables | ✅ Yes | ⚠️ Manual only | ⚠️ Manual only |
+| Context-aware translations | ✅ Planned | ❌ No | ❌ No |
+| Formality levels | ✅ DeepL only | ❌ No | ❌ No |
+| HTML/Markdown preservation | ✅ DeepL/Google | ❌ No | ❌ No |
+| Glossary support | ✅ DeepL | ❌ No | ❌ No |
+
+---
+
+## AI-Powered Translation Quality
+
+### Current State (v0.2.2)
+
+SHL uses multiple translation providers to ensure the best quality:
+
+| Provider | Best For | Features |
+|----------|----------|----------|
+| **DeepL** | European languages | Formality, glossary, context, HTML preservation |
+| **Papago** | Asian languages (Korean, Japanese, Chinese) | Cultural accuracy |
+| **Google Translate v2** | Wide language coverage | HTML format, failover |
+| **MyMemory** | Free, always available | Community translations |
+
+### AI-Powered Quality Pipeline (Planned)
+
+
+---
+
 
 ### Key Benefits
 
