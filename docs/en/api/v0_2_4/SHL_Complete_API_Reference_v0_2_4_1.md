@@ -115,6 +115,7 @@ logger.debug(f"API key: {mask_api_key(api_key)}")
 lang_utils.py is the shared source of truth for BCP-47 parsing and language-code normalization.
 
 ### API
+
 | Function | Signature | Returns | Description |
 |---|---|---|---|
 | parse_bcp47 | (lang_code: str) | (language, script, region) | Parses a BCP-47-like tag. |
@@ -130,14 +131,13 @@ lang_utils.py is the shared source of truth for BCP-47 parsing and language-code
 
 The utility layer supports language tags with:
 ```text
-
 language
 language-script
 language-region
 language-script-region
-
+```
 Example:
-python
+```python
 
 parse_bcp47("zh-Hant-TW")
 # ("zh", "hant", "tw")
@@ -147,9 +147,9 @@ Normalization is performed before language lookup where appropriate. GLFM lookup
 ## 4. GLFM Database Loader (utils/glfm_load_database.py)
 
 GLFM is a separate MIT-licensed project providing language metadata, language relationships, and precomputed fallback information.
-```
 
 SHL uses GLFM as a language and fallback data source. GLFM does not perform the actual translation.
+
 ### GLFM Responsibilities
 
 GLFM provides:
@@ -177,6 +177,7 @@ GLFM provides:
 The language-distance data is calculated before runtime and stored in the database. SHL does not recalculate URIEL/lang2vec distances during a translation request.
 
 ### Database Models
+
 | Mode | File | Description |
 |---|---|---|
 | Lite | languages_top20.json.gz | Covers approximately 4,700 languages. Each language contains its 20 nearest related languages. |
