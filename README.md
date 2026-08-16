@@ -81,9 +81,7 @@ SHL uses multiple translation providers to ensure the best quality:
 
 ### AI-Powered Quality Pipeline (Planned)
 
-
 ---
-
 
 ### Key Benefits
 

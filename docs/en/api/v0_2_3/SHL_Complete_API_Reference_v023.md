@@ -1,7 +1,7 @@
 # SHL — Self-Healing Localization Library
 ## Complete Technical API Reference
 
-> **Version:** 0.2.2  
+> **Version:** 0.2.3  
 > **Author:** Tuomas Lähteenmäki  
 > **License:** MIT  
 > **Scope:** Core engine, translation subsystem, providers, utilities, and GLFM integration.
@@ -9,6 +9,42 @@
 ---
 
 ## Version History
+
+
+### 0.2.3
+
+**Documentation Updates:**
+
+- Enhanced **8.4 Translation Cache** with cache architecture diagram and behavior table
+- Added **7.11 Provider Fallback Architecture** with fallback flow diagram
+- Added *11.1 UI Localization Guide** with complete example
+- Added **11.11 Translation Cache Behavior** example
+- Added **11.12 Cache Persistence** example
+- Added **11.13 Provider Fallback Example**
+- Added **11.14 BCP-47 Region Support** example
+- Added **11.15 GLFM Language Validation** example
+- Added new section **12. Self-Healing Features** explaining SHL's core philosophy
+
+
+**API Additions:**
+
+- Documented that SHL **does not modify** existing translations
+- Documented that SHL **only adds** new translations
+- Documented that **manual edits are permanent** and never overwritten
+- Clarified that **LibreTranslate fails intentionally** to test fallback mechanism
+- Documented **cache priority order**: Persistent Storage → Memory Cache → API
+
+**Examples Added:**
+
+- UI Localization with `UILocalizationProvider` class
+- Cache TTL and persistence behavior
+- Provider fallback chain with logging output
+- BCP-47 region subtag support
+- GLFM language validation and fallback chains
+
+**Fixed:**
+
+- Corrected return value in GLFM example from `"best"` to `"est"`
 
 ### 0.2.2
 
@@ -37,6 +73,7 @@
 9. [Provider Capability Matrix](#9-provider-capability-matrix)
 10. [Fallback and AI Audit Design](#10-fallback-and-ai-audit-design)
 11. [Quick Start Examples](#11-quick-start-examples)
+12. [Self-Healing Features](#12-Self-Healing Features)
 
 ---
 
@@ -633,6 +670,59 @@ zh-tw
 pt-br
 ```
 
+---
+
+## 7.11 Provider Fallback Architecture
+
+### Default Provider Priority
+
+* 1. DeepL (if API key provided)
+* 2. Papago (if API key provided)
+* 3. Google Translate v2 (if API key provided)
+* 4. MyMemory (fallback, always available)
+* 5. LibreTranslate (test mode)
+
+
+### Fallback Flow
+
+Request Translation
+    ↓
+Try Provider 1 (DeepL)
+    ↓
+Success? → Return & Cache
+    ↓
+Fail? → Try Provider 2 (Papago)
+    ↓
+Success? → Return & Cache
+    ↓
+Fail? → Try Provider 3 (Google)
+    ↓
+Success? → Return & Cache
+    ↓
+Fail? → Try Provider 4 (MyMemory)
+    ↓
+Success? → Return & Cache
+    ↓
+Fail? → Try Provider 5 (LibreTranslate)
+    ↓
+Success? → Return & Cache
+    ↓
+Fail? → Return original text (with warning)
+
+Why LibreTranslate Fails Intentionally
+
+LibreTranslate is configured to fail with:
+* 400 Bad Request
+* Timeout errors
+This is by design to test the fallback mechanism and ensure reliability.
+
+### Example Log Output
+```text
+INFO: Selected priority path for en->fi: ['libretranslate', 'mymemory']
+WARNING: Provider 'libretranslate' failed attempt 1/2: 400
+WARNING: Provider 'libretranslate' failed attempt 2/2: timeout
+INFO: Successfully translated using provider: 'mymemory'
+```
 
 ---
 
@@ -749,6 +839,95 @@ result = cache.get("Hello", "en", "fi")
 
 1. Remove expired entries.
 2. If capacity is still exceeded, remove the oldest entry.
+
+### Cache Architecture
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    SHL CACHE ARCHITECTURE                  │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  LEVEL 1: Persistent Storage (Disk)                 │   │
+│  │  - Location: locales/{lang}.json                    │   │
+│  │  - Never expires                                    │   │
+│  │  - Survives restarts                                │   │
+│  │  - Human-editable                                   │   │
+│  │  - HIGHEST PRIORITY                                 │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                              ↓                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  LEVEL 2: Memory Cache (RAM)                        │   │
+│  │  - TTL: 3600 seconds (1 hour)                       │   │
+│  │  - Cleared on restart                               │   │
+│  │  - Fast access                                      │   │
+│  │  - MIDDLE PRIORITY                                  │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                              ↓                              │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  LEVEL 3: API Translation                           │   │
+│  │  - MyMemory / DeepL / Google / Papago              │   │
+│  │  - Network call                                     │   │
+│  │  - LOWEST PRIORITY                                  │   │
+│  │  - Only for missing translations                    │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+
+### Cache Behavior
+
+| Feature | Description |
+|---------|-------------|
+| **TTL** | 3600 seconds (1 hour) for memory cache |
+| **Eviction** | Expired entries removed automatically |
+| **Persistence** | Saved to `locales/{lang}.json` |
+| **Manual Edits** | Never overwritten |
+| **Error Handling** | Errors not cached |
+| **Cache Key** | `text + source_lang + target_lang + context` |
+
+---
+
+#### Overview
+
+The caching system stores translation results to improve performance and reduce redundant API calls.
+
+##### Key Features
+
+- **Time-to-Live (TTL)**: Entries expire after 1 hour in memory
+- **Automatic Cleanup**: Expired entries are automatically evicted
+- **Persistent Storage**: Cache persists across sessions via JSON files
+- **Data Integrity**: Manual edits to cache files are preserved
+- **Selective Caching**: Only successful translations are cached
+
+##### Cache Key Generation
+
+The cache key is a composite of:
+- `text` - The original text to translate
+- `source_lang` - Source language code
+- `target_lang` - Target language code
+- `context` - Optional translation context
+
+This ensures uniqueness and prevents collisions between different translation requests.
+
+### Example Cache Flow
+```python
+# First call: API translation
+result1 = L("Save")  # → "Tallenna" (API call)
+# Saved to: memory cache + locales/fi.json
+
+# Second call: Cache hit
+result2 = L("Save")  # → "Tallenna" (immediate, no API)
+
+# Manual edit
+# User edits locales/fi.json: "Save": "Talleta"
+
+# Third call: Persistent storage
+result3 = L("Save")  # → "Talleta" (from persistent storage)
+
+# After TTL expires (1 hour)
+result4 = L("Save")  # → "Talleta" (still from persistent storage!)
+
+# New text: API translation
+result5 = L("Cancel")  # → "Peruuta" (API call, saved)
+```
 
 ### Cache Identity
 
@@ -930,7 +1109,103 @@ These belong in separate adapters, providers, or integration modules.
 
 # 11. Quick Start Examples
 
-## 11.1 Basic Translation
+
+# 11.1 UI Localization Guide
+```python
+## 11.1 UI Localization Guide
+
+### Basic Usage
+
+SHL is designed for UI localization with self-healing capabilities.
+
+```python
+from shl import LanguageValidator, setup_logging
+from dataclasses import dataclass
+from pathlib import Path
+import json
+import os
+from typing import Dict, Optional
+
+@dataclass
+class LocalizationConfig:
+    source_language: str = "en"
+    target_language: str = "en"
+    locales_dir: str = "locales"
+    cache_ttl: int = 3600
+    fallback_language: str = "en"
+
+class UILocalizationProvider:
+    """UI localization provider following SHL's provider architecture."""
+    
+    def __init__(self, config: LocalizationConfig):
+        self.config = config
+        self._translations: Dict[str, str] = {}
+        self._load_translations()
+    
+    def L(self, text: str, default_text: Optional[str] = None) -> str:
+        """
+        Main method for UI text localization.
+        Follows SHL's design pattern:
+        1. Check persistent storage first (respects manual edits)
+        2. Translate if needed
+        3. Save to persistent storage
+        """
+        if self.config.target_language == "en":
+            return text
+        
+        # Check persistent storage first (manual edits are permanent)
+        if text in self._translations:
+            return self._translations[text]
+        
+        # Translate new text
+        translated = self._translate_with_shl(text)
+        
+        # Save to persistent storage
+        self._translations[text] = translated
+        self._save_translations()
+        
+        return translated
+```
+
+### Features
+
+* Only UI texts are translated - User messages stay original
+* Manual editing possible - Edit locales/{lang}.json files
+* Never overwrites - SHL respects manual edits
+* New texts auto-translated - When encountered
+* Persistent storage - Translations saved to disk
+* Self-healing - Learns from manual corrections
+
+### Translation Workflow
+
+* First run: All UI text is translated and saved to locales/{lang}.json
+* Manual editing: You can edit any translation in JSON files
+* Subsequent runs: SHL uses your manual translations
+* New text: SHL automatically translates new UI text
+* Never overwrites: SHL respects all manual edits
+
+### Example Application
+
+```python
+from shl import UILocalizationProvider, LocalizationConfig
+
+# Initialize
+config = LocalizationConfig(target_language="fi")
+loc = UILocalizationProvider(config)
+
+# Use in UI
+title = loc.L("Guestbook")  # → "Vieraskirja"
+save = loc.L("Save")        # → "Tallenna"
+empty = loc.L("Empty")      # → "Tyhjennä"
+
+# User messages are NOT translated
+user_message = "Hello world"  # Stays "Hello world"
+```
+
+
+---
+
+## 11.2 Basic Translation
 
 ```python
 from shl import translate_text
@@ -940,7 +1215,7 @@ print(result)
 ```
 
 
-## 11.2 Translation with Metadata
+## 11.3 Translation with Metadata
 
 ```python
 from shl.engine.translation import translate_text_with_metadata
@@ -963,7 +1238,7 @@ print(result.confidence)
 ```
 
 
-## 11.3 Direct Provider Usage
+## 11.4 Direct Provider Usage
 
 ```python
 from shl.engine.translation.providers import DeepLAdapter
@@ -982,7 +1257,7 @@ print(result)
 ```
 
 
-## 11.4 Logging
+## 11.5 Logging
 
 ```python
 from shl import setup_logging, get_logger
@@ -998,7 +1273,7 @@ logger.info("SHL ready")
 ```
 
 
-## 11.5 Language Utilities
+## 11.6 Language Utilities
 
 ```python
 from shl import (
@@ -1018,7 +1293,7 @@ print(normalize_full_tag("EN-us"))
 ```
 
 
-## 11.6 GLFM Loader
+## 11.7 GLFM Loader
 
 ```python
 from shl.glfm_load_database import (
@@ -1036,7 +1311,7 @@ if language:
 ```
 
 
-## 11.7 `LanguageValidator` with Dynamic `lang_code`
+## 11.8 `LanguageValidator` with Dynamic `lang_code`
 
 ```python
 from shl.language_validator import LanguageValidator
@@ -1060,7 +1335,7 @@ if validator.is_valid(lang_code):
 
 The implementation uses the supplied `lang_code`. The example uses `fin` only as a sample value; the library does not hard-code Finnish.
 
-## 11.8 Best Available Fallback
+## 11.9 Best Available Fallback
 
 ```python
 from shl.language_validator import LanguageValidator
@@ -1080,7 +1355,7 @@ print(candidate)
 
 Provider integrations should normalize identifiers before matching `fin`, `fi`, and BCP-47 variants.
 
-## 11.9 Exception Handling
+## 11.10 Exception Handling
 
 ```python
 from shl import translate_text
@@ -1100,12 +1375,210 @@ except TranslationError as error:
     print(f"Translation failed: {error}")
 ```
 
+---
+
+## 11.11 Translation Cache Behavior
+
+```python
+from shl.engine.translation.cache import TranslationCache
+
+# Create cache with 1 hour TTL
+cache = TranslationCache(ttl=3600, max_size=10000)
+
+# Store translation
+cache.set("Hello", "Hei", "en", "fi")
+
+# Retrieve translation
+result = cache.get("Hello", "en", "fi")
+# Returns "Hei" immediately (no API call)
+
+# After TTL expires
+result = cache.get("Hello", "en", "fi")
+# Returns None → API call needed again
+```
 
 ---
 
+## 11.12 Cache Persistence
+
+```python
+# Memory cache (RAM)
+# - TTL: 3600 seconds (1 hour)
+# - Cleared on application restart
+# - Fast access
+
+# Persistent storage (Disk)
+# - Location: locales/{lang}.json
+# - Never expires
+# - Survives restarts
+# - Human-editable
+# - Manual corrections persist
+
+# Priority order:
+# 1. Persistent storage (highest)
+# 2. Memory cache (middle)
+# 3. API translation (lowest)
+```
+
+---
+
+## 11.13 Provider Fallback Example
+```python
+from shl import translate_text
+
+# SHL automatically handles provider fallback
+result = translate_text("Hello", target_lang="fi")
+
+# Log output:
+# INFO: Selected priority path for en->fi: ['libretranslate', 'mymemory']
+# WARNING: Provider 'libretranslate' failed attempt 1/2: 400
+# WARNING: Provider 'libretranslate' failed attempt 2/2: timeout
+# INFO: Successfully translated using provider: 'mymemory'
+```
+
+---
+
+## 11.14 BCP-47 Region Support
+```python
+from shl import parse_bcp47, base_language, normalize_full_tag
+
+# Full BCP-47 support
+parse_bcp47("zh-Hant-TW")  # ("zh", "hant", "tw")
+parse_bcp47("en-US")       # ("en", None, "us")
+parse_bcp47("fi")          # ("fi", None, None)
+
+# Base language extraction
+base_language("fi-FI")     # "fi"
+base_language("zh-Hant")   # "zh"
+
+# Normalization
+normalize_full_tag("EN-us")   # "en-us"
+normalize_full_tag("FI_fi")   # "fi-fi"
+```
+---
+
+## 11.15 GLFM Language Validation
+```python
+from shl.language_validator import LanguageValidator
+
+validator = LanguageValidator(base_language="en", use_lite=True)
+
+# Validate language
+validator.is_valid("fi")     # True
+validator.is_valid("vot")    # True (Votic - rare)
+validator.is_valid("xx")     # False
+
+# Get language info
+info = validator.get_language_info("fi")
+print(info.get("bcp47"))     # "fi-Latn-FI"
+print(info.get("default_region"))  # "FI"
+
+# Get fallback chain
+chain = validator.get_fallback_chain("vot", base_language="en")
+# ["vot", "izh", "liv", "est", "en"]
+
+# Best available fallback
+available = ["en", "fi", "et"]
+best = validator.get_best_available_fallback(
+    lang_code="vot",
+    available_languages=available,
+    base_language="en"
+)
+# Returns "best" (nearest available)
+```
+
+---
+
+# 12. Self-Healing Features
+
+## What Makes SHL Self-Healing?
+
+### 1. Auto-Translation
+New texts are automatically translated when encountered.
+```python
+# No manual preparation needed
+title = loc.L("New Feature")  # → Auto-translated!
+```
+
+### 2. Auto-Storage
+Translations are automatically saved to persistent storage.
+```python
+# Translation saved to locales/fi.json automatically
+loc.L("Save")  # → "Tallenna" + saved to disk
+```
+### 3. Manual Editing
+
+Users can correct translations by editing JSON files.
+```json
+// locales/fi.json
+{
+  "Empty": "Tyhjennä"  // ← Manual correction
+}
+```
+
+### 4. Respects Edits
+SHL never overwrites manual changes.
+```python
+loc.L("Empty")  # → "Tyhjennä" (uses manual edit, always!)
+```
+
+### 5. Lazy Learning
+Translations are created only when needed.
+
+```python
+# "Cancel" only translated when first used
+loc.L("Cancel")  # → First time → API → Saved
+loc.L("Cancel")  # → Second time → Immediate
+```
+
+### 6. Fallback Chains
+Always finds a way to translate.
+```text
+vot → izh → liv → est → en
+```
+
+### 7. Provider Failover
+Automatic provider switching when one fails.
+```text
+LibreTranslate (fail) → MyMemory (success)
+```
+
+### 8. AI Quality Validation (Future)
+Automatic translation correction with context awareness.
+```text
+
+"Empty" (button) → AI detects context → "Tyhjennä" (not "Tyhjä")
+```
+
+#### The Self-Healing Loop
+```text
+
+API Translation → Human Review → Correction → Persistence → Improvement
+     ↑                                                      ↓
+     └──────────────────────────────────────────────────────┘
+```
+
+#### Example Evolution
+```text
+
+1. First run:
+   "Empty" → API → "Tyhjä" (wrong)
+   
+2. User edits locales/fi.json:
+   "Empty": "Tyhjennä" (correct)
+   
+3. Next run:
+   "Empty" → "Tyhjennä" (correct, always!)
+   
+4. AI validation (future):
+   "Empty" (button) → AI → "Tyhjennä" (auto-corrected)
+```
+---
+
+
 ## Version Notes
 
-Version 0.2.2 provides the working foundation for provider-based localization and GLFM-assisted fallback.
+Version 0.2.3 provides the working foundation for provider-based localization and GLFM-assisted fallback.
 
 The current architecture intentionally separates:
 
@@ -1125,6 +1598,6 @@ GLFM is an independent project and data source. SHL consumes its loader and lang
 
 ---
 
-*End of API Reference — Self-Healing Localization Layer v0.2.2*
+*End of API Reference — Self-Healing Localization Library v0.2.3*
 
 ---
