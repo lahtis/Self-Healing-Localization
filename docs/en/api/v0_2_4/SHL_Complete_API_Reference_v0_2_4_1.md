@@ -214,6 +214,7 @@ LanguageValidator(
 ```
 
 #### Parameters
+
 | Parameter | Description |
 |---|---|
 | glfm_path | Optional custom GLFM database path. |
@@ -228,19 +229,16 @@ The validator uses the supplied lang_code dynamically:
 ```python
 
 info = validator.get_language_info(lang_code)
-
+```
 It does not assume that the requested language is Finnish or use fin as a hard-coded key.
 
 Lookup order:
 
-    ISO 639-1 index;
+* ISO 639-1 index;
+* direct language ID;
+* normalized full tag;
+* ISO 639-3 linear fallback lookup.
 
-    direct language ID;
-
-    normalized full tag;
-
-    ISO 639-3 linear fallback lookup.
-```
 
 ### Public Properties
 
