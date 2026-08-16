@@ -1108,9 +1108,6 @@ These belong in separate adapters, providers, or integration modules.
 
 # 11. Quick Start Examples
 
-
-# 11.1 UI Localization Guide
-```python
 ## 11.1 UI Localization Guide
 
 ### Basic Usage
