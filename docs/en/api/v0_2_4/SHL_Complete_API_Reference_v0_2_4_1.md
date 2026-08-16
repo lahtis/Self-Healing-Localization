@@ -144,18 +144,18 @@ SHL uses GLFM as a language and fallback data source. GLFM does not perform the 
 
 ### GLFM Responsibilities
 
-#### GLFM provides:
+GLFM provides:
 
-- language identifiers;
-- ISO 639 mappings;
-- BCP-47 information;
-- default region and script;
-- written-language metadata;
-- language-family metadata;
-- URIEL/lang2vec-derived features;
-- precomputed language distances;
-- nearest-language relationships;
-- fallback candidates.
+- language identifiers
+- ISO 639 mappings
+- BCP-47 information
+- default region and script
+- written-language metadata
+- language-family metadata
+- URIEL/lang2vec-derived features
+- precomputed language distances
+- nearest-language relationships
+- fallback candidates
 
 The language-distance data is calculated before runtime and stored in the database. SHL does not recalculate URIEL/lang2vec distances during a translation request.
 
@@ -169,6 +169,7 @@ The language-distance data is calculated before runtime and stored in the databa
 Lite is not a small language list. It covers the full language set but stores a limited nearest-language neighborhood for each language.
 
 ### Typical Lite Record
+
 ```json
 {
   "id": "fin",
