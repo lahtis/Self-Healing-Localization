@@ -14,11 +14,8 @@ from .lang_utils import (
 )
 from .env_loader import (
     load_shl_env,
-    get_env_file_path,
     get_env_value,
     get_env_value_masked,
-    is_env_loaded,
-    reset_env_loader,
     mask_api_key,
 )
 
@@ -34,10 +31,7 @@ __all__ = [
     "normalize_language",
     # Environment loader
     "load_shl_env",
-    "get_env_file_path",
     "get_env_value",
     "get_env_value_masked",
-    "is_env_loaded",
-    "reset_env_loader",
     "mask_api_key",
 ]
