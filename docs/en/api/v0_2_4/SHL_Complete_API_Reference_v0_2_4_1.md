@@ -133,7 +133,6 @@ language-script-region
 
 Example:
 ```python
-
 parse_bcp47("zh-Hant-TW")
 # ("zh", "hant", "tw")
 ```
@@ -174,7 +173,6 @@ Lite is not a small language list. It covers the full language set but stores a 
 
 ### Typical Lite Record
 ```json
-
 {
   "id": "fin",
   "iso639_1": "fi",
