@@ -10,10 +10,10 @@
 
 ## Table of Contents
 
-1. [Core Public API (`shl/__init__.py`)](#1-core-public-api-shl__init__py)
-2. [Logging Configuration (`logging_config.py`)](#2-logging-configuration-logging_configpy)
-3. [Language Utilities (`utils/lang_utils.py`)](#3-language-utilities-utilslang_utilspy)
-4. [GLFM Database Loader (`glfm_load_database.py`)](#4-glfm-database-loader-glfm_load_databasepy)
+1. [Core Public API](#1-core-public-api-shl__init__py)
+2. [Logging Configuration](#2-logging-configuration-logging_configpy)
+3. [Language Utilities](#3-language-utilities-utilslang_utilspy)
+4. [GLFM Database Loader](#4-glfm-database-loader-glfm_load_databasepy)
 5. [Language Validation and Fallback](#5-language-validation-and-fallback)
 6. [Translation Subsystem Overview](#6-translation-subsystem-overview)
 7. [Provider Architecture](#7-provider-architecture)
@@ -21,7 +21,7 @@
 9. [Provider Capability Matrix](#9-provider-capability-matrix)
 10. [Fallback and AI Audit Design](#10-fallback-and-ai-audit-design)
 11. [Quick Start Examples](#11-quick-start-examples)
-12. [Self-Healing Features](#12-Self-Healing Features)
+12. [Self-Healing Features](#12-self-healing-features)
 
 ---
 
@@ -1562,7 +1562,7 @@ GLFM is an independent project and data source. SHL consumes its loader and lang
 - Added **11.13 Provider Fallback Example**
 - Added **11.14 BCP-47 Region Support** example
 - Added **11.15 GLFM Language Validation** example
-- Added new section **12. Self-Healing Features** explaining SHL's core philosophy
+- Added **12. Self-Healing Features** explaining SHL's core philosophy
 
 
 **API Additions:**
