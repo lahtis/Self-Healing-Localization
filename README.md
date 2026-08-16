@@ -5,7 +5,7 @@
 * **License:** MIT  
 * **Version:** 0.2.4
 * **Type:**    Library
-* **Status:** in development
+* **Status:**  Stable
 
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
