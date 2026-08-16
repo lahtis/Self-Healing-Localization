@@ -10,6 +10,8 @@
 
 ## Table of Contents
 
+## Table of Contents
+
 1. [Core Public API](#1-core-public-api-shl__init__py)
 2. [Logging Configuration](#2-logging-configuration-logging_configpy)
 3. [Language Utilities](#3-language-utilities-utilslang_utilspy)
@@ -21,7 +23,21 @@
 9. [Provider Capability Matrix](#9-provider-capability-matrix)
 10. [Fallback and AI Audit Design](#10-fallback-and-ai-audit-design)
 11. [Quick Start Examples](#11-quick-start-examples)
-11.1 [UI Localization Guide](#11.1-UI-Localization-Guide)
+    - [UI Localization Guide](#ui-localization-guide)
+    - [Basic Translation](#basic-translation)
+    - [Translation with Metadata](#translation-with-metadata)
+    - [Direct Provider Usage](#direct-provider-usage)
+    - [Logging](#logging)
+    - [Language Utilities](#language-utilities)
+    - [GLFM Loader](#glfm-loader)
+    - [LanguageValidator with Dynamic lang_code](#languagevalidator-with-dynamic-lang_code)
+    - [Best Available Fallback](#best-available-fallback)
+    - [Exception Handling](#exception-handling)
+    - [Translation Cache Behavior](#translation-cache-behavior)
+    - [Cache Persistence](#cache-persistence)
+    - [Provider Fallback Example](#provider-fallback-example)
+    - [BCP-47 Region Support](#bcp-47-region-support)
+    - [GLFM Language Validation](#glfm-language-validation)
 12. [Self-Healing Features](#12-self-healing-features)
 
 ---
