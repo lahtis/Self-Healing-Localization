@@ -1,7 +1,7 @@
 """
 File: metadata.py — metadata for translation requests.
 Author: Tuomas Lähteenmäki
-Version: 0.2.0
+Version: 0.2.4
 License: MIT
 Description: Data transfer objects (DTO) for standardizing localized text payloads,
              context preservation markers, and external provider results.
@@ -27,18 +27,20 @@ class TranslationRequest:
     source_lang: str
     target_lang: str
 
-    # Tier 2: Context Controls (DeepL, Google Cloud, and LLM-backed routers)
-    context_type: Optional[str] = None      # e.g., "button", "label", "menu", "tooltip"
-    domain: Optional[str] = None            # e.g., "desktop_ui", "web", "mobile"
-    formality: Optional[str] = None         # e.g., "formal", "informal"
-    glossary: Optional[Dict[str, str]] = None  # e.g., {"Save": "Tallenna"}
-    html_format: bool = False               # Explicit markup protection handling
+    # Tier 2: Context Controls (DeepL, Google Cloud, Papago and LLM-backed routers)
+    context_type: Optional[str] = None          			# e.g., "button", "label", "menu", "tooltip"
+    domain: Optional[str] = None                			# e.g., "desktop_ui", "web", "mobile"
+    formality: Optional[str] = None             			# e.g., "formal", "informal"
+    honorific: Optional[bool] = None            			# Papago-specific: True = polite/honorific style
+    glossary: Optional[Dict[str, Any]] = None   			# e.g., {"Save": "Tallenna"}
+	glossary_id: Optional[str] = None
+    html_format: bool = False                   			# Explicit markup protection handling
 
     # Tier 3: Engine Internal Tracking
-    key: Optional[str] = None               # e.g., "settings.save"
-    screen: Optional[str] = None            # e.g., "settings", "main", "login"
-    component: Optional[str] = None         # e.g., "save_button"
-    source_id: Optional[str] = None         # e.g., "shl://settings/save_button"
+    key: Optional[str] = None               				# e.g., "settings.save"
+    screen: Optional[str] = None            				# e.g., "settings", "main", "login"
+    component: Optional[str] = None         				# e.g., "save_button"
+    source_id: Optional[str] = None         				# e.g., "shl://settings/save_button"
     metadata: Dict[str, Any] = field(default_factory=dict)  # Flexible extension dict
 
 
