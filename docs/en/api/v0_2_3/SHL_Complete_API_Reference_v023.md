@@ -8,57 +8,6 @@
 
 ---
 
-## Version History
-
-
-### 0.2.3
-
-**Documentation Updates:**
-
-- Enhanced **8.4 Translation Cache** with cache architecture diagram and behavior table
-- Added **7.11 Provider Fallback Architecture** with fallback flow diagram
-- Added *11.1 UI Localization Guide** with complete example
-- Added **11.11 Translation Cache Behavior** example
-- Added **11.12 Cache Persistence** example
-- Added **11.13 Provider Fallback Example**
-- Added **11.14 BCP-47 Region Support** example
-- Added **11.15 GLFM Language Validation** example
-- Added new section **12. Self-Healing Features** explaining SHL's core philosophy
-
-
-**API Additions:**
-
-- Documented that SHL **does not modify** existing translations
-- Documented that SHL **only adds** new translations
-- Documented that **manual edits are permanent** and never overwritten
-- Clarified that **LibreTranslate fails intentionally** to test fallback mechanism
-- Documented **cache priority order**: Persistent Storage → Memory Cache → API
-
-**Examples Added:**
-
-- UI Localization with `UILocalizationProvider` class
-- Cache TTL and persistence behavior
-- Provider fallback chain with logging output
-- BCP-47 region subtag support
-- GLFM language validation and fallback chains
-
-**Fixed:**
-
-- Corrected return value in GLFM example from `"best"` to `"est"`
-
-### 0.2.2
-
-- Updated the technical API reference to match the 0.2.2 implementation.
-- Removed the deleted `AITranslator` API from the documentation.
-- Clarified the GLFM Lite and Full database roles.
-- Documented dynamic `lang_code` lookup.
-- Documented precomputed GLFM language distances.
-- Clarified the provider fallback architecture.
-- Documented AI routing and audit as planned extension layers, not completed core functionality.
-- Kept the core engine intentionally small and provider-agnostic.
-
----
-
 ## Table of Contents
 
 1. [Core Public API (`shl/__init__.py`)](#1-core-public-api-shl__init__py)
@@ -1595,5 +1544,56 @@ GLFM is an independent project and data source. SHL consumes its loader and lang
 ---
 
 *End of API Reference — Self-Healing Localization Library v0.2.3*
+
+---
+
+# Version History
+
+
+## 0.2.3
+
+**Documentation Updates:**
+
+- Enhanced **8.4 Translation Cache** with cache architecture diagram and behavior table
+- Added **7.11 Provider Fallback Architecture** with fallback flow diagram
+- Added *11.1 UI Localization Guide** with complete example
+- Added **11.11 Translation Cache Behavior** example
+- Added **11.12 Cache Persistence** example
+- Added **11.13 Provider Fallback Example**
+- Added **11.14 BCP-47 Region Support** example
+- Added **11.15 GLFM Language Validation** example
+- Added new section **12. Self-Healing Features** explaining SHL's core philosophy
+
+
+**API Additions:**
+
+- Documented that SHL **does not modify** existing translations
+- Documented that SHL **only adds** new translations
+- Documented that **manual edits are permanent** and never overwritten
+- Clarified that **LibreTranslate fails intentionally** to test fallback mechanism
+- Documented **cache priority order**: Persistent Storage → Memory Cache → API
+
+**Examples Added:**
+
+- UI Localization with `UILocalizationProvider` class
+- Cache TTL and persistence behavior
+- Provider fallback chain with logging output
+- BCP-47 region subtag support
+- GLFM language validation and fallback chains
+
+**Fixed:**
+
+- Corrected return value in GLFM example from `"best"` to `"est"`
+
+## 0.2.2
+
+- Updated the technical API reference to match the 0.2.2 implementation.
+- Removed the deleted `AITranslator` API from the documentation.
+- Clarified the GLFM Lite and Full database roles.
+- Documented dynamic `lang_code` lookup.
+- Documented precomputed GLFM language distances.
+- Clarified the provider fallback architecture.
+- Documented AI routing and audit as planned extension layers, not completed core functionality.
+- Kept the core engine intentionally small and provider-agnostic.
 
 ---
