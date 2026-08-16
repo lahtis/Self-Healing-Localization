@@ -56,7 +56,6 @@
 - Clarified the provider fallback architecture.
 - Documented AI routing and audit as planned extension layers, not completed core functionality.
 - Kept the core engine intentionally small and provider-agnostic.
-```
 
 ---
 
