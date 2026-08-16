@@ -1081,6 +1081,24 @@ These belong in separate adapters, providers, or integration modules.
 SHL is designed for UI localization with self-healing capabilities.
 
 ```python
+from shl.engine import LocalizationEngine
+
+# 1. Alusta engine
+engine = LocalizationEngine(lang_code="fi", base_lang="en")
+
+# 2. Käytä suoraan
+title = engine.ui_text("welcome_msg", "Welcome to the App!")
+save = engine.ui_text("save_btn", "Save")
+empty = engine.ui_text("empty_btn", "Empty")
+
+# 3. Vaihda kieltä lennossa
+engine.set_language("sv")
+title = engine.ui_text("welcome_msg", "Welcome to the App!")  # "Välkommen!"
+```
+
+or you can also make this.
+
+```python
 from shl import LanguageValidator, setup_logging
 from dataclasses import dataclass
 from pathlib import Path
