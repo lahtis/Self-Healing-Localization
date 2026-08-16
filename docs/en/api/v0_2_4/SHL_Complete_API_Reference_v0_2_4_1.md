@@ -143,7 +143,7 @@ Normalization is performed before language lookup where appropriate. GLFM lookup
 ## 4. GLFM Database Loader (utils/glfm_load_database.py)
 
 GLFM is a separate MIT-licensed project providing language metadata, language relationships, and precomputed fallback information.
-```
+
 SHL uses GLFM as a language and fallback data source. GLFM does not perform the actual translation.
 
 ### GLFM Responsibilities
