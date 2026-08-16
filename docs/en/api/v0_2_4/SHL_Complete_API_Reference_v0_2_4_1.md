@@ -139,7 +139,6 @@ parse_bcp47("zh-Hant-TW")
 Normalization is performed before language lookup where appropriate. GLFM lookup itself is always driven by the runtime lang_code; language codes are not hard-coded to a specific language such as fin.
 
 ## 4. GLFM Database Loader (utils/glfm_load_database.py)
-
 GLFM is a separate MIT-licensed project providing language metadata, language relationships, and precomputed fallback information.
 SHL uses GLFM as a language and fallback data source. GLFM does not perform the actual translation.
 
@@ -201,7 +200,6 @@ LanguageValidator provides optional GLFM-based language validation, BCP-47 metad
 
 ### Constructor
 ```python
-
 LanguageValidator(
     glfm_path: Optional[str] = None,
     base_language: str = "en",
