@@ -97,17 +97,11 @@ logger.debug(f"API key: {mask_api_key(api_key)}")
 ### Features
 
 - Console output via StreamHandler.
-
 - Rotating file output via RotatingFileHandler.
-
 - UTF-8 file logging.
-
 - Safe reinitialization with force=True.
-
 - Automatic log-directory creation.
-
 - Graceful degradation if file logging cannot be initialized.
-
 - API key masking in logs.
 
 ## 3. Language Utilities (utils/lang_utils.py)
@@ -136,42 +130,35 @@ language-script
 language-region
 language-script-region
 ```
+
 Example:
 ```python
 
 parse_bcp47("zh-Hant-TW")
 # ("zh", "hant", "tw")
 ```
+
 Normalization is performed before language lookup where appropriate. GLFM lookup itself is always driven by the runtime lang_code; language codes are not hard-coded to a specific language such as fin.
 
 ## 4. GLFM Database Loader (utils/glfm_load_database.py)
 
 GLFM is a separate MIT-licensed project providing language metadata, language relationships, and precomputed fallback information.
-
+```
 SHL uses GLFM as a language and fallback data source. GLFM does not perform the actual translation.
 
 ### GLFM Responsibilities
 
-GLFM provides:
+#### GLFM provides:
 
 - language identifiers;
-
 - ISO 639 mappings;
-
 - BCP-47 information;
-
 - default region and script;
-
 - written-language metadata;
-
 - language-family metadata;
-
 - URIEL/lang2vec-derived features;
-
 - precomputed language distances;
-
 - nearest-language relationships;
-
 - fallback candidates.
 
 The language-distance data is calculated before runtime and stored in the database. SHL does not recalculate URIEL/lang2vec distances during a translation request.
