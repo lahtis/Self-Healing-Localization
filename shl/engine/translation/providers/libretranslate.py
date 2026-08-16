@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from shl._version import __version__ as SHL_VERSION
-
+from shl.utils.env_loader import load_shl_env, mask_api_key
 from ..exceptions import (
     InvalidRequestError,
     LanguageNotSupportedError,
@@ -47,6 +47,9 @@ def get_supported_languages(
     Returns:
         A list of dictionaries returned by LibreTranslate.
     """
+    # Lataa .env (jos ei jo ladattu)
+    load_shl_env()
+
     resolved_base_url = (
         base_url
         or os.environ.get("LIBRETRANSLATE_URL")
@@ -153,6 +156,9 @@ class LibreTranslateAdapter(TranslationProvider):
         mirror_manager: Optional[Any] = None,
         mirrors: Optional[List[Dict[str, Any]]] = None,
     ):
+        # Lataa .env-tiedosto ./env/shl/-kansiosta (jos ei jo ladattu)
+        load_shl_env()
+
         self.base_url = (
             base_url
             or os.environ.get("LIBRETRANSLATE_URL")
@@ -179,6 +185,11 @@ class LibreTranslateAdapter(TranslationProvider):
             self.mirror_manager = LibreTranslateMirrorManager(
                 mirrors=mirrors
             )
+
+        logger.debug(
+            f"LibreTranslateAdapter initialized (base_url={self.base_url}, "
+            f"api_key={mask_api_key(self.api_key)})"
+        )
 
     @property
     def name(self) -> str:
@@ -282,7 +293,7 @@ class LibreTranslateAdapter(TranslationProvider):
                 "(api_key=%s)",
                 source,
                 target,
-                self._mask_api_key(self.api_key),
+                mask_api_key(self.api_key),
             )
 
             request = Request(
@@ -414,20 +425,3 @@ class LibreTranslateAdapter(TranslationProvider):
                 "LibreTranslate: unexpected error "
                 f"{type(error).__name__}: {error}"
             ) from error
-
-    @staticmethod
-    def _mask_api_key(
-        key: Optional[str],
-    ) -> str:
-        """Mask API key for safe logging."""
-        if not key:
-            return "(not set)"
-
-        if len(key) <= 8:
-            return "*" * len(key)
-
-        return (
-            key[:4]
-            + "*" * (len(key) - 8)
-            + key[-4:]
-        )

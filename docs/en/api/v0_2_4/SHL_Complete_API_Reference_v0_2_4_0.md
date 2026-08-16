@@ -1,7 +1,7 @@
 # SHL — Self-Healing Localization Library
 ## Complete Technical API Reference
 
-> **Version:** 0.2.4  
+> **Version:** 0.2.4.0  
 > **Author:** Tuomas Lähteenmäki  
 > **License:** MIT  
 > **Scope:** Core engine, translation subsystem, providers, utilities, and GLFM integration.

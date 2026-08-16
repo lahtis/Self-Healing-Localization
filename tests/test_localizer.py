@@ -451,6 +451,18 @@ def test_localizer_integration_full_workflow(temp_locales_dir):
     assert loc2.get_text("greeting") == "Terve"
     assert loc2.get_text("farewell") == "Näkemiin"
 
+def test_localizer_with_env_loader(temp_locales_dir):
+    """Test that localizer works with env loader (no interference)."""
+    from shl.utils.env_loader import load_shl_env
+    
+    # Load env (should not affect localizer)
+    load_shl_env()
+    
+    loc = Localizer(lang_code="fi", base_lang="en", folder=temp_locales_dir)
+    loc.set_text("test_key", "Test value")
+    
+    assert loc.get_text("test_key") == "Test value"
+    assert os.path.exists(os.path.join(temp_locales_dir, "fi.json"))
 
 # ---------------------------------------------------------------------------
 # Run tests

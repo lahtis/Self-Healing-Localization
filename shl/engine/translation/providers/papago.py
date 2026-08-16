@@ -10,12 +10,14 @@ registry validation, and security checks for suspicious output.
 
 import json
 import logging
+import os
 import socket
 from typing import Dict, Any, Optional, Union
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 from shl._version import __version__ as SHL_VERSION
+from shl.utils.env_loader import load_shl_env, mask_api_key
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -124,18 +126,40 @@ class PapagoAdapter(TranslationProvider):
     - security checks
     """
 
-    def __init__(self, client_id: str, client_secret: str):
-        if not client_id or not client_secret:
-            raise ValueError("Papago client_id and client_secret cannot be empty")
+    def __init__(
+        self,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+    ):
+        # Lataa .env-tiedosto ./env/shl/-kansiosta (jos ei jo ladattu)
+        load_shl_env()
 
-        self.client_id = client_id.strip()
-        self.client_secret = client_secret.strip()
+        # Käytä annettuja tunnisteita tai lue ympäristömuuttujista
+        self.client_id = client_id or os.getenv("NAVER_CLIENT_ID")
+        self.client_secret = client_secret or os.getenv("NAVER_CLIENT_SECRET")
+
+        if not self.client_id or not self.client_secret:
+            raise ValueError(
+                "Papago client_id and client_secret must be provided as parameters or "
+                "set as NAVER_CLIENT_ID and NAVER_CLIENT_SECRET in ./.env/shl/.env"
+            )
+
+        self.client_id = self.client_id.strip()
+        self.client_secret = self.client_secret.strip()
         self.base_url = PAPAGO_ENDPOINT
         self.registry = PapagoRegistry()
+
+        logger.debug(
+            f"PapagoAdapter initialized (client_id={mask_api_key(self.client_id)})"
+        )
 
     @property
     def name(self) -> str:
         return "papago"
+
+    @property
+    def supported_features(self) -> list:
+        return ["honorific", "glossary", "formality"]
 
     def translate(self, request: TranslationRequest) -> str:
         """Translate text using Papago API."""
@@ -210,7 +234,8 @@ class PapagoAdapter(TranslationProvider):
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"Papago request to {url} (text length: {len(payload['text'])})"
+                f"Papago request to {url} (client_id={mask_api_key(self.client_id)}, "
+                f"text length: {len(payload['text'])})"
             )
 
             req = Request(

@@ -1,11 +1,12 @@
 """
 File: router.py — Intelligent routing logic for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.2.1
+Version: 0.2.4
 License: MIT
 Description: Coordinates provider priorities, executes automated failover mechanisms,
              maintains service availability status, and interfaces with memory cache and registries.
              Includes strict input validation, empty string fixes, and global timeouts.
+             Supports DeepL, Google, Papago, LibreTranslate, and MyMemory with .env auto-detection.
 """
 
 import time
@@ -33,6 +34,9 @@ from .providers.libretranslate_registry import LibreTranslateRegistry
 from .providers.deepl import DeepLAdapter
 from .providers.googlev2 import GoogleV2Adapter
 from .providers.google_registry import GoogleRegistry
+from .providers.papago import PapagoAdapter
+
+from shl.utils.env_loader import get_env_value
 
 logger = logging.getLogger(__name__)
 
@@ -49,20 +53,34 @@ def get_provider_priority(
     source_lang: str = "en",
     deepl_key: Optional[str] = None,
     google_api_key: Optional[str] = None,
+    papago_client_id: Optional[str] = None,
+    papago_client_secret: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> List[str]:
-    """Determine the prioritized order of provider adapters based on constraints and configuration."""
+    """
+    Determine the prioritized order of provider adapters based on constraints and configuration.
+    
+    Checks both explicit parameters and .env file for API keys.
+    """
     providers = []
 
-    # Premium services high-priority check
-    if deepl_key:
+    # DeepL: tarkista onko avain annettu tai .env:ssä
+    has_deepl_key = deepl_key or get_env_value("DEEPL_API_KEY")
+    if has_deepl_key:
         providers.append("deepl")
 
-    # Tarkistetaan Google-rekisteristä ennen priorisointia
-    if google_api_key and _google_registry.is_pair_supported(
+    # Google: tarkista onko avain annettu tai .env:ssä
+    has_google_key = google_api_key or get_env_value("GOOGLE_API_KEY")
+    if has_google_key and _google_registry.is_pair_supported(
         source_lang, target_lang
     ):
         providers.append("google")
+
+    # Papago: tarkista onko tunnisteet annettu tai .env:ssä
+    has_papago_id = papago_client_id or get_env_value("NAVER_CLIENT_ID")
+    has_papago_secret = papago_client_secret or get_env_value("NAVER_CLIENT_SECRET")
+    if has_papago_id and has_papago_secret:
+        providers.append("papago")
 
     # Open / Community services
     if _libre_registry.is_pair_supported(source_lang, target_lang):
@@ -78,6 +96,8 @@ def get_best_provider(
     source_lang: str = "en",
     deepl_key: Optional[str] = None,
     google_api_key: Optional[str] = None,
+    papago_client_id: Optional[str] = None,
+    papago_client_secret: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> str:
     """Get the highest priority provider for the given configuration."""
@@ -86,6 +106,8 @@ def get_best_provider(
         source_lang,
         deepl_key,
         google_api_key,
+        papago_client_id,
+        papago_client_secret,
         request,
     )
 
@@ -99,7 +121,7 @@ def get_libretranslate_mirror_stats() -> Dict[str, Any]:
 
 def get_all_supported_languages() -> List[str]:
     """Return a combined list of supported ISO language codes across all providers."""
-    return ["en", "fi", "sv", "de", "fr", "es", "it", "ru", "zh", "ja"]
+    return ["en", "fi", "sv", "de", "fr", "es", "it", "ru", "zh", "ja", "ko"]
 
 
 def clear_unavailable_cache() -> None:
@@ -131,6 +153,8 @@ def translate_text_with_metadata(
     deepl_key: Optional[str] = None,
     google_api_key: Optional[str] = None,
     google_backup_api_key: Optional[str] = None,
+    papago_client_id: Optional[str] = None,
+    papago_client_secret: Optional[str] = None,
     max_retries: int = 2,
     retry_delay: float = 1.0,
     total_timeout: float = 30.0,
@@ -139,6 +163,8 @@ def translate_text_with_metadata(
     """
     Primary routing execution entrypoint. Returns a detailed TranslationResult object.
     Handles automated fallback paths, retries, registries learning, and global execution time limits.
+    
+    All providers support both explicit API keys and .env file auto-detection.
     """
 
     if not text:
@@ -193,6 +219,8 @@ def translate_text_with_metadata(
         source_lang,
         deepl_key,
         google_api_key,
+        papago_client_id,
+        papago_client_secret,
         request,
     )
 
@@ -220,15 +248,34 @@ def translate_text_with_metadata(
             try:
                 translated: Optional[str] = None
 
-                if service == "deepl" and deepl_key:
-                    adapter = DeepLAdapter(api_key=deepl_key)
+                if service == "deepl":
+                    # DeepL: käytä annettua avainta tai anna adapterin lukea .env
+                    if deepl_key:
+                        adapter = DeepLAdapter(api_key=deepl_key)
+                    else:
+                        adapter = DeepLAdapter()  # Lukee .env:stä
                     translated = adapter.translate(request)
 
-                elif service == "google" and google_api_key:
-                    adapter = GoogleV2Adapter(
-                        api_key=google_api_key,
-                        backup_api_key=google_backup_api_key,
-                    )
+                elif service == "google":
+                    # Google: käytä annettuja avaimia tai anna adapterin lukea .env
+                    if google_api_key:
+                        adapter = GoogleV2Adapter(
+                            api_key=google_api_key,
+                            backup_api_key=google_backup_api_key,
+                        )
+                    else:
+                        adapter = GoogleV2Adapter()  # Lukee .env:stä
+                    translated = adapter.translate(request)
+
+                elif service == "papago":
+                    # Papago: käytä annettuja tunnisteita tai anna adapterin lukea .env
+                    if papago_client_id and papago_client_secret:
+                        adapter = PapagoAdapter(
+                            client_id=papago_client_id,
+                            client_secret=papago_client_secret,
+                        )
+                    else:
+                        adapter = PapagoAdapter()  # Lukee .env:stä
                     translated = adapter.translate(request)
 
                 elif service == "libretranslate":
@@ -336,6 +383,8 @@ def translate_text(
     deepl_key: Optional[str] = None,
     google_api_key: Optional[str] = None,
     google_backup_api_key: Optional[str] = None,
+    papago_client_id: Optional[str] = None,
+    papago_client_secret: Optional[str] = None,
     max_retries: int = 2,
     retry_delay: float = 1.0,
     total_timeout: float = 30.0,
@@ -344,6 +393,8 @@ def translate_text(
     """
     Convenience wrapper returning raw translated text string.
     Returns original string as fallback on total failure to avoid breaking calling application.
+    
+    All providers support both explicit API keys and .env file auto-detection.
     """
 
     try:
@@ -356,6 +407,8 @@ def translate_text(
             deepl_key=deepl_key,
             google_api_key=google_api_key,
             google_backup_api_key=google_backup_api_key,
+            papago_client_id=papago_client_id,
+            papago_client_secret=papago_client_secret,
             max_retries=max_retries,
             retry_delay=retry_delay,
             total_timeout=total_timeout,

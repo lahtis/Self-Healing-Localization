@@ -1,7 +1,7 @@
 """
 File: language_validator.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.0
+Version: 0.2.4
 License: MIT
 Description:
     Optional language validation using GLFM (Global Language Family Mapper).
@@ -48,7 +48,7 @@ class LanguageValidator:
         Args:
             glfm_path: Custom path to GLFM database (if None, uses default)
             base_language: Default fallback language
-            use_lite: Use GLFM Lite (~428 KB) instead of full GLFM (~800 MB)
+            use_lite: Use GLFM Lite (~428 KB) instead of full GLFM (~51.6 MB)
         """
         self.base_language = base_language
         self._loaded = False

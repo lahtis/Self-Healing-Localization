@@ -11,12 +11,14 @@ and security checks for suspicious output.
 
 import json
 import logging
+import os
 import socket
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 from shl._version import __version__ as SHL_VERSION
+from shl.utils.env_loader import load_shl_env, mask_api_key
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -46,11 +48,20 @@ class DeepLAdapter(TranslationProvider):
     - security checks
     """
 
-    def __init__(self, api_key: str):
-        if not api_key:
-            raise ValueError("DeepL API key cannot be empty")
+    def __init__(self, api_key: Optional[str] = None):
+        # Lataa .env-tiedosto ./env/shl/-kansiosta (jos ei jo ladattu)
+        load_shl_env()
 
-        self.api_key = api_key.strip()
+        # Käytä annettua avainta tai lue ympäristömuuttujasta
+        self.api_key = api_key or os.getenv("DEEPL_API_KEY")
+
+        if not self.api_key:
+            raise ValueError(
+                "DeepL API key must be provided as parameter or "
+                "set as DEEPL_API_KEY in ./.env/shl/.env"
+            )
+
+        self.api_key = self.api_key.strip()
 
         # Auto-detect Free vs Pro endpoint
         if self.api_key.endswith(":fx"):
@@ -61,9 +72,15 @@ class DeepLAdapter(TranslationProvider):
         # Runtime language pair registry
         self.registry = DeepLRegistry()
 
+        logger.debug(f"DeepLAdapter initialized (api_key={mask_api_key(self.api_key)})")
+
     @property
     def name(self) -> str:
         return "deepl"
+
+    @property
+    def supported_features(self) -> list:
+        return ["formality", "context", "glossary", "html_format"]
 
     def translate(self, request: TranslationRequest) -> str:
         """Translate text using DeepL API."""
@@ -127,7 +144,8 @@ class DeepLAdapter(TranslationProvider):
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"DeepL request to {url} (text length: {len(payload['text'][0])})"
+                f"DeepL request to {url} (api_key={mask_api_key(self.api_key)}, "
+                f"text length: {len(payload['text'][0])})"
             )
 
             req = Request(
@@ -269,4 +287,3 @@ class DeepLAdapter(TranslationProvider):
                 f"DeepL unexpected execution layer failure: "
                 f"{type(e).__name__}: {e}"
             )
-

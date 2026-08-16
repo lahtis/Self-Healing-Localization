@@ -1,7 +1,7 @@
 """
 File: core.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.2
+Version: 0.2.4
 License: MIT
 Description:
     Central engine that unifies the Self-Healing Localization Layer.
@@ -13,6 +13,7 @@ Description:
     - Smart translation routing with automatic fallback
     - Machine translation only when enabled
     - Provides a clean API for higher-level applications
+    - Supports .env file for API keys and configuration
 """
 
 import logging
@@ -40,6 +41,7 @@ from shl.utils.lang_utils import (
     base_language,
     normalize_full_tag,
 )
+from shl.utils.env_loader import load_shl_env, get_env_value
 
 
 logger = logging.getLogger(__name__)
@@ -63,7 +65,15 @@ class LocalizationEngine:
         libretranslate_mirrors: Optional[
             List[Dict[str, Any]]
         ] = None,
+        deepl_key: Optional[str] = None,
+        google_api_key: Optional[str] = None,
+        google_backup_api_key: Optional[str] = None,
+        papago_client_id: Optional[str] = None,
+        papago_client_secret: Optional[str] = None,
     ):
+        # Lataa .env-tiedosto (jos ei jo ladattu)
+        load_shl_env()
+
         default_config = self._load_default_config()
 
         if config:
@@ -109,18 +119,24 @@ class LocalizationEngine:
                 # Cache & adapters (required elsewhere in the class)
                 self.cache = TranslationCache()
 
+                # Resolve API keys: parametrit > .env > oletus
                 resolved_mymemory_email = (
                     mymemory_email
-                    or os.environ.get("MYMEMORY_EMAIL")
+                    or get_env_value("MYMEMORY_EMAIL")
                 )
                 resolved_libretranslate_url = (
                     libretranslate_url
-                    or os.environ.get("LIBRETRANSLATE_URL")
+                    or get_env_value("LIBRETRANSLATE_URL")
                 )
                 resolved_libretranslate_api_key = (
                     libretranslate_api_key
-                    or os.environ.get("LIBRETRANSLATE_API_KEY")
+                    or get_env_value("LIBRETRANSLATE_API_KEY")
                 )
+                self._deepl_key = deepl_key or get_env_value("DEEPL_API_KEY")
+                self._google_api_key = google_api_key or get_env_value("GOOGLE_API_KEY")
+                self._google_backup_api_key = google_backup_api_key or get_env_value("GOOGLE_BACKUP_API_KEY")
+                self._papago_client_id = papago_client_id or get_env_value("NAVER_CLIENT_ID")
+                self._papago_client_secret = papago_client_secret or get_env_value("NAVER_CLIENT_SECRET")
 
                 self.mymemory_adapter = MyMemoryAdapter(
                     email=resolved_mymemory_email,
@@ -211,20 +227,24 @@ class LocalizationEngine:
 
         self.cache = TranslationCache()
 
+        # Resolve API keys: parametrit > .env > oletus
         resolved_mymemory_email = (
             mymemory_email
-            or os.environ.get("MYMEMORY_EMAIL")
+            or get_env_value("MYMEMORY_EMAIL")
         )
-
         resolved_libretranslate_url = (
             libretranslate_url
-            or os.environ.get("LIBRETRANSLATE_URL")
+            or get_env_value("LIBRETRANSLATE_URL")
         )
-
         resolved_libretranslate_api_key = (
             libretranslate_api_key
-            or os.environ.get("LIBRETRANSLATE_API_KEY")
+            or get_env_value("LIBRETRANSLATE_API_KEY")
         )
+        self._deepl_key = deepl_key or get_env_value("DEEPL_API_KEY")
+        self._google_api_key = google_api_key or get_env_value("GOOGLE_API_KEY")
+        self._google_backup_api_key = google_backup_api_key or get_env_value("GOOGLE_BACKUP_API_KEY")
+        self._papago_client_id = papago_client_id or get_env_value("NAVER_CLIENT_ID")
+        self._papago_client_secret = papago_client_secret or get_env_value("NAVER_CLIENT_SECRET")
 
         self.mymemory_adapter = MyMemoryAdapter(
             email=resolved_mymemory_email,
@@ -688,6 +708,11 @@ class LocalizationEngine:
                         target_lang=self.lang_code,
                         source_lang=self.base_lang,
                         mymemory_email=self._mymemory_email,
+                        deepl_key=self._deepl_key,
+                        google_api_key=self._google_api_key,
+                        google_backup_api_key=self._google_backup_api_key,
+                        papago_client_id=self._papago_client_id,
+                        papago_client_secret=self._papago_client_secret,
                     )
 
                     if (
@@ -943,6 +968,9 @@ class LocalizationEngine:
                 False,
             ),
             "config": self.config.copy(),
+            "deepl_key_configured": bool(self._deepl_key),
+            "google_api_key_configured": bool(self._google_api_key),
+            "papago_configured": bool(self._papago_client_id and self._papago_client_secret),
         }
 
     # ------------------------------------------------------------------
@@ -1012,4 +1040,3 @@ class LocalizationEngine:
         )
 
         return True
-

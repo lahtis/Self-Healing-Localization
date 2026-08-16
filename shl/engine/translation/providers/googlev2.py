@@ -11,13 +11,15 @@ Description: Translation provider adapter for the Google Cloud Translation Basic
 
 import json
 import logging
+import os
 import socket
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 from shl._version import __version__ as SHL_VERSION
+from shl.utils.env_loader import load_shl_env, mask_api_key
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -43,22 +45,42 @@ class GoogleV2Adapter(TranslationProvider):
 
     def __init__(
         self,
-        api_key: str,
-        backup_api_key: str = None,
+        api_key: Optional[str] = None,
+        backup_api_key: Optional[str] = None,
     ):
-        if not api_key:
-            raise ValueError("Google Cloud Translation API key cannot be empty")
+        # Lataa .env-tiedosto ./env/shl/-kansiosta (jos ei jo ladattu)
+        load_shl_env()
 
-        self.api_key = api_key.strip()
-        self.backup_api_key = backup_api_key.strip() if backup_api_key else None
+        # Käytä annettuja avaimia tai lue ympäristömuuttujista
+        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        self.backup_api_key = backup_api_key or os.getenv("GOOGLE_BACKUP_API_KEY")
+
+        if not self.api_key:
+            raise ValueError(
+                "Google Cloud Translation API key must be provided as parameter or "
+                "set as GOOGLE_API_KEY in ./.env/shl/.env"
+            )
+
+        self.api_key = self.api_key.strip()
+        if self.backup_api_key:
+            self.backup_api_key = self.backup_api_key.strip()
         self.has_backup = bool(self.backup_api_key) and self.backup_api_key != self.api_key
 
         # Runtime language pair registry (validation + learning)
         self.registry = GoogleRegistry()
 
+        logger.debug(
+            f"GoogleV2Adapter initialized (api_key={mask_api_key(self.api_key)}, "
+            f"has_backup={self.has_backup})"
+        )
+
     @property
     def name(self) -> str:
         return "google"
+
+    @property
+    def supported_features(self) -> list:
+        return ["html_format"]
 
     def translate(self, request: TranslationRequest) -> str:
         """
@@ -125,7 +147,10 @@ class GoogleV2Adapter(TranslationProvider):
 
         request_data = json.dumps(payload).encode("utf-8")
         target_type = "Backup" if is_backup else "Primary"
-        logger.debug(f"{target_type} Google translation request")
+        logger.debug(
+            f"{target_type} Google translation request "
+            f"(api_key={mask_api_key(api_key)})"
+        )
 
         try:
             req = Request(
@@ -268,4 +293,3 @@ class GoogleV2Adapter(TranslationProvider):
                 payload["source"],
                 payload["target"],
             )
-

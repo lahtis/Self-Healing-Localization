@@ -1,7 +1,7 @@
 """
 File: logging_config.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.0
+Version: 0.2.4
 License: MIT
 Description:
     Unified logging configuration for the Self-Healing Localization Layer.
@@ -10,6 +10,7 @@ Description:
     - File output for errors (error.log)
     - Configurable log levels
     - Rotating file handler to prevent disk overflow
+    - API key masking for secure logging
     
 Usage:
     # Before anything else is run:
@@ -19,6 +20,10 @@ Usage:
     # Then in modules:
     import logging
     logger = logging.getLogger(__name__)
+    
+    # Mask API keys in logs:
+    from shl.logging_config import mask_api_key
+    logger.debug(f"API key: {mask_api_key(api_key)}")
 """
 
 import logging
@@ -26,7 +31,7 @@ import sys
 import os
 import glob
 from logging.handlers import RotatingFileHandler
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 
 # Default log levels
@@ -41,6 +46,40 @@ _logging_initialized = False
 
 # Store active log file for stats
 _active_log_files: List[str] = []
+
+
+def mask_api_key(key: Optional[str]) -> str:
+    """
+    Mask API key for safe logging.
+
+    Args:
+        key: API key string or None
+
+    Returns:
+        Masked string:
+        - "(not set)" if key is None or empty
+        - "*****" if key is 8 characters or less
+        - "abcd***********wxyz" for longer keys (first 4 + last 4 visible)
+
+    Examples:
+        >>> mask_api_key("my-secret-key-12345")
+        'my-s*****************12345'
+        >>> mask_api_key("short")
+        '*****'
+        >>> mask_api_key(None)
+        '(not set)'
+    """
+    if not key:
+        return "(not set)"
+
+    key_str = str(key).strip()
+    if not key_str:
+        return "(not set)"
+
+    if len(key_str) <= 8:
+        return "*" * len(key_str)
+
+    return key_str[:4] + "*" * (len(key_str) - 8) + key_str[-4:]
 
 
 def setup_logging(
@@ -232,7 +271,7 @@ def remove_handler(
     return removed
 
 
-def get_log_stats() -> dict:
+def get_log_stats() -> Dict[str, Any]:
     """
     Return logging statistics.
     
@@ -243,11 +282,16 @@ def get_log_stats() -> dict:
         >>> stats = get_log_stats()
         >>> print(stats['log_files'])
     """
-    stats = {
+    stats: Dict[str, Any] = {
         'initialized': _logging_initialized,
         'handlers': len(logging.getLogger().handlers),
         'log_files': list(_active_log_files),
+        'handler_types': [],
     }
+    
+    # Handler types
+    for handler in logging.getLogger().handlers:
+        stats['handler_types'].append(handler.__class__.__name__)
     
     # Check first active log file
     if _active_log_files and os.path.exists(_active_log_files[0]):
@@ -259,12 +303,6 @@ def get_log_stats() -> dict:
     else:
         stats['log_file_size'] = 0
         stats['backup_files'] = 0
-    
-    # Handler types
-    handler_types = []
-    for handler in logging.getLogger().handlers:
-        handler_types.append(handler.__class__.__name__)
-    stats['handler_types'] = handler_types
     
     return stats
 
@@ -302,6 +340,18 @@ if __name__ == "__main__":
     logger.info("This is an INFO message (general info)")
     logger.warning("This is a WARNING message (caution)")
     logger.error("This is an ERROR message (error)")
+    
+    # Test API key masking
+    print("\n=== API Key Masking Test ===")
+    test_keys = [
+        None,
+        "",
+        "short",
+        "my-secret-api-key-12345",
+        "abcdefghijklmnopqrstuvwxyz",
+    ]
+    for key in test_keys:
+        print(f"  {repr(key)} -> {mask_api_key(key)}")
     
     # Test exception logging
     try:
