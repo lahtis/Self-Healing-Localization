@@ -1,7 +1,6 @@
 # SHL-asetukset
 
-SHL käyttää kevyttä riippuvuudetonta asetustasoa tarjoaja asetuksille
-ja ympäristömuuttujille.
+SHL käyttää kevyttä riippuvuudetonta asetustasoa palvelun tarjoajan asetuksille ja ympäristömuuttujille.
 
 Asetusten hallinta sijaitsee polussa:
 
@@ -26,7 +25,7 @@ my_project/
 
 Oletusarvoisesti SHL etsii tiedostoa `shl-config.json` nykyisestä projektikansiosta.
 
-Tarjoaja voidaan määrittää `enabled`, `allow` ja `deny` -asetuksilla.
+Palvelun tarjoaja voidaan määrittää `enabled`, `allow` ja `deny` -asetuksilla.
 
 Esimerkki:
 
@@ -52,9 +51,9 @@ Esimerkki:
 
 Erillistä·· `fallback`-lippua ei ole.
 
-## Tarjoajan `enabled`
+## Palvelun tarjoajan `enabled`
 
-`enabled` määrittää, onko tarjoaja käytössä SHL:lle.
+`enabled` määrittää, onko palveluntarjoaja käytössä SHL:lle.
 
 ```json
 "DeepL": {
@@ -62,28 +61,27 @@ Erillistä·· `fallback`-lippua ei ole.
 }
 ```
 
-Kun `enabled` on `false`, tarjoajaa ei sisällytetä käytössä olevien tarjoajien joukkoon käännöksiä tai varajärjestelmää varten.
+Kun `enabled` on `false`, tarjoajaa ei sisällytetä käytössä olevien palvelun tarjoajien joukkoon käännöksiä tai varajärjestelmää varten.
 
-K äy t össä·· olevat tarjoajat ovat saatavilla funktion kautta:
+Käytössä olevat palveluntarjoajat ovat saatavilla funktion kautta:
 
 ```python
 config.get_enabled_providers()
 ```
 
-## Automaattinen varaj ärjestelm ä
+## Automaattinen varajärjestelmä
 
-SHL käsittelee muita käy tössä olevia tarjoajia mahdollisina
-varajärjestelminä.
+SHL käsittelee muita käytössä olevia palvelun tarjoajia mahdollisina varajärjestelminä.
 
-Tarjoaja ei voi koskaan olla oma varajärjestelmänsä.
+Palvelun tarjoaja ei voi koskaan olla oma varajärjestelmänsä.
 
-Esimerkiksi, kun nykyinen tarjoaja on `DeepL`:
+Esimerkiksi, kun nykyinen palvelun tarjoaja on `DeepL`:
 
 ```python
 config.get_fallback_providers("DeepL")
 ```
 
-palauttaa muut käytössä olevat tarjoajat.
+palauttaa muut käytössä olevat palveluntarjoajat.
 
 Jos asetukset ovat:
 
@@ -110,7 +108,7 @@ DeepL    → MyMemory
 
 Googlea ei sisällytetä, koska se on poissa käytöstä.
 
-Jos vain yksi tarjoaja on käytössä:
+Jos vain yksi palvelun tarjoaja on käytössä:
 
 ```json
 {
@@ -126,15 +124,15 @@ Jos vain yksi tarjoaja on käytössä:
 }
 ```
 
-niin MyMemoryllä ei ole vaihtoehtoista tarjoajaa.
+niin MyMemoryllä ei ole vaihtoehtoista palvelun tarjoajaa.
 
-Tällöin SHL ei yritä käyttää MyMemoryä omana varajärjestelmänään. Jos tarjoaja ei pysty tuottamaan käännöstä, suoritusaika voi näyttää `base_lang`-arvon.
+Tällöin SHL ei yritä käyttää MyMemoryä omana varajärjestelmänään. Jos palvelun tarjoaja ei pysty tuottamaan käännöstä, suoritusaika voi näyttää `base_lang`-tekstin.
 
 ## `base_lang` ei ole tallennettu käännös
 
 `base_lang`-varajärjestelmä on suoritusaikainen näyttövarajärjestelmä.
 
-Jos mikään tarjoaja ei pysty tuottamaan käännöstä, SHL voi näyttää lähdekielisen tekstin sovelluksen käytössä pitämiseksi.
+Jos mikään palveluntarjoaja ei pysty tuottamaan käännöstä, SHL voi näyttää lähdekielisen tekstin sovelluksen käytössä pitämiseksi.
 
 Tätä arvoa ei saa kirjoittaa kohdekieliseen käännöstiedostoon.
 
@@ -153,11 +151,10 @@ Varajärjestelmät:
     ei yhtään
 
 Suoritusaika:
-    näytä base_lang (suomi)
+    näytä base_lang (suomennkielinen teksti)
 ```
 
-Suomenkielinen teksti näytetään, mutta sitä ei tallenneta saksan
-käännökseksi.
+Suomenkielinen teksti näytetään, mutta sitä ei tallenneta saksan käännökseksi.
 
 Tämä on tärkeää SHL:n itsekorjautuvalle toiminnalle. Kun käännös tarjoaja tulee taas saataville, SHL voi tuottaa todellisen käännöksen ja tallentaa sen sopivaan kohdekieliseen tiedostoon.
 
@@ -170,7 +167,7 @@ käytä käännöstä
 
 käännös puuttuu
     ↓
-tarjoaja onnistuu
+palveluntarjoaja onnistuu
     ↓
 käytä käännöstä
     ↓
@@ -178,7 +175,7 @@ tallenna kohdekielinen käännös
 
 käännös puuttuu
     ↓
-kaikki sopivat tarjoajat epä onnistuvat
+kaikki sopivat palvelun tarjoajat epäonnistuvat
     ↓
 näytä base_lang
     ↓
@@ -187,8 +184,7 @@ näytä base_lang
 
 ## `allow` ja `deny`
 
-`allow` ja `deny` ohjaavat, onko tarjoaja sopiva tietylle
-kohteelle, kuten muodolle.
+`allow` ja `deny` ohjaavat, onko palvelun tarjoaja sopiva tietylle kohteelle, kuten muodolle.
 
 Esimerkki:
 
@@ -215,12 +211,11 @@ config.is_allowed("DeepL", "html")
 
 palauttaa `False`, kun `html` on tarjoajan `deny`-listalla.
 
-Tämä mahdollistaa reitittimen valita toisen käytössä olevan tarjoajan, kun nykyinen tarjoaja ei sovellu pyyntöön.
+Tämä mahdollistaa reitittimen valita toisen käytössä olevan palvelun tarjoajan, jos nykyinen palvelun tarjoaja ei sovellu pyyntöön.
 
 ## `.env`-tuki
 
-`ConfigManager` voi ladata `.env`-tiedoston ilman ulkoista
-riippuvuutta.
+`ConfigManager` voi ladata `.env`-tiedoston ilman ulkoista riippuvuutta.
 
 Oletusarvoisesti:
 
@@ -290,7 +285,7 @@ config = ConfigManager(
 )
 ```
 
-## Tarjoaja-asetusten lukeminen
+## Tarjoaja asetusten lukeminen
 
 Hae koko tarjoajan kokoonpano:
 
@@ -354,8 +349,7 @@ config.reload(force=True)
 
 ## Uudelleenlatauskutsut
 
-Koodi voi rekisteröidä kutsun, joka suoritetaan onnistuneen
-asetusten uudelleenlatauksen jälkeen:
+Koodi voi rekisteröidä kutsun, joka suoritetaan onnistuneen asetusten uudelleenlatauksen jälkeen:
 
 ```python
 def on_config_reload(new_config):
@@ -415,14 +409,14 @@ config.close()
 
 ## Asetusten vastuu
 
-`ConfigManager` on vastuussa asetustilasta ja tarjoajien saatavuudesta.
+`ConfigManager` on vastuussa asetustilasta ja palvelun tarjoajien saatavuudesta.
 
-Reititin pysyy vastuussa käännösten reitityksestä··.
+Reititin pysyy vastuussa käännösten reitityksestä.
 
 Erityisesti `ConfigManager` ei:
 
 - suorita käännöksiä
-- päätäkäännöksen semanttisesta laadusta
+- päätä käännöksen semanttisesta laadusta
 - kirjoita käännöstiedostoja
 - tallenna `base_lang:in tekstiä kohdekäännökseksi
 - yritä samaa tarjoajaa omana varajärjestelmä nään
@@ -432,19 +426,19 @@ Tarkoitettu erottelu on:
 ```text
 ConfigManager
     │
-    ├── tarjoaja käytössä?
-    ├── tarjoaja sallittu?
+    ├── palvelun tarjoaja käytössä?
+    ├── palvelun tarjoaja sallittu?
     ├── saatavilla olevat varajärjestelmät?
     └── ympäristömuuttujat
              │
              ▼
           Reititin
              │
-             ├── valitse tarjoaja
-             ├── yrit ä varaj ärjestelm ätarjoajaa
+             ├── valitse palvelun tarjoaja
+             ├── yritä varajärjestelmä palvelun tarjoajaa
              └── päätä suoritusaikaisesta varajärjestelmästä
                        │
                        └── base_lang (vain näyttö)
 ```
 
-Tämä pitää tarjoaja-asetukset erillään reitityslogiikasta ja säilyttää SHL:n itsekorjautuvan toiminnan.
+Tämä pitää palvelun tarjoaja asetukset erillään reitityslogiikasta ja säilyttää SHL:n itsekorjautuvan toiminnan.

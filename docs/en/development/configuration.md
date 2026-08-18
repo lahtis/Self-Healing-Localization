@@ -128,9 +128,7 @@ If only one provider is enabled:
 
 then MyMemory has no alternative provider.
 
-In that situation, SHL does not attempt to use MyMemory as its own
-fallback. If the provider cannot produce a translation, the runtime may
-show the `base_lang` value.
+In that situation, SHL does not attempt to use MyMemory as its own fallback. If the provider cannot produce a translation, the runtime may show the `base_lang` text.
 
 ## `base_lang` is not a stored translation
 
@@ -156,15 +154,12 @@ Fallback providers:
     none
 
 Runtime:
-    display base_lang (Finnish)
+    display base_lang (Finnish text)
 ```
 
-The Finnish text is displayed, but it is not saved as the German
-translation.
+The Finnish text is displayed, but it is not saved as the German translation.
 
-This is important for SHL's self-healing behavior. When a translation
-provider becomes available again, SHL can generate the real translation
-and store it in the appropriate target-language file.
+This is important for SHL's self-healing behavior. When a translation provider becomes available again, SHL can generate the real translation and store it in the appropriate target-language file.
 
 The flow is therefore:
 
@@ -185,7 +180,7 @@ translation missing
     ↓
 all suitable providers fail
     ↓
-display base_lang
+display base_lang text
     ↓
 do NOT store base_lang as translation
 ```
