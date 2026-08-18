@@ -151,7 +151,7 @@ Varajärjestelmät:
     ei yhtään
 
 Suoritusaika:
-    näytä base_lang (suomennkielinen teksti)
+    näytä base_lang (suomenkielinen teksti)
 ```
 
 Suomenkielinen teksti näytetään, mutta sitä ei tallenneta saksan käännökseksi.
@@ -178,6 +178,8 @@ käännös puuttuu
 kaikki sopivat palvelun tarjoajat epäonnistuvat
     ↓
 näytä base_lang
+base_lang → fi
+text      → "Tervetuloa sovellukseen"
     ↓
  ÄLÄ tallenna base_lang:ia käännökseksi
 ```

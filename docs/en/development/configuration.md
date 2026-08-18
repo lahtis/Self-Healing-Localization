@@ -154,7 +154,7 @@ Fallback providers:
     none
 
 Runtime:
-    display base_lang (Finnish text)
+    display base_lang (the original text)
 ```
 
 The Finnish text is displayed, but it is not saved as the German translation.
@@ -181,8 +181,12 @@ translation missing
 all suitable providers fail
     ↓
 display base_lang text
+
+base_lang → fi
+text      → "Tervetuloa sovellukseen"
+
     ↓
-do NOT store base_lang as translation
+do NOT store base_lang text as translation
 ```
 
 ## `allow` and `deny`
@@ -451,7 +455,7 @@ ConfigManager
              ├── try fallback provider
              └── decide runtime fallback
                        │
-                       └── base_lang (display only)
+                       └── display base_lang text
 ```
 
 This keeps provider configuration separate from routing logic and preserves
