@@ -18,6 +18,7 @@ Tervetuloa itsekorjautuvan lokalisointikirjaston dokumentaatioon. SHL on älykä
 - [API-viite](api/v0_2_0/engine.md)
 - [Täydellinen opas](api/v0_2_3/SHL_Complete_API_Reference_v023.md)
 - [Kehitys](kehitys/readme.md)
+
 ---
 
 # Mikä tekee SHL:stä erilaisen?

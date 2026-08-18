@@ -18,12 +18,12 @@ Welcome to the Self-Healing Localization Library documentation. SHL is a smart, 
 - [API Reference](api/v0_2_0/engine.md)
 - [Full Guide](api/v0_2_3/SHL_Complete_API_Reference_v023.md)
 - [Development](development/readme.md)
+
 ---
 
 # What Makes SHL Different?
 
 ## Feature Comparison
-
 | Feature | SHL | Traditional i18n | Other (gettext, Babel) |
 |---------|-----|------------------|------------------------|
 | Missing keys created automatically | ✅ Yes | ❌ No | ❌ No |
