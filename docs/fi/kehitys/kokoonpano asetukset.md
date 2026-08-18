@@ -1,7 +1,7 @@
 # SHL-asetukset
 
-SHL käyttää kevyttä··riippuvuudetonta asetustasoa tarjoaja-asetuksille
-ja ympä··ristö···muuttujille.
+SHL käyttää kevyttä riippuvuudetonta asetustasoa tarjoaja asetuksille
+ja ympäristömuuttujille.
 
 Asetusten hallinta sijaitsee polussa:
 
@@ -12,7 +12,7 @@ shl/
     └── manager.py
 ```
 
-Sovelluksen asetukset säilytetä··n yleensä·· projektin juuressa:
+Sovelluksen asetukset säilytetän yleensä projektin juuressa:
 
 ```text
 my_project/
@@ -24,9 +24,9 @@ my_project/
 
 ## Asetustiedosto
 
-Oletusarvoisesti SHL etsii tiedostoa `shl-config.json` nykyisestä·· projektikansiosta.
+Oletusarvoisesti SHL etsii tiedostoa `shl-config.json` nykyisestä projektikansiosta.
 
-Tarjoaja voidaan m ää··ritt ää·· `enabled`, `allow` ja `deny` -asetuksilla.
+Tarjoaja voidaan määrittää `enabled`, `allow` ja `deny` -asetuksilla.
 
 Esimerkki:
 
@@ -54,7 +54,7 @@ Erillistä·· `fallback`-lippua ei ole.
 
 ## Tarjoajan `enabled`
 
-`enabled` m ää··ritt ää··, onko tarjoaja k äy t össä·· SHL:lle.
+`enabled` määrittää, onko tarjoaja käytössä SHL:lle.
 
 ```json
 "DeepL": {
@@ -62,8 +62,7 @@ Erillistä·· `fallback`-lippua ei ole.
 }
 ```
 
-Kun `enabled` on `false`, tarjoajaa ei sis ällytet ä k äy t össä·· olevien
-tarjoajien joukkoon k ää··nn öksi ä tai varaj ärjestelm ää·· varten.
+Kun `enabled` on `false`, tarjoajaa ei sisällytetä käytössä olevien tarjoajien joukkoon käännöksiä tai varajärjestelmää varten.
 
 K äy t össä·· olevat tarjoajat ovat saatavilla funktion kautta:
 
@@ -73,10 +72,10 @@ config.get_enabled_providers()
 
 ## Automaattinen varaj ärjestelm ä
 
-SHL k äs ittelee muita k äy t össä·· olevia tarjoajia mahdollisina
-varaj ärjestelmin ä.
+SHL käsittelee muita käy tössä olevia tarjoajia mahdollisina
+varajärjestelminä.
 
-Tarjoaja ei voi koskaan olla oma varaj ärjestelm äns ä.
+Tarjoaja ei voi koskaan olla oma varajärjestelmänsä.
 
 Esimerkiksi, kun nykyinen tarjoaja on `DeepL`:
 
@@ -84,7 +83,7 @@ Esimerkiksi, kun nykyinen tarjoaja on `DeepL`:
 config.get_fallback_providers("DeepL")
 ```
 
-palauttaa muut k äy t össä·· olevat tarjoajat.
+palauttaa muut käytössä olevat tarjoajat.
 
 Jos asetukset ovat:
 
@@ -102,16 +101,16 @@ Jos asetukset ovat:
 }
 ```
 
-varaj ärjestelm äsuhde on tehokkaasti:
+varajärjestelmäsuhde on tehokkaasti:
 
 ```text
 MyMemory → DeepL
 DeepL    → MyMemory
 ```
 
-Googlea ei sis ällytet ä, koska se on poissa k äy t östä··.
+Googlea ei sisällytetä, koska se on poissa käytöstä.
 
-Jos vain yksi tarjoaja on k äy t össä··:
+Jos vain yksi tarjoaja on käytössä:
 
 ```json
 {
@@ -127,68 +126,63 @@ Jos vain yksi tarjoaja on k äy t össä··:
 }
 ```
 
-niin MyMemoryll ä ei ole vaihtoehtoista tarjoajaa.
+niin MyMemoryllä ei ole vaihtoehtoista tarjoajaa.
 
-T äll öin SHL ei yrit ä k äy tt ää·· MyMemory ä omana
-varaj ärjestelm än ää··n. Jos tarjoaja ei pysty tuottamaan k ää··nn östä··,
-suoritusaika voi n äy tt ää·· `base_lang`-arvon.
+Tällöin SHL ei yritä käyttää MyMemoryä omana varajärjestelmänään. Jos tarjoaja ei pysty tuottamaan käännöstä, suoritusaika voi näyttää `base_lang`-arvon.
 
-## `base_lang` ei ole tallennettu k ää··nn ös
+## `base_lang` ei ole tallennettu käännös
 
-`base_lang`-varaj ärjestelm ä on suoritusaikainen n äy tt övaraj ärjestelm ä.
+`base_lang`-varajärjestelmä on suoritusaikainen näyttövarajärjestelmä.
 
-Jos mik ää··n tarjoaja ei pysty tuottamaan k ää··nn östä··, SHL voi n äy tt ää··
-l ähdekielisen tekstin sovelluksen k äy t össä·· pit ämiseksi.
+Jos mikään tarjoaja ei pysty tuottamaan käännöstä, SHL voi näyttää lähdekielisen tekstin sovelluksen käytössä pitämiseksi.
 
-T ät ä arvoa ei saa kirjoittaa kohdekieliseen k ää··nn östiedostoon.
+Tätä arvoa ei saa kirjoittaa kohdekieliseen käännöstiedostoon.
 
 Esimerkiksi:
 
 ```text
 Pyydetty: fi → de
 
-K ää··nn östiedosto:
-    Saksankielinen k ää··nn ös puuttuu
+Käännöstiedosto:
+    Saksankielinen käännös puuttuu
 
 Tarjoaja:
-    MyMemory epä onnistuu
+    MyMemory epäonnistuu
 
-Varaj ärjestelm ät:
-    ei yht ää··n
+Varajärjestelmät:
+    ei yhtään
 
 Suoritusaika:
-    n äy tä base_lang (suomi)
+    näytä base_lang (suomi)
 ```
 
-Suomenkielinen teksti n äy tet ää··n, mutta sit ä ei tallenneta saksan
-k ää··nn ökseksi.
+Suomenkielinen teksti näytetään, mutta sitä ei tallenneta saksan
+käännökseksi.
 
-T äm ä on tärke ää·· SHL:n itsekorjautuvalle toiminnalle. Kun k ää··nn ös
-tarjoaja tulee taas saataville, SHL voi tuottaa todellisen k ää··nn öksen
-ja tallentaa sen sopivaan kohdekieliseen tiedostoon.
+Tämä on tärkeää SHL:n itsekorjautuvalle toiminnalle. Kun käännös tarjoaja tulee taas saataville, SHL voi tuottaa todellisen käännöksen ja tallentaa sen sopivaan kohdekieliseen tiedostoon.
 
 Virtaus on siis:
 
 ```text
-k ää··nn ös on olemassa
+käännös on olemassa
     ↓
-k äy tä k ää··nn östä··
+käytä käännöstä
 
-k ää··nn ös puuttuu
+käännös puuttuu
     ↓
 tarjoaja onnistuu
     ↓
-k äy tä k ää··nn östä··
+käytä käännöstä
     ↓
-tallenna kohdekielinen k ää··nn ös
+tallenna kohdekielinen käännös
 
-k ää··nn ös puuttuu
+käännös puuttuu
     ↓
 kaikki sopivat tarjoajat epä onnistuvat
     ↓
-n äy tä base_lang
+näytä base_lang
     ↓
- ÄL Ä tallenna base_lang:ia k ää··nn ökseksi
+ ÄLÄ tallenna base_lang:ia käännökseksi
 ```
 
 ## `allow` ja `deny`
@@ -206,12 +200,12 @@ Esimerkki:
 }
 ```
 
-S ää··nn öt arvioidaan t ässä·· j ärjestyksessä··:
+Säännöt arvioidaan tässä järjestyksessä:
 
-1. Kohde `deny`-listalla hyl ät ää··n.
-2. Jos `allow` on tyhj ä, k äy tet ää··n asetettua oletusarvoa.
-3. Jos `allow` sis ält ää·· kohteen, se hyv äksyt ää··n.
-4. Muuten kohde hyl ät ää··n.
+1. Kohde `deny`-listalla hylätään.
+2. Jos `allow` on tyhjä, käytetään asetettua oletusarvoa.
+3. Jos `allow` sisältää kohteen, se hyväksytään.
+4. Muuten kohde hylätään.
 
 Esimerkiksi:
 
@@ -221,8 +215,7 @@ config.is_allowed("DeepL", "html")
 
 palauttaa `False`, kun `html` on tarjoajan `deny`-listalla.
 
-T äm ä mahdollistaa reitittimen valita toisen k äy t össä·· olevan tarjoajan,
-kun nykyinen tarjoaja ei sovellu pyynt öö···n.
+Tämä mahdollistaa reitittimen valita toisen käytössä olevan tarjoajan, kun nykyinen tarjoaja ei sovellu pyyntöön.
 
 ## `.env`-tuki
 
@@ -245,9 +238,9 @@ GOOGLE_API_KEY=your-key
 MYMEMORY_EMAIL=example@example.com
 ```
 
-Arvot tehd ää··n saatavilla prosessin ymp ärist ömuuttujien kautta.
+Arvot tehdään saatavilla prosessin ympäristömuuttujien kautta.
 
-Niihin p ää··see k äy tt äm äll ä:
+Niihin pääsee käyttämällä:
 
 ```python
 config.get_env("DEEPL_API_KEY")
@@ -260,11 +253,11 @@ config.get_env("DEEPL_API_KEY", default=None)
 ```
 
 `.env`-tiedostoa valvoo asetusten tarkkailija. Kun se muuttuu,
-SHL lataa ymp ärist öarvonsa uudelleen.
+SHL lataa ympäristöarvonsa uudelleen.
 
-Ä· ·l ä sitoudu salaisiin avaimiin lähteenhallintaan.
+Älä sitoudu salaisiin avaimiin lähteenhallintaan.
 
-## `ConfigManager`-luokan k äy tt ö
+## `ConfigManager`-luokan käyttö
 
 Tuo hallinta asetuspaketin kautta:
 
@@ -321,13 +314,13 @@ Tai yksinkertaisesti:
 enabled = config.is_enabled("DeepL")
 ```
 
-Hae kaikki k äy t össä·· olevat tarjoajat:
+Hae kaikki käytössä olevat tarjoajat:
 
 ```python
 providers = config.get_enabled_providers()
 ```
 
-Hae varaj ärjestelm äehdokkaat tarjoajalle:
+Hae varajärjestelmäehdokkaat tarjoajalle:
 
 ```python
 fallbacks = config.get_fallback_providers("DeepL")
@@ -343,12 +336,9 @@ providers = config.get_provider_list()
 
 `ConfigManager` valvoo `shl-config.json`:ia automaattisesti.
 
-Kun tiedosto muuttuu, SHL yritt ää·· ladata sen uudelleen.
+Kun tiedosto muuttuu, SHL yrittää ladata sen uudelleen.
 
-Jos uusi JSON on virheellinen, aiempi kelvollinen asetustiedosto
-s äilytet ää··n. T äm ä est ää·· v äliaikaisen tai keskener äisen
-tiedoston kirjoituksen korvaamasta toimivaa asetusta virheellisellä··
-datalla.
+Jos uusi JSON on virheellinen, aiempi kelvollinen asetustiedosto säilytetään. Tämä estää väliaikaisen tai keskeneräisen tiedoston kirjoituksen korvaamasta toimivaa asetusta virheellisellä datalla.
 
 Manuaalinen uudelleenlataus on myös mahdollinen:
 
@@ -356,7 +346,7 @@ Manuaalinen uudelleenlataus on myös mahdollinen:
 config.reload()
 ```
 
-Pakotettu uudelleenlataus voidaan pyyt ää··:
+Pakotettu uudelleenlataus voidaan pyytää:
 
 ```python
 config.reload(force=True)
@@ -364,8 +354,8 @@ config.reload(force=True)
 
 ## Uudelleenlatauskutsut
 
-Koodi voi rekister öid ä kutsun, joka suoritetaan onnistuneen
-asetusten uudelleenlatauksen j älkeen:
+Koodi voi rekisteröidä kutsun, joka suoritetaan onnistuneen
+asetusten uudelleenlatauksen jälkeen:
 
 ```python
 def on_config_reload(new_config):
@@ -385,32 +375,29 @@ config.remove_reload_callback(on_config_reload)
 
 ## Säikeiden turvallisuus
 
-`ConfigManager` suojelee sis äistä·· asetustaan uudelleenk äy nnilukolla.
+`ConfigManager` suojelee sisäistä asetustaan uudelleenkäynnistyslukolla.
 
-Palautetut asetusrakenteet ovat syv äkopioita, joten kutsujat eivät voi
-vahingossa muokata sis äistä·· asetusta palautetun
-sanakirjan tai listan kautta.
+Palautetut asetusrakenteet ovat syväkopioita, joten kutsujat eivät voi vahingossa muokata sisäistä asetusta palautetun sanakirjan tai listan kautta.
 
-T äm ä mahdollistaa asetusten tarkkailijan ja sovelluskoodin k äy tt ää··
-hallintaa samanaikaisesti.
+Tämä mahdollistaa asetusten tarkkailijan ja sovelluskoodin käyttää hallintaa samanaikaisesti.
 
 ## Tarkkailijan elinkaari
 
-Tarkkailija k äy nnistyy automaattisesti, kun `ConfigManager` luodaan.
+Tarkkailija käynnistyy automaattisesti, kun `ConfigManager` luodaan.
 
-Se voidaan pys äy tt ää·· eksplisiittisesti:
+Se voidaan pysäyttää eksplisiittisesti:
 
 ```python
 config.stop_watcher()
 ```
 
-Se voidaan myös k äy nnist ää·· uudelleen:
+Se voidaan myös käynnistää uudelleen:
 
 ```python
 config.start_watcher()
 ```
 
-Eksplisiittistä·· resurssienhallintaa varten:
+Eksplisiittistä resurssienhallintaa varten:
 
 ```python
 with ConfigManager() as config:
@@ -418,7 +405,7 @@ with ConfigManager() as config:
     ...
 ```
 
-Kontekstista poistuminen pys äy tt ää·· tarkkailijan.
+Kontekstista poistuminen pysäyttää tarkkailijan.
 
 Vaihtoehtoisesti:
 
@@ -428,38 +415,36 @@ config.close()
 
 ## Asetusten vastuu
 
-`ConfigManager` on vastuussa asetustilasta ja tarjoajien
-saatavuudesta.
+`ConfigManager` on vastuussa asetustilasta ja tarjoajien saatavuudesta.
 
-Reititin pysyy vastuussa k ää··nn östen reitityksestä··.
+Reititin pysyy vastuussa käännösten reitityksestä··.
 
 Erityisesti `ConfigManager` ei:
 
-- suorita k ää··nn öksi ä
-- p ää··t ä k ää··nn öksen semanttisesta laadusta
-- kirjoita k ää··nn östiedostoja
-- tallenna `base_lang`:ia kohdek ää··nn ökseksi
-- yrit ä samaa tarjoajaa omana varaj ärjestelm än ää··n
+- suorita käännöksiä
+- päätäkäännöksen semanttisesta laadusta
+- kirjoita käännöstiedostoja
+- tallenna `base_lang:in tekstiä kohdekäännökseksi
+- yritä samaa tarjoajaa omana varajärjestelmä nään
 
 Tarkoitettu erottelu on:
 
 ```text
 ConfigManager
     │
-    ├── tarjoaja k äy t össä··?
+    ├── tarjoaja käytössä?
     ├── tarjoaja sallittu?
-    ├── saatavilla olevat varaj ärjestelm ät?
-    └── ymp ärist ömuuttujat
+    ├── saatavilla olevat varajärjestelmät?
+    └── ympäristömuuttujat
              │
              ▼
           Reititin
              │
              ├── valitse tarjoaja
              ├── yrit ä varaj ärjestelm ätarjoajaa
-             └── p ää··t ä suoritusaikaisesta varaj ärjestelm ästä··
+             └── päätä suoritusaikaisesta varajärjestelmästä
                        │
-                       └── base_lang (vain n äy tt ö)
+                       └── base_lang (vain näyttö)
 ```
 
-T äm ä pitää tarjoaja-asetukset erill ää··n reitityslogiikasta ja s äilytt ää··
-SHL:n itsekorjautuvan toiminnan.
+Tämä pitää tarjoaja-asetukset erillään reitityslogiikasta ja säilyttää SHL:n itsekorjautuvan toiminnan.
