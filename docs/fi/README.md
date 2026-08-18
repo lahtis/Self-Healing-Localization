@@ -26,7 +26,6 @@ Tervetuloa itsekorjautuvan lokalisointikirjaston dokumentaatioon. SHL on älykä
 ## Ominaisuuksien vertailu
 
 | Ominaisuus | SHL | Perinteinen i18n | Muu (gettext, Babel) |
-
 |---------|-----|-------------------|-----------------------|
 | Puuttuvat avaimet luodaan automaattisesti | ✅ Kyllä | ❌ Ei | ❌ Ei |
 | Puuttuvat kielitiedostot luodaan automaattisesti | ✅ Kyllä | ❌ Ei | ❌ Ei |
