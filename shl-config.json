@@ -1,0 +1,27 @@
+{
+    "deepl": {
+        "enabled": true,
+        "allow": [],
+        "deny": ["html"]
+    },
+    "pagago": {
+        "enabled": false,
+        "allow": [],
+        "deny": ["html"]
+    },    
+    "googlev3": {
+        "enabled": true,
+        "allow": [],
+        "deny": ["html"]
+    },
+    "mymemory": {
+        "enabled": true,
+        "allow": [],
+        "deny": ["html"]
+    },
+    "libretranslate": {
+        "enabled": false,
+        "allow": [],
+        "deny": ["html"]
+    }
+}
