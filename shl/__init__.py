@@ -30,7 +30,6 @@ from shl.engine.translation import (
     # Pääfunktiot
     translate_text,
     get_best_provider,
-    get_all_supported_languages,
     get_supported_languages,
     get_libretranslate_mirror_stats,
     # Välimuisti
@@ -75,7 +74,6 @@ __all__ = [
     # Translation - pääfunktiot
     "translate_text",
     "get_best_provider",
-    "get_all_supported_languages",
     "get_libretranslate_mirror_stats",
     # Translation - cache
     "TranslationCache",
@@ -88,6 +86,10 @@ __all__ = [
     # Translation - providerit
     "MyMemoryAdapter",
     "LibreTranslateAdapter",
+    "DeepLAdapter",
+    "GoogleV2Adapter",
+    "PapagoAdapter",
+    "MicrosoftTranslatorAdapter",
     # Translation - poikkeukset
     "TranslationError",
     "RateLimitExceededError",

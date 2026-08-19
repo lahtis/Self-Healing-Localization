@@ -1,0 +1,8 @@
+{
+    "ttl": {
+        "microsoft": 600,
+        "google": 300,
+        "deepl": 500
+    }
+}
+

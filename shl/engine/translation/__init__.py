@@ -16,7 +16,6 @@ from .router import (
     translate_text_with_metadata,
     get_best_provider,
     get_provider_priority,
-    get_all_supported_languages,
     get_libretranslate_mirror_stats,
     clear_unavailable_cache,
     get_unavailable_cache_stats,
@@ -46,6 +45,10 @@ from .providers.libretranslate import (
 )
 from .providers.deepl import DeepLAdapter
 from .providers.googlev2 import GoogleV2Adapter
+from .providers.papago import PapagoAdapter
+
+from .providers.microsoft import MicrosoftTranslatorAdapter
+
 
 __all__ = [
     "__version__",
@@ -55,7 +58,6 @@ __all__ = [
     "translate_text_with_metadata",
     "get_best_provider",
     "get_provider_priority",
-    "get_all_supported_languages",
     "get_supported_languages",
     "get_libretranslate_mirror_stats",
     "clear_unavailable_cache",
@@ -73,6 +75,8 @@ __all__ = [
     "LibreTranslateAdapter",
     "DeepLAdapter",
     "GoogleV2Adapter",
+    "PapagoAdapter",
+    "MicrosoftTranslatorAdapter",
         
     # Exception Taxonomy
     "TranslationError",

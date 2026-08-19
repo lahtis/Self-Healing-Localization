@@ -9,10 +9,13 @@ Description: Coordinates provider priorities, executes automated failover mechan
              Supports DeepL, Google, Papago, LibreTranslate, and MyMemory with .env auto-detection.
 """
 
+
 import time
 import logging
 from typing import Optional, List, Dict, Any
 
+from .provider_cache import load_cache
+from shl.config.config import get_ttl
 from .cache import TranslationCache
 from .metadata import TranslationRequest, TranslationResult
 from .exceptions import (
@@ -21,32 +24,42 @@ from .exceptions import (
     LanguageNotSupportedError,
     RateLimitExceededError,
 )
+
+from .providers.microsoft import MicrosoftTranslatorAdapter
 from .providers.mymemory import MyMemoryAdapter
-from .providers.libretranslate import (
-    LibreTranslateAdapter,
-)
-
-from .providers.libretranslate_mirrors import (
-    LibreTranslateMirrorManager,
-)
-
+from .providers.libretranslate import LibreTranslateAdapter
+from .providers.libretranslate_mirrors import LibreTranslateMirrorManager
 from .providers.libretranslate_registry import LibreTranslateRegistry
+
 from .providers.deepl import DeepLAdapter
 from .providers.googlev2 import GoogleV2Adapter
 from .providers.google_registry import GoogleRegistry
+
 from .providers.papago import PapagoAdapter
+from .providers.papago_registry import PapagoRegistry
+
+from .providers.microsoft_registry import MicrosoftServiceRegistry
 
 from shl.utils.env_loader import get_env_value
+from shl.config import get_config_value
 
 logger = logging.getLogger(__name__)
 
 _translation_cache = TranslationCache()
 _mirror_manager = LibreTranslateMirrorManager()
 
-# Registry-instanssit kieliparien tarkistukseen ja oppimiseen
 _libre_registry = LibreTranslateRegistry()
 _google_registry = GoogleRegistry()
+_papago_registry = PapagoRegistry()
 
+_ms_registry = MicrosoftServiceRegistry(
+    ttl_seconds=get_config_value("microsoft_translator.ttl")
+)
+
+
+# ---------------------------------------------------------------------------
+# PROVIDER PRIORITY
+# ---------------------------------------------------------------------------
 
 def get_provider_priority(
     target_lang: str,
@@ -55,41 +68,65 @@ def get_provider_priority(
     google_api_key: Optional[str] = None,
     papago_client_id: Optional[str] = None,
     papago_client_secret: Optional[str] = None,
+    microsoft_api_key: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> List[str]:
-    """
-    Determine the prioritized order of provider adapters based on constraints and configuration.
-    
-    Checks both explicit parameters and .env file for API keys.
-    """
-    providers = []
 
-    # DeepL: tarkista onko avain annettu tai .env:ssä
-    has_deepl_key = deepl_key or get_env_value("DEEPL_API_KEY")
-    if has_deepl_key:
+    cache = load_cache()
+    providers_cache = cache.get("providers", {})
+
+    ms_langs = providers_cache.get("microsoft_translator", {})
+    lt_langs = providers_cache.get("libretranslate", {})
+    pg_langs = providers_cache.get("pagago", [])
+    mm_langs = providers_cache.get("mymemory", [])
+
+    providers: List[str] = []
+
+    # Microsoft Translator (symmetrinen avainlogiikka)
+    ms_key = microsoft_api_key or get_env_value("MICROSOFT_TRANSLATOR_KEY")
+    if ms_key and _ms_registry.is_available():
+        if source_lang.lower() in ms_langs and target_lang.lower() in ms_langs:
+            providers.append("microsoft_translator")
+
+    # DeepL
+    deepl_key = deepl_key or get_env_value("DEEPL_API_KEY")
+    if deepl_key:
         providers.append("deepl")
 
-    # Google: tarkista onko avain annettu tai .env:ssä
-    has_google_key = google_api_key or get_env_value("GOOGLE_API_KEY")
-    if has_google_key and _google_registry.is_pair_supported(
-        source_lang, target_lang
-    ):
-        providers.append("google")
+    # Google
+    google_api_key = google_api_key or get_env_value("GOOGLE_API_KEY")
+    if google_api_key:
+        if _google_registry.is_pair_supported(source_lang, target_lang):
+            providers.append("google")
 
-    # Papago: tarkista onko tunnisteet annettu tai .env:ssä
-    has_papago_id = papago_client_id or get_env_value("NAVER_CLIENT_ID")
-    has_papago_secret = papago_client_secret or get_env_value("NAVER_CLIENT_SECRET")
-    if has_papago_id and has_papago_secret:
-        providers.append("papago")
+    # Papago
+    papago_client_id = papago_client_id or get_env_value("NAVER_CLIENT_ID")
+    papago_client_secret = papago_client_secret or get_env_value("NAVER_CLIENT_SECRET")
 
-    # Open / Community services
-    if _libre_registry.is_pair_supported(source_lang, target_lang):
-        providers.append("libretranslate")
+    static_pg = (
+        source_lang.lower() in pg_langs and
+        target_lang.lower() in pg_langs
+    )
 
-    providers.append("mymemory")
+    if papago_client_id and papago_client_secret:
+        if _papago_registry.is_pair_supported(source_lang, target_lang, static_pg):
+            providers.append("papago")
+
+    # LibreTranslate
+    if source_lang.lower() in lt_langs and target_lang.lower() in lt_langs:
+        if _libre_registry.is_pair_supported(source_lang, target_lang):
+            providers.append("libretranslate")
+
+    # MyMemory
+    if source_lang.lower() in mm_langs and target_lang.lower() in mm_langs:
+        providers.append("mymemory")
 
     return providers
 
+
+# ---------------------------------------------------------------------------
+# BEST PROVIDER
+# ---------------------------------------------------------------------------
 
 def get_best_provider(
     target_lang: str,
@@ -98,9 +135,10 @@ def get_best_provider(
     google_api_key: Optional[str] = None,
     papago_client_id: Optional[str] = None,
     papago_client_secret: Optional[str] = None,
+    microsoft_api_key: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> str:
-    """Get the highest priority provider for the given configuration."""
+
     providers = get_provider_priority(
         target_lang,
         source_lang,
@@ -108,41 +146,45 @@ def get_best_provider(
         google_api_key,
         papago_client_id,
         papago_client_secret,
+        microsoft_api_key,
         request,
     )
 
     return providers[0] if providers else "mymemory"
 
-
 def get_libretranslate_mirror_stats() -> Dict[str, Any]:
     """Get statistics about LibreTranslate mirrors."""
     return _mirror_manager.get_stats()
 
-
-def get_all_supported_languages() -> List[str]:
-    """Return a combined list of supported ISO language codes across all providers."""
-    return ["en", "fi", "sv", "de", "fr", "es", "it", "ru", "zh", "ja", "ko"]
-
+# ---------------------------------------------------------------------------
+# CLEAR UNAVAILABLE CACHE
+# ---------------------------------------------------------------------------
 
 def clear_unavailable_cache() -> None:
-    """Clear internal tracking of blacklisted/unavailable providers and language registries."""
     _mirror_manager.clear_blacklist()
     _libre_registry.clear_blacklist()
     _google_registry.clear_blacklist()
+    _papago_registry.clear_blacklist()
+    _ms_registry.clear()
 
+
+# ---------------------------------------------------------------------------
+# UNAVAILABLE CACHE STATS
+# ---------------------------------------------------------------------------
 
 def get_unavailable_cache_stats() -> Dict[str, Any]:
-    """Retrieve statistics regarding currently unavailable endpoints and blacklisted language pairs."""
     return {
         "blacklisted_mirrors": len(_mirror_manager.blacklist),
-        "blacklisted_google_pairs": len(
-            _google_registry._unsupported_pairs_cache
-        ),
-        "blacklisted_libre_pairs": len(
-            _libre_registry._unsupported_pairs_cache
-        ),
+        "blacklisted_google_pairs": len(_google_registry._unsupported_pairs_cache),
+        "blacklisted_libre_pairs": len(_libre_registry._unsupported_pairs_cache),
+        "blacklisted_papago_pairs": len(_papago_registry._unsupported_pairs_cache),
+        "microsoft_unavailable": not _ms_registry.is_available(),
     }
 
+
+# ---------------------------------------------------------------------------
+# TRANSLATION EXECUTION
+# ---------------------------------------------------------------------------
 
 def translate_text_with_metadata(
     text: str,
@@ -155,24 +197,18 @@ def translate_text_with_metadata(
     google_backup_api_key: Optional[str] = None,
     papago_client_id: Optional[str] = None,
     papago_client_secret: Optional[str] = None,
+    microsoft_api_key: Optional[str] = None,
     max_retries: int = 2,
     retry_delay: float = 1.0,
     total_timeout: float = 30.0,
     request: Optional[TranslationRequest] = None,
 ) -> TranslationResult:
-    """
-    Primary routing execution entrypoint. Returns a detailed TranslationResult object.
-    Handles automated fallback paths, retries, registries learning, and global execution time limits.
-    
-    All providers support both explicit API keys and .env file auto-detection.
-    """
 
     if not text:
         return TranslationResult(
             translated_text=text,
             source="input_validation",
-            request_metadata=request
-            or TranslationRequest(
+            request_metadata=request or TranslationRequest(
                 text=text,
                 source_lang=source_lang,
                 target_lang=target_lang,
@@ -180,10 +216,6 @@ def translate_text_with_metadata(
         )
 
     if not isinstance(text, str):
-        logger.warning(
-            f"translate_text_with_metadata: Invalid input type {type(text)}, "
-            "forcing str conversion."
-        )
         text = str(text)
 
     if request is None:
@@ -199,15 +231,9 @@ def translate_text_with_metadata(
 
     if use_cache:
         cached = _translation_cache.get(
-            text,
-            source_lang,
-            target_lang,
-            formality,
-            context_type,
+            text, source_lang, target_lang, formality, context_type
         )
-
         if cached is not None:
-            logger.info("Translation retrieved from cache")
             return TranslationResult(
                 translated_text=cached,
                 source="cache",
@@ -221,90 +247,57 @@ def translate_text_with_metadata(
         google_api_key,
         papago_client_id,
         papago_client_secret,
+        microsoft_api_key,
         request,
     )
 
-    logger.info(
-        f"Selected priority path for "
-        f"{source_lang}->{target_lang}: {order}"
-    )
+    ms_key = microsoft_api_key or get_env_value("MICROSOFT_TRANSLATOR_KEY")
 
     for service in order:
         if time.time() - start_time > total_timeout:
-            logger.error(
-                f"Global timeout ({total_timeout}s) exceeded before "
-                f"attempting provider '{service}'."
-            )
             break
 
         for attempt in range(max_retries):
             if time.time() - start_time > total_timeout:
-                logger.error(
-                    f"Global timeout ({total_timeout}s) exceeded during "
-                    f"attempt {attempt + 1} for '{service}'."
-                )
                 break
 
             try:
-                translated: Optional[str] = None
+                translated = None
 
-                if service == "deepl":
-                    # DeepL: käytä annettua avainta tai anna adapterin lukea .env
-                    if deepl_key:
-                        adapter = DeepLAdapter(api_key=deepl_key)
-                    else:
-                        adapter = DeepLAdapter()  # Lukee .env:stä
+                if service == "microsoft_translator":
+                    adapter = MicrosoftTranslatorAdapter(api_key=ms_key)
+                    translated = adapter.translate(request)
+
+                elif service == "deepl":
+                    adapter = DeepLAdapter(api_key=deepl_key) if deepl_key else DeepLAdapter()
                     translated = adapter.translate(request)
 
                 elif service == "google":
-                    # Google: käytä annettuja avaimia tai anna adapterin lukea .env
-                    if google_api_key:
-                        adapter = GoogleV2Adapter(
-                            api_key=google_api_key,
-                            backup_api_key=google_backup_api_key,
-                        )
-                    else:
-                        adapter = GoogleV2Adapter()  # Lukee .env:stä
+                    adapter = GoogleV2Adapter(
+                        api_key=google_api_key,
+                        backup_api_key=google_backup_api_key,
+                    ) if google_api_key else GoogleV2Adapter()
                     translated = adapter.translate(request)
 
                 elif service == "papago":
-                    # Papago: käytä annettuja tunnisteita tai anna adapterin lukea .env
-                    if papago_client_id and papago_client_secret:
-                        adapter = PapagoAdapter(
-                            client_id=papago_client_id,
-                            client_secret=papago_client_secret,
-                        )
-                    else:
-                        adapter = PapagoAdapter()  # Lukee .env:stä
+                    adapter = PapagoAdapter(
+                        client_id=papago_client_id,
+                        client_secret=papago_client_secret,
+                    ) if papago_client_id and papago_client_secret else PapagoAdapter()
                     translated = adapter.translate(request)
 
                 elif service == "libretranslate":
-                    adapter = LibreTranslateAdapter(
-                        mirror_manager=_mirror_manager
-                    )
+                    adapter = LibreTranslateAdapter(mirror_manager=_mirror_manager)
                     translated = adapter.translate(request)
 
                 elif service == "mymemory":
-                    adapter = MyMemoryAdapter(
-                        email=mymemory_email
-                    )
+                    adapter = MyMemoryAdapter(email=mymemory_email)
                     translated = adapter.translate(request)
 
                 if translated is not None:
-                    logger.info(
-                        f"Successfully translated '{translated[:20]}...' "
-                        f"({source_lang}->{target_lang}) using provider: "
-                        f"'{service}'"
-                    )
-
                     if use_cache:
                         _translation_cache.set(
-                            text,
-                            translated,
-                            source_lang,
-                            target_lang,
-                            formality,
-                            context_type,
+                            text, translated, source_lang, target_lang, formality, context_type
                         )
 
                     return TranslationResult(
@@ -313,66 +306,39 @@ def translate_text_with_metadata(
                         request_metadata=request,
                     )
 
-            except LanguageNotSupportedError as e:
-                logger.warning(
-                    f"Provider '{service}' does not support pair "
-                    f"{source_lang}->{target_lang}. "
-                    "Updating registry blacklist."
-                )
-
-                # Opetetaan rekisterille, että tämä kielipari ei ole tuettu
+            except LanguageNotSupportedError:
                 if service == "google":
-                    _google_registry.mark_pair_unsupported(
-                        source_lang,
-                        target_lang,
-                    )
+                    _google_registry.mark_pair_unsupported(source_lang, target_lang)
                 elif service == "libretranslate":
-                    _libre_registry.mark_pair_unsupported(
-                        source_lang,
-                        target_lang,
-                    )
-
+                    _libre_registry.mark_pair_unsupported(source_lang, target_lang)
+                elif service == "papago":
+                    _papago_registry.mark_pair_unsupported(source_lang, target_lang)
                 break
 
-            except RateLimitExceededError as e:
-                logger.warning(
-                    f"Provider '{service}' hit rate limit: {e}. "
-                    "Shifting to fallback."
-                )
+            except RateLimitExceededError:
                 break
 
-            except TranslationError as e:
+            except TranslationError:
                 backoff = retry_delay * (attempt + 1)
-
-                logger.warning(
-                    f"Provider '{service}' failed attempt "
-                    f"{attempt + 1}/{max_retries}: {e}"
-                )
-
                 if (time.time() - start_time) + backoff > total_timeout:
-                    logger.error(
-                        "Next retry delay would exceed global timeout "
-                        "limit. Skipping retry."
-                    )
                     break
-
                 if attempt < max_retries - 1:
                     time.sleep(backoff)
-
                 continue
 
-            except Exception as e:
-                logger.error(
-                    f"Unexpected error with provider '{service}': {e}",
-                    exc_info=True,
-                )
+            except Exception:
+                if service == "microsoft_translator":
+                    _ms_registry.mark_unavailable()
                 break
 
     raise ServiceUnavailableError(
-        f"All available translation services failed or timed out "
-        f"within {total_timeout}s."
+        f"All translation services failed or timed out within {total_timeout}s."
     )
 
+
+# ---------------------------------------------------------------------------
+# RAW TRANSLATION WRAPPER
+# ---------------------------------------------------------------------------
 
 def translate_text(
     text: str,
@@ -385,17 +351,12 @@ def translate_text(
     google_backup_api_key: Optional[str] = None,
     papago_client_id: Optional[str] = None,
     papago_client_secret: Optional[str] = None,
+    microsoft_api_key: Optional[str] = None,
     max_retries: int = 2,
     retry_delay: float = 1.0,
     total_timeout: float = 30.0,
     request: Optional[TranslationRequest] = None,
 ) -> str:
-    """
-    Convenience wrapper returning raw translated text string.
-    Returns original string as fallback on total failure to avoid breaking calling application.
-    
-    All providers support both explicit API keys and .env file auto-detection.
-    """
 
     try:
         result = translate_text_with_metadata(
@@ -409,24 +370,13 @@ def translate_text(
             google_backup_api_key=google_backup_api_key,
             papago_client_id=papago_client_id,
             papago_client_secret=papago_client_secret,
+            microsoft_api_key=microsoft_api_key,
             max_retries=max_retries,
             retry_delay=retry_delay,
             total_timeout=total_timeout,
             request=request,
         )
-
         return result.translated_text
-
-    except ServiceUnavailableError as e:
-        logger.error(
-            f"translate_text wrapper: {e} "
-            "Returning original text as robust fallback."
-        )
+    except Exception:
         return text
 
-    except Exception as e:
-        logger.error(
-            f"Unexpected failure in routing wrapper: {e}. "
-            "Returning original text."
-        )
-        return text

@@ -13,9 +13,9 @@ __all__ = ["ConfigManager"]
 
 class ConfigManager:
     """
-    SHL-konfiguraationhallinta – 0-riippuvuutta, säieturvallinen.
+    SHL-policy konfiguraationhallinta – 0-riippuvuutta, säieturvallinen.
 
-    Hakee konfiguraation projektin juuresta (oletus: ./config.json).
+    Hakee policy konfiguraation projektin juuresta (oletus: ./SHL-policy-config.json).
     Tukee .env-tiedostoa (oletus: ./.env) ympäristömuuttujille.
 
     Provider-konfiguraatio voi sisältää esimerkiksi:
@@ -47,7 +47,7 @@ class ConfigManager:
     käännöstiedostoon.
 
     Attributes:
-        path: Polku config.json-tiedostoon.
+        path: Polku SHL-policy-config.json-tiedostoon.
         check_interval: Tiedoston tarkistusväli sekunteina.
         env_path: Polku .env-tiedostoon.
                   None = älä lataa .env-tiedostoa.
@@ -55,7 +55,7 @@ class ConfigManager:
 
     def __init__(
         self,
-        path: Union[str, Path] = "shl-config.json"
+        path: Union[str, Path] = "shl-policy-config.json"
         check_interval: float = 1.0,
         env_path: Optional[Union[str, Path]] = ".env",
     ):
@@ -627,7 +627,7 @@ class ConfigManager:
         config = self.get()
 
         print("\n" + "=" * 50)
-        print("SHL CONFIGURATION")
+        print("SHL POLICY CONFIGURATION")
         print("=" * 50)
 
         for name, provider in config.items():
