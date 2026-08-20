@@ -1,3 +1,11 @@
+"""
+File: config.py - Load config.json
+Author: Tuomas Lähteenmäki
+Version: 0.2.4
+License: MIT
+Description:
+    
+"""
 import json
 import os
 

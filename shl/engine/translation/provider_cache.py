@@ -1,3 +1,11 @@
+"""
+file: provider_cache.py - Providers language support and cache. 
+Author: Tuomas Lähteenmäki
+License: MIT
+Version: 0.2.5
+Checks the language support of service providers and saves it to the cache. 
+"""
+
 import json
 import os
 import requests

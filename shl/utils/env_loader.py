@@ -1,4 +1,12 @@
-# shl/utils/env_loader.py
+"""
+File: shl/utils/env_loader.py - Load .env file
+Author: Tuomas Lähteenmäki
+Version: 0.2.4
+License: MIT
+Description: 
+    
+"""
+
 
 import os
 import logging

@@ -1,4 +1,10 @@
-# microsoft_registry.py
+"""
+File: microsoft_registry.py — module for Microsoft Translator adapter.
+Author: Tuomas Lähteenmäki
+Version: 0.2.5
+License: MIT
+Description: Robust translation provider adapter for the Microsoft Translator API.
+"""
 
 import time
 from typing import Optional

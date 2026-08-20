@@ -1,6 +1,9 @@
 """
-Base provider interface for translation adapters.
-file: base.py
+File: base.py — Base provider interface for translation adapters.
+Author: Tuomas Lähteenmäki
+Version: 0.2.4
+License: MIT
+Description: Base provider interface for translation adapters.
 """
 
 from abc import ABC, abstractmethod

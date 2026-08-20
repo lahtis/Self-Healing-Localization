@@ -1,7 +1,7 @@
 """
 File: microsoft_translator.py — module for Microsoft Translator adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.4
+Version: 0.2.5
 License: MIT
 Description: Robust translation provider adapter for the Microsoft Translator API.
 Handles advanced features including context matching,

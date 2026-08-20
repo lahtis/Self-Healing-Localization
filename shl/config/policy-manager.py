@@ -1,3 +1,11 @@
+"""
+file: policy-manager.py - SHL policy manager
+Author: Tuomas Lähteenmäki
+License: MIT
+Version: 0.2.5
+Future version of SHL policy manager. Not implementing the code right now.
+"""
+
 from __future__ import annotations
 
 import json
