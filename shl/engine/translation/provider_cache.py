@@ -1,77 +1,205 @@
 """
-file: provider_cache.py - Providers language support and cache. 
+file: provider_cache.py - Providers language support and cache.
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.5
-Checks the language support of service providers and saves it to the cache. 
+Version: 0.2.5-fix
+
+Checks the language support of service providers and saves it to the cache.
 """
 
 import json
-import os
-import requests
-
-CACHE_FILE = "languages_cache.json"
-PM_FILE = "data/papago_mymemory.json"
+import shutil
+from pathlib import Path
+from urllib.request import urlopen
 
 
-# ---------------------------------------------------------
-# 1) Lataa olemassa oleva cache (EI verkkoa)
-# ---------------------------------------------------------
+# ---------------------------------------------------------------------------
+# PATHS
+# ---------------------------------------------------------------------------
+
+# __file__:
+# shl/engine/translation/provider_cache.py
+#
+# parents[0] = shl/engine/translation
+# parents[1] = shl/engine
+# parents[2] = shl
+
+SHL_DIR = Path(__file__).resolve().parents[2]
+
+CACHE_FILE = SHL_DIR / "languages_cache.json"
+PM_FILE = SHL_DIR / "data" / "papago_mymemory.json"
+
+
+# ---------------------------------------------------------------------------
+# CACHE
+# ---------------------------------------------------------------------------
 
 def load_cache() -> dict:
-    """Load existing provider language cache without generating anything."""
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}  # router päättää mitä tehdä jos tyhjä
+    """
+    Lataa olemassa olevan cachen.
+
+    Jos cachea ei löydy, se generoidaan automaattisesti.
+    Jos cache on rikkinäinen, varmuuskopioidaan rikkinäinen tiedosto
+    ja generoidaan uusi.
+    """
+
+    if CACHE_FILE.exists():
+        try:
+            with CACHE_FILE.open(
+                "r",
+                encoding="utf-8",
+            ) as file:
+                return json.load(file)
+
+        except (
+            json.JSONDecodeError,
+            OSError,
+        ):
+            # Varmuuskopioi rikkinäinen cache, jotta se ei häviä
+            backup = CACHE_FILE.with_suffix(".json.bak")
+            try:
+                shutil.copy2(CACHE_FILE, backup)
+            except OSError:
+                pass
+            pass
+
+    return generate_cache()
 
 
-# ---------------------------------------------------------
-# 2) Generoi cache (KÄYTTÄÄ VERKKOA, mutta vain kun kutsutaan)
-# ---------------------------------------------------------
+def fetch_json(url: str) -> object:
+    """
+    Hakee JSON-datan URL-osoitteesta Pythonin standardikirjastolla.
+    """
+
+    with urlopen(
+        url,
+        timeout=10,
+    ) as response:
+        return json.loads(
+            response.read().decode("utf-8")
+        )
+
+
+# ---------------------------------------------------------------------------
+# GENERATE CACHE
+# ---------------------------------------------------------------------------
 
 def generate_cache() -> dict:
-    """Generate provider language cache using network calls."""
-    ms = fetch_microsoft_translator()     # POST
-    lt = fetch_libretranslate()           # POST
-    pm = load_pagago_mymemory()           # JSON
+    """
+    Generoi providerien kielicachen.
+    """
+
+    try:
+        microsoft = fetch_microsoft_translator()
+    except Exception:
+        microsoft = {}
+
+    try:
+        libretranslate = fetch_libretranslate()
+    except Exception:
+        libretranslate = {}
+
+    papago_mymemory = load_papago_mymemory()
 
     cache = {
         "providers": {
-            "microsoft_translator": ms,
-            "libretranslate": lt,
-            "papago": sorted(code.lower() for code in pm.get("papago", [])),
-            "mymemory": sorted(code.lower() for code in pm.get("mymemory_iso_639_1", [])),
+            "microsoft_translator": microsoft,
+            "libretranslate": libretranslate,
+            "papago": sorted(
+                code.lower()
+                for code in papago_mymemory.get(
+                    "papago",
+                    [],
+                )
+            ),
+            "mymemory_iso_639_1": sorted(
+                code.lower()
+                for code in papago_mymemory.get(
+                    "mymemory_iso_639_1",
+                    [],
+                )
+            ),
         }
     }
 
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(cache, f, indent=4, ensure_ascii=False)
+    CACHE_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with CACHE_FILE.open(
+        "w",
+        encoding="utf-8",
+    ) as file:
+        json.dump(
+            cache,
+            file,
+            indent=4,
+            ensure_ascii=False,
+        )
 
     return cache
 
 
-# ---------------------------------------------------------
-# 3) Provider-kohtaiset hakijat (VERKKOA)
-# ---------------------------------------------------------
+# ---------------------------------------------------------------------------
+# PROVIDER FETCHERS
+# ---------------------------------------------------------------------------
 
 def fetch_microsoft_translator() -> dict:
-    url = "https://api.cognitive.microsofttranslator.com/languages?api-version=3.0"
-    resp = requests.post(url, timeout=10)
-    resp.raise_for_status()
-    data = resp.json().get("translation", {})
-    return {code.lower(): info["name"] for code, info in data.items()}
+    """
+    Hakee Microsoft Translatorin kielitiedot.
+    """
+
+    data = fetch_json(
+        "https://api.cognitive.microsofttranslator.com/"
+        "languages?api-version=3.0"
+    )
+
+    translations = data.get(
+        "translation",
+        {},
+    )
+
+    return {
+        code.lower(): info["name"]
+        for code, info in translations.items()
+    }
 
 
 def fetch_libretranslate() -> dict:
-    url = "https://libretranslate.com/languages"
-    resp = requests.post(url, timeout=10)
-    resp.raise_for_status()
-    langs = resp.json()
-    return {lang["code"].lower(): lang["name"] for lang in langs}
+    """
+    Hakee LibreTranslaten kielitiedot.
+
+    Ei API-avainta.
+    Ei localhostia.
+    """
+
+    languages = fetch_json(
+        "https://libretranslate.com/languages"
+    )
+
+    return {
+        language["code"].lower(): language["name"]
+        for language in languages
+    }
 
 
-def load_papago_mymemory(path: str = PM_FILE) -> dict:
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+def load_papago_mymemory(
+    path: Path = PM_FILE,
+) -> dict:
+    """
+    Lataa Papago- ja MyMemory-kielitiedot.
+    """
+
+    if not path.exists():
+        return {
+            "papago": [],
+            "mymemory_iso_639_1": [],
+        }
+
+    with path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
+        return json.load(file)
 

@@ -1,12 +1,8 @@
 """
-File: router.py — Intelligent routing logic for SHL translation ecosystem.
+File: router.py — Policy-aware routing for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.2.4
+Version: 0.2.5-casefix
 License: MIT
-Description: Coordinates provider priorities, executes automated failover mechanisms,
-             maintains service availability status, and interfaces with memory cache and registries.
-             Includes strict input validation, empty string fixes, and global timeouts.
-             Supports DeepL, Google, Papago, LibreTranslate, and MyMemory with .env auto-detection.
 """
 
 
@@ -15,7 +11,6 @@ import logging
 from typing import Optional, List, Dict, Any
 
 from .provider_cache import load_cache
-from shl.config.config import get_ttl
 from .cache import TranslationCache
 from .metadata import TranslationRequest, TranslationResult
 from .exceptions import (
@@ -40,8 +35,24 @@ from .providers.papago_registry import PapagoRegistry
 
 from .providers.microsoft_registry import MicrosoftServiceRegistry
 
+from shl.config.policy_manager import ConfigManager
 from shl.utils.env_loader import get_env_value
 from shl.config import get_config_value
+
+# ---------------------------------------------------------------------------
+# POLICY MANAGER INITIALIZATION
+# ---------------------------------------------------------------------------
+
+try:
+    _policy = ConfigManager()
+    _USE_POLICY = True
+    print(f"[Router] PolicyManager loaded from {_policy.path}")
+except Exception as e:
+    _USE_POLICY = False
+    _policy = None
+    print(f"[Router] PolicyManager failed to load: {e}")
+
+_PROVIDER_CACHE = load_cache()
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +69,20 @@ _ms_registry = MicrosoftServiceRegistry(
 
 
 # ---------------------------------------------------------------------------
+# ZERO-BUDGET DETECTION
+# ---------------------------------------------------------------------------
+
+def _has_any_paid_key() -> bool:
+    """Tarkistaa, onko yhtään maksullista API-avainta asetettu."""
+    return any([
+        get_env_value("MICROSOFT_TRANSLATOR_KEY"),
+        get_env_value("DEEPL_API_KEY"),
+        get_env_value("GOOGLE_API_KEY"),
+        get_env_value("NAVER_CLIENT_ID"),
+    ])
+
+
+# ---------------------------------------------------------------------------
 # PROVIDER PRIORITY
 # ---------------------------------------------------------------------------
 
@@ -69,59 +94,82 @@ def get_provider_priority(
     papago_client_id: Optional[str] = None,
     papago_client_secret: Optional[str] = None,
     microsoft_api_key: Optional[str] = None,
+    mymemory_email: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> List[str]:
+    """
+    Palauttaa providerit käyttöjärjestyksessä.
+    """
 
-    cache = load_cache()
-    providers_cache = cache.get("providers", {})
+    # --- Policy-manager mode ---
+    if _USE_POLICY and _policy is not None:
+        available = _policy.get_available_providers()
+        if available:
+            # Normalisoi pieniksi kirjaimiksi
+            return [name.lower() for name in available]
 
-    ms_langs = providers_cache.get("microsoft_translator", {})
-    lt_langs = providers_cache.get("libretranslate", {})
-    pg_langs = providers_cache.get("pagago", [])
-    mm_langs = providers_cache.get("mymemory", [])
+    # --- Nolla-budjetti: fast path ---
+    if not _has_any_paid_key():
+        mymemory_email = mymemory_email or get_env_value("MYMEMORY_EMAIL")
+        if mymemory_email:
+            return ["mymemory"]
+        return ["libretranslate"]
+
+    # --- Legacy cache-based mode ---
+    providers_cache = _PROVIDER_CACHE.get("providers", {})
+
+    pg_langs = {code.lower() for code in providers_cache.get("papago", [])}
+    mm_langs = {code.lower() for code in providers_cache.get("mymemory_iso_639_1", [])}
+    ms_langs = {code.lower() for code in providers_cache.get("microsoft_translator", {})}
+    lt_langs = {code.lower() for code in providers_cache.get("libretranslate", {})}
 
     providers: List[str] = []
 
-    # Microsoft Translator (symmetrinen avainlogiikka)
     ms_key = microsoft_api_key or get_env_value("MICROSOFT_TRANSLATOR_KEY")
     if ms_key and _ms_registry.is_available():
         if source_lang.lower() in ms_langs and target_lang.lower() in ms_langs:
             providers.append("microsoft_translator")
 
-    # DeepL
     deepl_key = deepl_key or get_env_value("DEEPL_API_KEY")
     if deepl_key:
         providers.append("deepl")
 
-    # Google
     google_api_key = google_api_key or get_env_value("GOOGLE_API_KEY")
     if google_api_key:
         if _google_registry.is_pair_supported(source_lang, target_lang):
             providers.append("google")
 
-    # Papago
     papago_client_id = papago_client_id or get_env_value("NAVER_CLIENT_ID")
     papago_client_secret = papago_client_secret or get_env_value("NAVER_CLIENT_SECRET")
-
     static_pg = (
         source_lang.lower() in pg_langs and
         target_lang.lower() in pg_langs
     )
-
     if papago_client_id and papago_client_secret:
         if _papago_registry.is_pair_supported(source_lang, target_lang, static_pg):
             providers.append("papago")
 
-    # LibreTranslate
     if source_lang.lower() in lt_langs and target_lang.lower() in lt_langs:
         if _libre_registry.is_pair_supported(source_lang, target_lang):
             providers.append("libretranslate")
 
-    # MyMemory
-    if source_lang.lower() in mm_langs and target_lang.lower() in mm_langs:
+    mymemory_email = mymemory_email or get_env_value("MYMEMORY_EMAIL")
+    if mymemory_email:
+        providers.append("mymemory")
+    elif source_lang.lower() in mm_langs and target_lang.lower() in mm_langs:
+        providers.append("mymemory")
+
+    if not providers:
         providers.append("mymemory")
 
     return providers
+
+
+def get_provider_timeout(provider_name: str) -> float:
+    """Hakee providerin timeoutin policy-managerista tai oletuksen."""
+    if _USE_POLICY and _policy is not None:
+        return _policy.get_timeout(provider_name, default=10.0)
+    return 10.0
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +184,7 @@ def get_best_provider(
     papago_client_id: Optional[str] = None,
     papago_client_secret: Optional[str] = None,
     microsoft_api_key: Optional[str] = None,
+    mymemory_email: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> str:
 
@@ -147,6 +196,7 @@ def get_best_provider(
         papago_client_id,
         papago_client_secret,
         microsoft_api_key,
+        mymemory_email,
         request,
     )
 
@@ -248,8 +298,11 @@ def translate_text_with_metadata(
         papago_client_id,
         papago_client_secret,
         microsoft_api_key,
+        mymemory_email,
         request,
     )
+
+    print(f"[Router] Provider order: {order}")  # DEBUG
 
     ms_key = microsoft_api_key or get_env_value("MICROSOFT_TRANSLATOR_KEY")
 
@@ -257,8 +310,14 @@ def translate_text_with_metadata(
         if time.time() - start_time > total_timeout:
             break
 
+        provider_timeout = get_provider_timeout(service)
+        service_deadline = min(
+            start_time + total_timeout,
+            time.time() + provider_timeout
+        )
+
         for attempt in range(max_retries):
-            if time.time() - start_time > total_timeout:
+            if time.time() > service_deadline:
                 break
 
             try:
@@ -320,7 +379,7 @@ def translate_text_with_metadata(
 
             except TranslationError:
                 backoff = retry_delay * (attempt + 1)
-                if (time.time() - start_time) + backoff > total_timeout:
+                if time.time() + backoff > service_deadline:
                     break
                 if attempt < max_retries - 1:
                     time.sleep(backoff)
@@ -377,6 +436,17 @@ def translate_text(
             request=request,
         )
         return result.translated_text
-    except Exception:
+    except ServiceUnavailableError as e:
+        logger.warning(
+            "Translation failed for '%s...' (%s -> %s): %s",
+            text[:50], source_lang, target_lang, e,
+        )
+        return text
+    except Exception as e:
+        logger.error(
+            "Unexpected translation error for '%s...': %s",
+            text[:50], e,
+            exc_info=True,
+        )
         return text
 

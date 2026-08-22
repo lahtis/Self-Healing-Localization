@@ -1,27 +1,67 @@
 {
-    "deepl": {
+    "MyMemory": {
         "enabled": true,
         "allow": [],
-        "deny": ["html"]
+        "deny": [
+            "html"
+        ],
+        "timeout": 10,
+        "requires_env": [
+            "MYMEMORY_EMAIL"
+        ],
+        "priority": 1
     },
-    "pagago": {
+    "LibreTranslate": {
         "enabled": false,
         "allow": [],
-        "deny": ["html"]
-    },    
-    "googlev3": {
-        "enabled": true,
-        "allow": [],
-        "deny": ["html"]
+        "deny": [
+            "html"
+        ],
+        "timeout": 8,
+        "requires_env": [],
+        "priority": 2
     },
-    "mymemory": {
-        "enabled": true,
-        "allow": [],
-        "deny": ["html"]
-    },
-    "libretranslate": {
+    "DeepL": {
         "enabled": false,
         "allow": [],
-        "deny": ["html"]
+        "deny": [],
+        "timeout": 5,
+        "requires_env": [
+            "DEEPL_API_KEY"
+        ],
+        "priority": 3
+    },
+    "Google": {
+        "enabled": false,
+        "allow": [],
+        "deny": [],
+        "timeout": 5,
+        "requires_env": [
+            "GOOGLE_API_KEY"
+        ],
+        "priority": 4
+    },
+    "MicrosoftTranslator": {
+        "enabled": false,
+        "allow": [],
+        "deny": [],
+        "timeout": 5,
+        "requires_env": [
+            "MICROSOFT_TRANSLATOR_KEY"
+        ],
+        "priority": 5
+    },
+    "Papago": {
+        "enabled": false,
+        "allow": [],
+        "deny": [
+            "html"
+        ],
+        "timeout": 5,
+        "requires_env": [
+            "NAVER_CLIENT_ID",
+            "NAVER_CLIENT_SECRET"
+        ],
+        "priority": 6
     }
 }

@@ -39,3 +39,9 @@ htmlcov/
 
 # macOS
 .DS_Store
+
+# test project
+_version.py
+Digital Guestbook.py
+data.db
+config.conf

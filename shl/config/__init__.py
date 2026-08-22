@@ -4,5 +4,5 @@ A lightweight, dependency-free Python library that eliminates missing translatio
 """
 
 from .config import get_ttl, get_config_value
-
+from .policy_manager import ConfigManager
 
