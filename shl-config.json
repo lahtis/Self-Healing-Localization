@@ -1,0 +1,16 @@
+{
+    "ttl": {
+        "mymemory": 10,
+        "libretranslate": 8,
+        "deepl": 5,
+        "google": 5,
+        "microsoft_translator": 5,
+        "papago": 5
+    },
+    "cache": {
+        "cache_persist": true,
+        "cache_persist_path": ".shl_cache.json",
+        "ttl": 3600,
+        "max_size": 10000
+    }
+}

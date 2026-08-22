@@ -1,7 +1,7 @@
 """
 File: core.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.4
+Version: 0.2.5
 License: MIT
 Description:
     Central engine that unifies the Self-Healing Localization Layer.
@@ -42,6 +42,7 @@ from shl.utils.lang_utils import (
     normalize_full_tag,
 )
 from shl.utils.env_loader import load_shl_env, get_env_value
+from shl.config.config import get_cache_config
 
 
 logger = logging.getLogger(__name__)
@@ -117,8 +118,13 @@ class LocalizationEngine:
                 self.template_folder = template_folder
 
                 # Cache & adapters (required elsewhere in the class)
-                self.cache = TranslationCache()
-
+                cache_cfg = get_cache_config()
+                self.cache = TranslationCache(
+                    persist=cache_cfg.get("persist", False),
+                    persist_path=cache_cfg.get("persist_path", ".shl_cache.json"),
+                    ttl=cache_cfg.get("ttl", 3600),
+                    max_size=cache_cfg.get("max_size", 10000),
+                )
                 # Resolve API keys: parametrit > .env > oletus
                 resolved_mymemory_email = (
                     mymemory_email
@@ -225,7 +231,13 @@ class LocalizationEngine:
                     self.glfm_fallback_chain,
                 )
 
-        self.cache = TranslationCache()
+        cache_cfg = get_cache_config()
+        self.cache = TranslationCache(
+            persist=cache_cfg.get("persist", False),
+            persist_path=cache_cfg.get("persist_path", ".shl_cache.json"),
+            ttl=cache_cfg.get("ttl", 3600),
+            max_size=cache_cfg.get("max_size", 10000),
+        )
 
         # Resolve API keys: parametrit > .env > oletus
         resolved_mymemory_email = (
@@ -306,8 +318,15 @@ class LocalizationEngine:
             "strict_mode": False,
             "default_language": None,
             "glfm_lite": True,
+            "cache": {
+                "cache_persist": False,
+                "cache_persist_path": ".shl_cache.json",
+                "ttl": 3600,
+                "max_size": 10000,
+            },
         }
 
+        # Lue config.conf
         try:
             import configparser
 
