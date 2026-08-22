@@ -65,8 +65,7 @@
 | # | Puute | Ehdotus | Priority |
 |---|-------|---------|----------|
 | 6.1 | **Ei automaattista API-docin generointia** | `pdoc`, `mkdocstrings` tai `sphinx-autodoc` | Matala |
-| 6.2 | **Versiohistoria hajallaan** | Yksi `shl/__init__.py`:n `__version__` riittää | Matala |
-| 6.3 | **Legacy-migraatio jättää vanhat tiedostot** | Optio vanhojen `lang_xx.json`-tiedostojen siivoamiseen | Matala |
+| 6.2 | **Legacy-migraatio jättää vanhat tiedostot** | Optio vanhojen `lang_xx.json`-tiedostojen siivoamiseen | Matala |
 
 ---
 
