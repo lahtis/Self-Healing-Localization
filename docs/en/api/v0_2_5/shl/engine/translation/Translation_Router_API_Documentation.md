@@ -1,90 +1,109 @@
-# Translation Router — API Documentation
+# Router API Documentation
 
-## Module Overview
+## Overview
 
-**File:** `router.py`
-
-The central orchestration layer for the SHL translation ecosystem. Coordinates provider priorities, executes automated failover across multiple translation backends, maintains service availability status via registries and blacklists, and interfaces with the translation cache. Supports DeepL, Google Translate v2, Papago, LibreTranslate, MyMemory, and Microsoft Translator with automatic `.env` credential detection.
+`router.py` provides policy-aware routing for the SHL translation ecosystem. It manages provider priority selection, translation execution with retry logic, caching, timeout handling, and runtime blacklist management across multiple translation providers.
 
 ---
 
-## Metadata
+## Module Metadata
 
-| Attribute | Value |
-|-----------|-------|
-| Author | Tuomas Lähteenmäki |
-| Version | 0.2.4 |
-| License | MIT |
-
----
-
-## Dependencies
-
-| Module | Usage |
-|--------|-------|
-| `time` | Timeout tracking and retry backoff delays. |
-| `logging` | Router-level log output. |
-| `typing.Optional`, `typing.List`, `typing.Dict`, `typing.Any` | Type annotations. |
-| `.provider_cache.load_cache` | Loads the provider language support cache. |
-| `shl.config.config.get_ttl` | Retrieves TTL configuration values. |
-| `.cache.TranslationCache` | In-memory translation result cache. |
-| `.metadata.TranslationRequest`, `.metadata.TranslationResult` | Core data structures for translation operations. |
-| `.exceptions.TranslationError`, `.exceptions.ServiceUnavailableError`, `.exceptions.LanguageNotSupportedError`, `.exceptions.RateLimitExceededError` | Exception types used for routing decisions. |
-| `.providers.*` | All supported provider adapters and their registries. |
-| `shl.utils.env_loader.get_env_value` | Reads environment variables with fallback. |
-| `shl.config.get_config_value` | Reads configuration values from SHL config. |
+| Field | Value |
+|-------|-------|
+| **File** | `router.py` |
+| **Author** | Tuomas Lähteenmäki |
+| **Version** | `0.2.5-casefix` |
+| **License** | MIT |
 
 ---
 
-## Module-Level Globals
+## Dependencies and Imports
 
-| Name | Type | Description |
-|------|------|-------------|
-| `_translation_cache` | `TranslationCache` | Singleton in-memory cache for translation results. |
-| `_mirror_manager` | `LibreTranslateMirrorManager` | Manages LibreTranslate mirror selection and blacklisting. |
-| `_libre_registry` | `LibreTranslateRegistry` | Runtime blacklist for unsupported LibreTranslate language pairs. |
-| `_google_registry` | `GoogleRegistry` | Runtime blacklist for unsupported Google language pairs. |
-| `_papago_registry` | `PapagoRegistry` | Runtime blacklist for unsupported Papago language pairs. |
-| `_ms_registry` | `MicrosoftServiceRegistry` | TTL-based availability registry for Microsoft Translator. |
+### Standard Library
+
+- `time`
+- `logging`
+- `typing` (`Optional`, `List`, `Dict`, `Any`)
+
+### SHL Internal Modules
+
+- `.provider_cache.load_cache`
+- `.cache.TranslationCache`
+- `.metadata.TranslationRequest`, `.metadata.TranslationResult`
+- `.exceptions.TranslationError`, `.exceptions.ServiceUnavailableError`, `.exceptions.LanguageNotSupportedError`, `.exceptions.RateLimitExceededError`
+- `.providers.microsoft.MicrosoftTranslatorAdapter`
+- `.providers.mymemory.MyMemoryAdapter`
+- `.providers.libretranslate.LibreTranslateAdapter`
+- `.providers.libretranslate_mirrors.LibreTranslateMirrorManager`
+- `.providers.libretranslate_registry.LibreTranslateRegistry`
+- `.providers.deepl.DeepLAdapter`
+- `.providers.googlev2.GoogleV2Adapter`
+- `.providers.google_registry.GoogleRegistry`
+- `.providers.papago.PapagoAdapter`
+- `.providers.papago_registry.PapagoRegistry`
+- `.providers.microsoft_registry.MicrosoftServiceRegistry`
+- `shl.config.policy_manager.ConfigManager`
+- `shl.utils.env_loader.get_env_value`
+- `shl.config.get_config_value`
 
 ---
 
-## Provider Priority Logic
+## Module-Level Initialization
 
-### Evaluation Order
+### Policy Manager
 
-Providers are evaluated in the following priority order. A provider is included only if all its prerequisites are met:
+```python
+try:
+    _policy = ConfigManager()
+    _USE_POLICY = True
+    print(f"[Router] PolicyManager loaded from {_policy.path}")
+except Exception as e:
+    _USE_POLICY = False
+    _policy = None
+    print(f"[Router] PolicyManager failed to load: {e}")
+```
 
-| Priority | Provider | Prerequisites |
-|----------|----------|---------------|
-| 1 | **Microsoft Translator** | API key available + registry available + both languages in MS cache. |
-| 2 | **DeepL** | API key available (no language cache check). |
-| 3 | **Google** | API key available + pair supported by Google registry. |
-| 4 | **Papago** | Client ID + Secret available + pair supported by Papago registry and static cache. |
-| 5 | **LibreTranslate** | Both languages in LT cache + pair supported by Libre registry. |
-| 6 | **MyMemory** | Both languages in MyMemory cache. |
+Attempts to initialize `ConfigManager` at module load time. If it fails, policy-based routing is disabled.
 
-### Credential Resolution
+### Provider Cache
 
-All credentials follow the same resolution order:
-1. Explicit parameter passed to the function.
-2. Environment variable (via `get_env_value()` and `.env` auto-detection).
-3. If neither is available, the provider is skipped.
+```python
+_PROVIDER_CACHE = load_cache()
+```
 
-| Provider | Parameter | Environment Variable |
-|----------|-----------|---------------------|
-| Microsoft Translator | `microsoft_api_key` | `MICROSOFT_TRANSLATOR_KEY` |
-| DeepL | `deepl_key` | `DEEPL_API_KEY` |
-| Google | `google_api_key` | `GOOGLE_API_KEY` |
-| Papago | `papago_client_id` / `papago_client_secret` | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` |
-| LibreTranslate | — | — (uses mirror manager) |
-| MyMemory | `mymemory_email` | — (optional email for higher quota) |
+Loads the provider language cache once at module initialization.
+
+### Shared Instances
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `_translation_cache` | `TranslationCache` | Shared translation cache instance. |
+| `_mirror_manager` | `LibreTranslateMirrorManager` | Shared LibreTranslate mirror manager. |
+| `_libre_registry` | `LibreTranslateRegistry` | Shared LibreTranslate language pair registry. |
+| `_google_registry` | `GoogleRegistry` | Shared Google language pair registry. |
+| `_papago_registry` | `PapagoRegistry` | Shared Papago language pair registry. |
+| `_ms_registry` | `MicrosoftServiceRegistry` | Shared Microsoft service registry, initialized with `ttl_seconds` from `get_config_value("microsoft_translator.ttl")`. |
 
 ---
 
 ## Functions
 
-### `get_provider_priority()`
+### `_has_any_paid_key() -> bool`
+
+Checks whether any paid API key is configured.
+
+#### Behavior
+
+Returns `True` if any of the following environment variables is set (via `get_env_value`):
+
+- `MICROSOFT_TRANSLATOR_KEY`
+- `DEEPL_API_KEY`
+- `GOOGLE_API_KEY`
+- `NAVER_CLIENT_ID`
+
+---
+
+### `get_provider_priority(...)`
 
 ```python
 def get_provider_priority(
@@ -95,40 +114,79 @@ def get_provider_priority(
     papago_client_id: Optional[str] = None,
     papago_client_secret: Optional[str] = None,
     microsoft_api_key: Optional[str] = None,
+    mymemory_email: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> List[str]
 ```
 
-Returns an ordered list of provider names that are available and support the given language pair.
+Returns providers in usage order.
+
+#### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `target_lang` | `str` | — | Target language code (e.g., `"fi"`, `"ja"`). |
-| `source_lang` | `str` | `"en"` | Source language code (e.g., `"en"`, `"de"`). |
-| `deepl_key` | `Optional[str]` | `None` | DeepL API key override. |
-| `google_api_key` | `Optional[str]` | `None` | Google API key override. |
-| `papago_client_id` | `Optional[str]` | `None` | Papago client ID override. |
-| `papago_client_secret` | `Optional[str]` | `None` | Papago client secret override. |
-| `microsoft_api_key` | `Optional[str]` | `None` | Microsoft Translator API key override. |
-| `request` | `Optional[TranslationRequest]` | `None` | Original request object (reserved for future use). |
+| `target_lang` | `str` | — | Target language code. |
+| `source_lang` | `str` | `"en"` | Source language code. |
+| `deepl_key` | `Optional[str]` | `None` | DeepL API key. |
+| `google_api_key` | `Optional[str]` | `None` | Google API key. |
+| `papago_client_id` | `Optional[str]` | `None` | Papago client ID. |
+| `papago_client_secret` | `Optional[str]` | `None` | Papago client secret. |
+| `microsoft_api_key` | `Optional[str]` | `None` | Microsoft Translator API key. |
+| `mymemory_email` | `Optional[str]` | `None` | MyMemory email address. |
+| `request` | `Optional[TranslationRequest]` | `None` | Optional translation request object (not used in the function body). |
 
-**Returns**
-- `List[str]` — Ordered list of provider identifier strings. Empty list if no providers are available.
+#### Behavior
 
-**Logic**
-1. Loads the provider language cache via `load_cache()`.
-2. For each provider, checks credentials, registry availability, and language support.
-3. Returns providers in priority order.
+1. **Policy-manager mode**: If `_USE_POLICY` is `True` and `_policy` is not `None`, calls `_policy.get_available_providers()`. If the result is truthy, returns the list with all names lowercased.
 
-**Example**
-```python
-providers = get_provider_priority("fi", source_lang="en")
-# ["microsoft_translator", "deepl", "google", "libretranslate", "mymemory"]
-```
+2. **Zero-budget fast path**: If `_has_any_paid_key()` returns `False`:
+   - Resolves `mymemory_email` from parameter or `MYMEMORY_EMAIL` env.
+   - If `mymemory_email` is truthy, returns `["mymemory"]`.
+   - Otherwise returns `["libretranslate"]`.
+
+3. **Legacy cache-based mode**:
+   - Extracts language sets from `_PROVIDER_CACHE["providers"]`:
+     - `pg_langs`: set of lowercase codes from `"papago"`
+     - `mm_langs`: set of lowercase codes from `"mymemory_iso_639_1"`
+     - `ms_langs`: set of lowercase codes from `"microsoft_translator"` keys
+     - `lt_langs`: set of lowercase codes from `"libretranslate"` keys
+   - Builds provider list in the following order:
+     - **microsoft_translator**: If `ms_key` is available (parameter or env) AND `_ms_registry.is_available()` AND both languages are in `ms_langs`.
+     - **deepl**: If `deepl_key` is available (parameter or env).
+     - **google**: If `google_api_key` is available (parameter or env) AND `_google_registry.is_pair_supported(source_lang, target_lang)`.
+     - **papago**: If `papago_client_id` and `papago_client_secret` are available (parameter or env) AND `_papago_registry.is_pair_supported(source_lang, target_lang, static_pg)` where `static_pg` is `True` if both languages are in `pg_langs`.
+     - **libretranslate**: If both languages are in `lt_langs` AND `_libre_registry.is_pair_supported(source_lang, target_lang)`.
+     - **mymemory**: If `mymemory_email` is available (parameter or env), OR if both languages are in `mm_langs`.
+   - If the list is empty, appends `"mymemory"` as a fallback.
+
+#### Returns
+
+- `List[str]` — Provider names in priority order.
 
 ---
 
-### `get_best_provider()`
+### `get_provider_timeout(provider_name: str) -> float`
+
+Retrieves a provider's timeout from the policy manager or returns a default.
+
+#### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `provider_name` | `str` | Name of the provider. |
+
+#### Behavior
+
+- If `_USE_POLICY` is `True` and `_policy` is not `None`, returns `_policy.get_timeout(provider_name, default=10.0)`.
+- Otherwise returns `10.0`.
+
+#### Returns
+
+- `float` — Timeout in seconds.
+
+---
+
+### `get_best_provider(...)`
 
 ```python
 def get_best_provider(
@@ -139,101 +197,65 @@ def get_best_provider(
     papago_client_id: Optional[str] = None,
     papago_client_secret: Optional[str] = None,
     microsoft_api_key: Optional[str] = None,
+    mymemory_email: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> str
 ```
 
-Returns the highest-priority available provider for the given language pair.
+Returns the highest-priority provider name.
 
-**Parameters**
-Same as `get_provider_priority()`.
+#### Behavior
 
-**Returns**
-- `str` — The name of the best available provider, or `"mymemory"` as the ultimate fallback.
+Calls `get_provider_priority()` with the same arguments and returns the first element. If the list is empty, returns `"mymemory"`.
 
-**Example**
-```python
-best = get_best_provider("ko", source_lang="en")
-# "papago"  (if credentials and pair are supported)
-```
+#### Returns
+
+- `str` — The best provider name.
 
 ---
 
-### `get_libretranslate_mirror_stats()`
+### `get_libretranslate_mirror_stats() -> Dict[str, Any]`
 
-```python
-def get_libretranslate_mirror_stats() -> Dict[str, Any]
-```
+Gets statistics about LibreTranslate mirrors.
 
-Returns statistics about LibreTranslate mirror health and availability.
+#### Returns
 
-**Returns**
-- `Dict[str, Any]` — Mirror statistics from the internal `LibreTranslateMirrorManager`.
-
-**Example**
-```python
-stats = get_libretranslate_mirror_stats()
-print(stats)
-# {"total_mirrors": 5, "available": 3, "blacklisted": 2, ...}
-```
+- `Dict[str, Any]` — The result of `_mirror_manager.get_stats()`.
 
 ---
 
-### `clear_unavailable_cache()`
+### `clear_unavailable_cache() -> None`
 
-```python
-def clear_unavailable_cache() -> None
-```
+Clears all runtime blacklist caches.
 
-Clears all runtime blacklists and availability registries, forcing a fresh start for all providers.
+#### Behavior
 
-**Side Effects**
-- Clears LibreTranslate mirror blacklist.
-- Clears Google, LibreTranslate, and Papago pair blacklists.
-- Clears Microsoft Translator availability flag.
+Calls the following clear methods in order:
 
-**Use Cases**
-- Manual recovery after operator intervention.
-- Testing and debugging.
-- Periodic health check resets.
-
-**Example**
-```python
-clear_unavailable_cache()
-# All providers are now eligible for retry
-```
+1. `_mirror_manager.clear_blacklist()`
+2. `_libre_registry.clear_blacklist()`
+3. `_google_registry.clear_blacklist()`
+4. `_papago_registry.clear_blacklist()`
+5. `_ms_registry.clear()`
 
 ---
 
-### `get_unavailable_cache_stats()`
+### `get_unavailable_cache_stats() -> Dict[str, Any]`
 
-```python
-def get_unavailable_cache_stats() -> Dict[str, Any]
-```
+Returns statistics about unavailable/blacklisted entries.
 
-Returns a snapshot of all runtime blacklist and availability states.
+#### Returns
 
-**Returns**
-- `Dict[str, Any]` — Dictionary with the following keys:
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `blacklisted_mirrors` | `int` | Number of blacklisted LibreTranslate mirrors. |
-| `blacklisted_google_pairs` | `int` | Number of blacklisted Google language pairs. |
-| `blacklisted_libre_pairs` | `int` | Number of blacklisted LibreTranslate language pairs. |
-| `blacklisted_papago_pairs` | `int` | Number of blacklisted Papago language pairs. |
-| `microsoft_unavailable` | `bool` | `True` if Microsoft Translator is currently marked unavailable. |
-
-**Example**
-```python
-stats = get_unavailable_cache_stats()
-print(f"Blacklisted mirrors: {stats['blacklisted_mirrors']}")
-print(f"Microsoft available: {not stats['microsoft_unavailable']}")
-```
+- `Dict[str, Any]` — A dictionary with the following keys:
+  - `"blacklisted_mirrors"`: `len(_mirror_manager.blacklist)`
+  - `"blacklisted_google_pairs"`: `len(_google_registry._unsupported_pairs_cache)`
+  - `"blacklisted_libre_pairs"`: `len(_libre_registry._unsupported_pairs_cache)`
+  - `"blacklisted_papago_pairs"`: `len(_papago_registry._unsupported_pairs_cache)`
+  - `"microsoft_unavailable"`: `not _ms_registry.is_available()`
 
 ---
 
-### `translate_text_with_metadata()`
+### `translate_text_with_metadata(...)`
 
 ```python
 def translate_text_with_metadata(
@@ -255,104 +277,92 @@ def translate_text_with_metadata(
 ) -> TranslationResult
 ```
 
-The core translation execution function. Routes the request through available providers with automatic failover, caching, retries, and timeout enforcement.
+Translates text with full metadata, retry logic, caching, and provider failover.
+
+#### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `text` | `str` | — | Text to translate. |
 | `target_lang` | `str` | — | Target language code. |
 | `source_lang` | `str` | `"en"` | Source language code. |
-| `use_cache` | `bool` | `True` | Whether to check and store results in the translation cache. |
-| `mymemory_email` | `Optional[str]` | `None` | Email for MyMemory API (higher quota). |
-| `deepl_key` | `Optional[str]` | `None` | DeepL API key override. |
-| `google_api_key` | `Optional[str]` | `None` | Google API key override. |
-| `google_backup_api_key` | `Optional[str]` | `None` | Backup Google API key for failover. |
-| `papago_client_id` | `Optional[str]` | `None` | Papago client ID override. |
-| `papago_client_secret` | `Optional[str]` | `None` | Papago client secret override. |
-| `microsoft_api_key` | `Optional[str]` | `None` | Microsoft Translator API key override. |
+| `use_cache` | `bool` | `True` | Whether to read from and write to the translation cache. |
+| `mymemory_email` | `Optional[str]` | `None` | MyMemory email. |
+| `deepl_key` | `Optional[str]` | `None` | DeepL API key. |
+| `google_api_key` | `Optional[str]` | `None` | Google API key. |
+| `google_backup_api_key` | `Optional[str]` | `None` | Google backup API key. |
+| `papago_client_id` | `Optional[str]` | `None` | Papago client ID. |
+| `papago_client_secret` | `Optional[str]` | `None` | Papago client secret. |
+| `microsoft_api_key` | `Optional[str]` | `None` | Microsoft Translator API key. |
 | `max_retries` | `int` | `2` | Maximum retry attempts per provider. |
-| `retry_delay` | `float` | `1.0` | Base delay in seconds between retries (multiplied by attempt number). |
-| `total_timeout` | `float` | `30.0` | Maximum total time in seconds for the entire translation attempt. |
-| `request` | `Optional[TranslationRequest]` | `None` | Pre-built request object. If omitted, one is created from the other parameters. |
+| `retry_delay` | `float` | `1.0` | Base delay in seconds between retries (multiplied by attempt index). |
+| `total_timeout` | `float` | `30.0` | Maximum total time in seconds for the entire translation operation. |
+| `request` | `Optional[TranslationRequest]` | `None` | Optional pre-built request object. |
 
-**Returns**
-- `TranslationResult` — Object containing the translated text, source provider name, and request metadata.
+#### Behavior
 
-**Raises**
+1. **Input validation**:
+   - If `text` is empty or falsy, returns a `TranslationResult` with `translated_text=text`, `source="input_validation"`, and a default `TranslationRequest`.
+   - If `text` is not a `str`, converts it with `str(text)`.
+   - If `request` is `None`, creates a `TranslationRequest(text=text, source_lang=source_lang, target_lang=target_lang)`.
+
+2. **Cache lookup**:
+   - If `use_cache` is `True`, calls `_translation_cache.get(text, source_lang, target_lang, formality, context_type)`.
+   - If a cached result is found, returns a `TranslationResult` with `source="cache"`.
+
+3. **Provider selection**:
+   - Calls `get_provider_priority()` to determine the provider order.
+   - Prints the provider order to stdout for debugging.
+
+4. **Provider resolution**:
+   - `ms_key` is resolved from `microsoft_api_key` or `MICROSOFT_TRANSLATOR_KEY` env.
+
+5. **Provider iteration**:
+   - Iterates over each provider in `order`.
+   - Breaks the loop if `time.time() - start_time > total_timeout`.
+   - For each provider:
+     - Computes `provider_timeout` via `get_provider_timeout(service)`.
+     - Computes `service_deadline = min(start_time + total_timeout, time.time() + provider_timeout)`.
+     - Iterates `for attempt in range(max_retries)`:
+       - Breaks if `time.time() > service_deadline`.
+       - Instantiates the appropriate adapter and calls `translate(request)`:
+         - `"microsoft_translator"`: `MicrosoftTranslatorAdapter(api_key=ms_key)`
+         - `"deepl"`: `DeepLAdapter(api_key=deepl_key)` if `deepl_key` else `DeepLAdapter()`
+         - `"google"`: `GoogleV2Adapter(api_key=google_api_key, backup_api_key=google_backup_api_key)` if `google_api_key` else `GoogleV2Adapter()`
+         - `"papago"`: `PapagoAdapter(client_id=papago_client_id, client_secret=papago_client_secret)` if both are provided else `PapagoAdapter()`
+         - `"libretranslate"`: `LibreTranslateAdapter(mirror_manager=_mirror_manager)`
+         - `"mymemory"`: `MyMemoryAdapter(email=mymemory_email)`
+       - If `translated` is not `None`:
+         - If `use_cache` is `True`, stores the result in `_translation_cache.set(...)`.
+         - Returns a `TranslationResult` with `source=service`.
+
+6. **Exception handling per attempt**:
+   - `LanguageNotSupportedError`:
+     - Marks the pair unsupported in the corresponding registry (`_google_registry`, `_libre_registry`, or `_papago_registry`).
+     - Breaks to the next provider.
+   - `RateLimitExceededError`: Breaks to the next provider.
+   - `TranslationError`:
+     - Computes `backoff = retry_delay * (attempt + 1)`.
+     - If `time.time() + backoff > service_deadline`, breaks.
+     - If `attempt < max_retries - 1`, sleeps for `backoff` seconds and continues.
+   - Generic `Exception`:
+     - If the service is `"microsoft_translator"`, calls `_ms_registry.mark_unavailable()`.
+     - Breaks to the next provider.
+
+7. **Final fallback**:
+   - If all providers fail or time out, raises `ServiceUnavailableError` with message `"All translation services failed or timed out within {total_timeout}s."`.
+
+#### Returns
+
+- `TranslationResult` — The translation result with metadata.
+
+#### Raises
+
 - `ServiceUnavailableError` — If all providers fail or the total timeout is exceeded.
-
-**Execution Flow**
-
-```
-1. Input validation
-   ├── Empty text → return TranslationResult with empty text
-   └── Non-string → coerce to string
-
-2. Cache check (if use_cache=True)
-   └── Hit → return cached TranslationResult
-
-3. Provider priority resolution
-   └── Get ordered list of available providers
-
-4. Provider iteration with failover
-   ├── For each provider:
-   │   ├── Check total_timeout
-   │   └── For each retry attempt (max_retries):
-   │       ├── Check total_timeout
-   │       ├── Instantiate adapter
-   │       ├── Call adapter.translate(request)
-   │       ├── On success → cache result → return TranslationResult
-   │       ├── LanguageNotSupportedError → blacklist pair → break to next provider
-   │       ├── RateLimitExceededError → break to next provider
-   │       ├── TranslationError → backoff retry → continue
-   │       └── Other Exception → mark Microsoft unavailable (if applicable) → break
-   └── All failed → raise ServiceUnavailableError
-```
-
-**Exception Handling per Provider**
-
-| Exception Type | Action | Registry Effect |
-|----------------|--------|-----------------|
-| `LanguageNotSupportedError` | Skip to next provider. | Blacklist pair for Google, LibreTranslate, or Papago. |
-| `RateLimitExceededError` | Skip to next provider. | None. |
-| `TranslationError` | Retry with exponential backoff. | None. |
-| Other exception | Skip to next provider. | Mark Microsoft Translator unavailable (if MS service). |
-
-**Retry Backoff**
-```python
-backoff = retry_delay * (attempt + 1)
-# Attempt 0: 1.0s, Attempt 1: 2.0s
-```
-
-**Example**
-```python
-from router import translate_text_with_metadata
-from shl.metadata import TranslationRequest
-
-request = TranslationRequest(
-    text="Hello, world!",
-    source_lang="en",
-    target_lang="fi",
-    formality="formal",
-)
-
-result = translate_text_with_metadata(
-    text="Hello, world!",
-    target_lang="fi",
-    source_lang="en",
-    use_cache=True,
-    max_retries=2,
-    total_timeout=30.0,
-    request=request,
-)
-
-print(result.translated_text)  # "Hei, maailma!"
-print(result.source)           # "microsoft_translator" (or best available)
-```
 
 ---
 
-### `translate_text()`
+### `translate_text(...)`
 
 ```python
 def translate_text(
@@ -374,131 +384,116 @@ def translate_text(
 ) -> str
 ```
 
-Simplified wrapper around `translate_text_with_metadata()` that returns only the translated string.
+Raw translation wrapper that returns only the translated string.
 
-**Parameters**
+#### Parameters
+
 Same as `translate_text_with_metadata()`.
 
-**Returns**
-- `str` — The translated text, or the original `text` if all providers fail (fail-safe).
+#### Behavior
 
-**Behavior**
-- Calls `translate_text_with_metadata()` internally.
-- On any exception, returns the original `text` instead of raising.
+Calls `translate_text_with_metadata()` with the same arguments.
 
-**Example**
+- On success, returns `result.translated_text`.
+- On `ServiceUnavailableError`, logs a warning and returns the original `text`.
+- On any other `Exception`, logs an error with `exc_info=True` and returns the original `text`.
+
+#### Returns
+
+- `str` — The translated text, or the original text if translation fails.
+
+---
+
+## Provider Instantiation Logic
+
+The router instantiates adapters differently depending on whether credentials are provided:
+
+| Provider | Credential Check | Adapter Instantiation |
+|----------|-----------------|----------------------|
+| `microsoft_translator` | `ms_key` resolved | `MicrosoftTranslatorAdapter(api_key=ms_key)` |
+| `deepl` | `deepl_key` | `DeepLAdapter(api_key=deepl_key)` if key else `DeepLAdapter()` |
+| `google` | `google_api_key` | `GoogleV2Adapter(api_key=..., backup_api_key=...)` if key else `GoogleV2Adapter()` |
+| `papago` | `client_id` and `client_secret` | `PapagoAdapter(client_id=..., client_secret=...)` if both else `PapagoAdapter()` |
+| `libretranslate` | Always | `LibreTranslateAdapter(mirror_manager=_mirror_manager)` |
+| `mymemory` | Always | `MyMemoryAdapter(email=mymemory_email)` |
+
+---
+
+## Retry and Backoff Logic
+
+- `max_retries` attempts are made per provider.
+- `retry_delay` is multiplied by `(attempt + 1)` to produce the backoff duration.
+- The service deadline (`min(total_timeout_remaining, provider_timeout)`) is checked before each attempt.
+- `TranslationError` triggers a retry with backoff; `LanguageNotSupportedError` and `RateLimitExceededError` skip to the next provider immediately.
+
+---
+
+## Cache Behavior
+
+- If `use_cache` is `True`, the router checks `_translation_cache` before making any API calls.
+- On success, the result is stored in `_translation_cache` with `formality` and `context_type` as part of the cache key.
+- Cache hits return `source="cache"` in the `TranslationResult`.
+
+---
+
+## Timeout Logic
+
+- `total_timeout` governs the entire translation operation.
+- `provider_timeout` is fetched per provider (default `10.0`, overridable via policy manager).
+- `service_deadline = min(start_time + total_timeout, time.time() + provider_timeout)`.
+- The provider loop breaks if the total timeout is exceeded before trying the next provider.
+- Each attempt breaks if `time.time() > service_deadline`.
+
+---
+
+## Usage Example
+
 ```python
-from router import translate_text
+from shl.engine.translation.router import (
+    translate_text,
+    translate_text_with_metadata,
+    get_best_provider,
+    clear_unavailable_cache,
+    get_unavailable_cache_stats,
+)
 
-translated = translate_text(
+# Simple translation
+result = translate_text(
     text="Hello, world!",
     target_lang="fi",
     source_lang="en",
+    use_cache=True,
 )
-print(translated)  # "Hei, maailma!" (or "Hello, world!" on total failure)
-```
 
----
-
-## Failover Behavior Summary
-
-| Scenario | Behavior |
-|----------|----------|
-| Empty input text | Returns immediately with empty text, source `"input_validation"`. |
-| Cache hit | Returns cached result immediately, source `"cache"`. |
-| Provider succeeds | Returns translated text with provider name as source. |
-| Provider rate-limited | Skips to next provider in priority list. |
-| Provider doesn't support language pair | Blacklists pair and skips to next provider. |
-| Provider transient error | Retries with backoff up to `max_retries`. |
-| Total timeout exceeded | Breaks out and raises `ServiceUnavailableError`. |
-| All providers fail | Raises `ServiceUnavailableError` (or returns original text via `translate_text()`). |
-
----
-
-## Usage Example: Full Workflow
-
-```python
-from shl.router import (
-    get_provider_priority,
-    get_best_provider,
-    translate_text,
-    translate_text_with_metadata,
-    get_unavailable_cache_stats,
-    clear_unavailable_cache,
-)
-from shl.metadata import TranslationRequest
-
-# 1. Check which providers are available for a language pair
-providers = get_provider_priority("ja", source_lang="en")
-print(providers)  # ["microsoft_translator", "deepl", "google", "libretranslate", "mymemory"]
-
-# 2. Get the best provider
-best = get_best_provider("ja", source_lang="en")
-print(best)  # "microsoft_translator"
-
-# 3. Translate with full metadata
-request = TranslationRequest(
-    text="Welcome to our application!",
+# Translation with metadata
+translation_result = translate_text_with_metadata(
+    text="Hello, world!",
+    target_lang="fi",
     source_lang="en",
-    target_lang="ja",
-    formality="formal",
-    domain="user_onboarding",
+    deepl_key="your-deepl-key",
+    max_retries=3,
+    total_timeout=60.0,
 )
+print(f"Translated by: {translation_result.source}")
 
-result = translate_text_with_metadata(
-    text="Welcome to our application!",
-    target_lang="ja",
-    source_lang="en",
-    request=request,
-    total_timeout=45.0,
-)
+# Get best provider
+best = get_best_provider("fi", "en")
+print(f"Best provider: {best}")
 
-print(f"Translated: {result.translated_text}")
-print(f"Provider: {result.source}")
+# Clear blacklists
+clear_unavailable_cache()
 
-# 4. Simple translation (fail-safe)
-text = translate_text("Hello", target_lang="fi")
-print(text)  # "Hei"
-
-# 5. Check blacklist status
+# Get blacklist stats
 stats = get_unavailable_cache_stats()
 print(stats)
-
-# 6. Clear all blacklists for fresh retry
-clear_unavailable_cache()
 ```
 
 ---
 
-## Thread Safety
+## Version
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| `_translation_cache` | Generally safe | `TranslationCache` implementation determines thread safety. |
-| Registries (`_libre_registry`, `_google_registry`, `_papago_registry`) | Not safe | Mutable caches. Concurrent modifications may cause race conditions. |
-| `_ms_registry` | Generally safe | TTL-based flag. Reads are safe; writes (mark_unavailable) may race. |
-| `_mirror_manager` | Not safe | Mutable blacklist. Concurrent access may race. |
+**Module version:** `0.2.5-casefix`
 
-**Recommendation:** In multi-threaded environments, use one router instance per thread or wrap registry-modifying calls with locks.
+**Author:** Tuomas Lähteenmäki
 
----
-
-## Logging
-
-The module uses Python's standard `logging` module under the logger name `__name__`.
-
-**Log Levels Used**
-
-| Level | Event |
-|-------|-------|
-| `DEBUG` | Provider initialization, request details, successful translations. |
-| `WARNING` | Blacklist events, detected language mismatches, provider unavailability. |
-| `ERROR` | Unhandled exceptions during translation execution. |
-
----
-
-## Changelog
-
-| Version | Notes |
-|---------|-------|
-| 0.2.4 | Current — intelligent routing with 6 providers, automated failover, caching, retries, timeout enforcement, and comprehensive registry/blacklist management. |
+**License:** MIT

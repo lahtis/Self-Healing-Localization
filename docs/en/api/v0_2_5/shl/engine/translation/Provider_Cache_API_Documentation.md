@@ -1,377 +1,244 @@
-# Provider Language Cache — API Documentation
+# ProviderCache API Documentation
 
-## Module Overview
+## Overview
 
-**File:** `provider_cache.py`
-
-Manages language support discovery and caching for SHL translation providers. Fetches live language lists from remote APIs (Microsoft Translator, LibreTranslate) and combines them with static configuration data (Papago, MyMemory) into a unified, disk-persisted cache. The module separates offline cache reading from online cache generation to ensure fast cold starts and minimal network usage.
+`provider_cache.py` checks the language support of service providers and saves it to a local JSON cache. It fetches live language data from Microsoft Translator and LibreTranslate APIs, loads static Papago and MyMemory language data from a local JSON file, and persists the combined result to disk.
 
 ---
 
-## Metadata
+## Module Metadata
 
-| Attribute | Value |
-|-----------|-------|
-| Author | Tuomas Lähteenmäki |
-| Version | 0.2.5 |
-| License | MIT |
-
----
-
-## Dependencies
-
-| Module | Usage |
-|--------|-------|
-| `json` | Serialization and deserialization of cache and static data files. |
-| `os` | File existence checks for cache loading. |
-| `requests` | HTTP POST requests to Microsoft Translator and LibreTranslate language endpoints. |
+| Field | Value |
+|-------|-------|
+| **File** | `provider_cache.py` |
+| **Author** | Tuomas Lähteenmäki |
+| **License** | MIT |
+| **Version** | `0.2.5-fix` |
 
 ---
 
 ## Module Constants
 
-| Name | Type | Value | Description |
-|------|------|-------|-------------|
-| `CACHE_FILE` | `str` | `"languages_cache.json"` | Path to the generated provider language cache file. |
-| `PM_FILE` | `str` | `"data/papago_mymemory.json"` | Path to the static JSON file containing Papago and MyMemory language code lists. |
+### Paths
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `SHL_DIR` | `Path(__file__).resolve().parents[2]` | The SHL package root directory, resolved two levels above this file. |
+| `CACHE_FILE` | `SHL_DIR / "languages_cache.json"` | Path to the generated language cache file. |
+| `PM_FILE` | `SHL_DIR / "data" / "papago_mymemory.json"` | Path to the static Papago and MyMemory language data file. |
 
 ---
 
-## Cache Structure
+## Dependencies and Imports
 
-The generated cache file (`languages_cache.json`) has the following structure:
+### Standard Library
 
-```json
-{
-    "providers": {
-        "microsoft_translator": {
-            "en": "English",
-            "fi": "Finnish",
-            "ja": "Japanese"
-        },
-        "libretranslate": {
-            "en": "English",
-            "fi": "Finnish"
-        },
-        "papago": ["en", "ja", "ko", "zh-cn"],
-        "mymemory": ["en", "fi", "de", "fr"]
-    }
-}
-```
-
-| Provider | Value Type | Source |
-|----------|-----------|--------|
-| `microsoft_translator` | `dict[str, str]` | Live API — code → display name mapping. |
-| `libretranslate` | `dict[str, str]` | Live API — code → display name mapping. |
-| `papago` | `list[str]` | Static file — sorted lowercase language codes. |
-| `mymemory` | `list[str]` | Static file — sorted lowercase language codes. |
+- `json`
+- `shutil`
+- `pathlib.Path`
+- `urllib.request.urlopen`
 
 ---
 
 ## Functions
 
-### `load_cache()`
+### `load_cache() -> dict`
 
-```python
-def load_cache() -> dict
-```
+Loads the existing language cache from disk.
 
-Loads the existing provider language cache from disk **without making any network calls**.
+#### Behavior
 
-**Returns**
-- `dict` — The parsed cache dictionary. Returns an empty dict `{}` if the cache file does not exist.
+- If `CACHE_FILE` exists, attempts to open and parse it as JSON.
+- If parsing succeeds, returns the parsed dictionary.
+- If parsing fails (`json.JSONDecodeError` or `OSError`):
+  - Creates a backup by copying the broken file to `CACHE_FILE.with_suffix(".json.bak")`.
+  - If the backup copy fails (`OSError`), the error is silently ignored.
+  - Falls through to `generate_cache()`.
+- If `CACHE_FILE` does not exist, calls `generate_cache()` to create it.
 
-**Behavior**
-- Checks if `CACHE_FILE` (`"languages_cache.json"`) exists.
-- If it exists, reads and parses it as UTF-8 JSON.
-- If it does not exist, returns `{}` and lets the caller (typically the router) decide the fallback behavior.
+#### Returns
 
-**Side Effects**
-- None (read-only disk access).
-
-**Network Usage**
-- None.
-
-**Example**
-```python
-cache = load_cache()
-if cache:
-    ms_langs = cache["providers"]["microsoft_translator"]
-    print(f"Microsoft supports {len(ms_langs)} languages")
-else:
-    print("No cache found — consider calling generate_cache()")
-```
+- `dict` — The loaded or newly generated cache dictionary.
 
 ---
 
-### `generate_cache()`
+### `fetch_json(url: str) -> object`
 
-```python
-def generate_cache() -> dict
-```
+Fetches JSON data from a URL using Python's standard library.
 
-Generates a fresh provider language cache by fetching live data from remote APIs and reading static configuration files, then persists the result to disk.
+#### Parameters
 
-**Returns**
-- `dict` — The newly generated and saved cache dictionary.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `url` | `str` | The URL to fetch JSON from. |
 
-**Behavior**
-1. Fetches Microsoft Translator language list via `fetch_microsoft_translator()`.
-2. Fetches LibreTranslate language list via `fetch_libretranslate()`.
-3. Loads static Papago and MyMemory language codes via `load_papago_mymemory()`.
-4. Assembles the unified cache structure.
-5. Writes the result to `CACHE_FILE` as indented UTF-8 JSON.
+#### Behavior
 
-**Side Effects**
-- Writes to `CACHE_FILE` on disk.
-- Makes up to 2 HTTP POST requests to external APIs.
+- Opens the URL with `urlopen(url, timeout=10)`.
+- Reads the response, decodes as UTF-8, and parses with `json.loads`.
 
-**Network Usage**
-- Microsoft Translator API — 1 POST request.
-- LibreTranslate API — 1 POST request.
+#### Returns
 
-**Raises**
-- `requests.HTTPError` — If either live API returns a non-2xx status code.
-- `requests.Timeout` — If either API request exceeds the 10-second timeout.
-- `json.JSONDecodeError` — If the API response or static file contains invalid JSON.
-- `FileNotFoundError` — If `PM_FILE` does not exist.
-
-**Example**
-```python
-try:
-    cache = generate_cache()
-    print("Cache generated successfully")
-    for provider, data in cache["providers"].items():
-        print(f"  {provider}: {len(data)} languages")
-except requests.RequestException as e:
-    print(f"Network error during cache generation: {e}")
-```
+- `object` — The parsed JSON data (type depends on the response).
 
 ---
 
-### `fetch_microsoft_translator()`
+### `generate_cache() -> dict`
 
-```python
-def fetch_microsoft_translator() -> dict
+Generates the provider language cache by fetching live data and loading static data.
+
+#### Behavior
+
+1. **Microsoft Translator**: Calls `fetch_microsoft_translator()` inside a `try/except`. On any exception, falls back to an empty dict `{}`.
+2. **LibreTranslate**: Calls `fetch_libretranslate()` inside a `try/except`. On any exception, falls back to an empty dict `{}`.
+3. **Papago / MyMemory**: Calls `load_papago_mymemory()`.
+4. Constructs the cache dictionary with the following structure:
+
+```json
+{
+  "providers": {
+    "microsoft_translator": { "code": "Name", ... },
+    "libretranslate": { "code": "Name", ... },
+    "papago": ["code1", "code2", ...],
+    "mymemory_iso_639_1": ["code1", "code2", ...]
+  }
+}
 ```
 
-Fetches the list of supported languages from the Microsoft Translator API.
+   - `"microsoft_translator"`: The dict returned by `fetch_microsoft_translator()`.
+   - `"libretranslate"`: The dict returned by `fetch_libretranslate()`.
+   - `"papago"`: A sorted list of lowercase language codes from `papago_mymemory.get("papago", [])`.
+   - `"mymemory_iso_639_1"`: A sorted list of lowercase language codes from `papago_mymemory.get("mymemory_iso_639_1", [])`.
+5. Creates parent directories for `CACHE_FILE` if they do not exist (`mkdir(parents=True, exist_ok=True)`).
+6. Writes the cache to `CACHE_FILE` as JSON with `indent=4` and `ensure_ascii=False`.
+7. Returns the cache dictionary.
 
-**Returns**
-- `dict` — Mapping of lowercase language codes to their display names.
-  ```python
-  {"en": "English", "fi": "Finnish", "ja": "Japanese"}
-  ```
+#### Returns
 
-**API Details**
-
-| Attribute | Value |
-|-----------|-------|
-| Endpoint | `https://api.cognitive.microsofttranslator.com/languages?api-version=3.0` |
-| Method | `POST` |
-| Timeout | `10` seconds |
-
-**Response Parsing**
-- Extracts the `"translation"` object from the JSON response.
-- Maps each language code (lowercased) to its `"name"` field.
-
-**Raises**
-- `requests.HTTPError` — On non-2xx response.
-- `requests.Timeout` — On timeout.
-- `KeyError` — If the response JSON lacks the expected `"translation"` key.
-
-**Example**
-```python
-ms_langs = fetch_microsoft_translator()
-print(ms_langs.get("fi"))  # "Finnish"
-```
+- `dict` — The generated cache dictionary.
 
 ---
 
-### `fetch_libretranslate()`
+### `fetch_microsoft_translator() -> dict`
 
-```python
-def fetch_libretranslate() -> dict
-```
+Fetches Microsoft Translator language information.
 
-Fetches the list of supported languages from the LibreTranslate API.
+#### Behavior
 
-**Returns**
-- `dict` — Mapping of lowercase language codes to their display names.
-  ```python
-  {"en": "English", "es": "Spanish", "de": "German"}
-  ```
+- Calls `fetch_json("https://api.cognitive.microsofttranslator.com/languages?api-version=3.0")`.
+- Extracts the `"translation"` field from the response (defaults to `{}` if missing).
+- Returns a dictionary mapping each language code (lowercased) to its `"name"` field.
 
-**API Details**
+#### Returns
 
-| Attribute | Value |
-|-----------|-------|
-| Endpoint | `https://libretranslate.com/languages` |
-| Method | `POST` |
-| Timeout | `10` seconds |
-
-**Response Parsing**
-- Expects a JSON array of language objects.
-- Maps each object's `"code"` field (lowercased) to its `"name"` field.
-
-**Raises**
-- `requests.HTTPError` — On non-2xx response.
-- `requests.Timeout` — On timeout.
-- `KeyError` — If a language object lacks `"code"` or `"name"`.
-
-**Example**
-```python
-lt_langs = fetch_libretranslate()
-print(lt_langs.get("de"))  # "German"
-```
+- `dict` — `{ "code_lower": "Language Name", ... }`
 
 ---
 
-### `load_papago_mymemory()`
+### `fetch_libretranslate() -> dict`
 
-```python
-def load_papago_mymemory(path: str = PM_FILE) -> dict
-```
+Fetches LibreTranslate language information.
 
-Loads the static JSON file containing pre-defined language code lists for Papago and MyMemory providers.
+#### Behavior
+
+- Calls `fetch_json("https://libretranslate.com/languages")`.
+- Does not use an API key.
+- Does not use localhost.
+- Returns a dictionary mapping each language's `"code"` (lowercased) to its `"name"`.
+
+#### Returns
+
+- `dict` — `{ "code_lower": "Language Name", ... }`
+
+---
+
+### `load_papago_mymemory(path: Path = PM_FILE) -> dict`
+
+Loads Papago and MyMemory language data from a local JSON file.
+
+#### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | `str` | `PM_FILE` | Path to the static JSON file. |
+| `path` | `Path` | `PM_FILE` | Path to the Papago / MyMemory JSON file. |
 
-**Returns**
-- `dict` — Parsed JSON with expected keys `"papago"` and `"mymemory_iso_639_1"`, each containing a list of language code strings.
+#### Behavior
+
+- If `path` does not exist, returns a default dictionary:
   ```python
   {
-      "papago": ["en", "ja", "ko", "zh-cn", "zh-tw"],
-      "mymemory_iso_639_1": ["en", "fi", "de", "fr", "es"]
+      "papago": [],
+      "mymemory_iso_639_1": [],
   }
   ```
+- Otherwise, opens the file and parses it as JSON.
 
-**Behavior**
-- Reads the file at `path` as UTF-8 JSON.
-- No network calls.
+#### Returns
 
-**Raises**
-- `FileNotFoundError` — If the file at `path` does not exist.
-- `json.JSONDecodeError` — If the file contains invalid JSON.
-
-**Example**
-```python
-data = load_papago_mymemory()
-papago_codes = data.get("papago", [])
-mymemory_codes = data.get("mymemory_iso_639_1", [])
-```
+- `dict` — The parsed JSON dictionary, expected to contain `"papago"` and `"mymemory_iso_639_1"` keys.
 
 ---
 
-## Workflow Diagram
+## Cache File Format
 
+The generated `languages_cache.json` has the following structure:
+
+```json
+{
+  "providers": {
+    "microsoft_translator": {
+      "en": "English",
+      "fi": "Finnish",
+      "..."
+    },
+    "libretranslate": {
+      "en": "English",
+      "fi": "Finnish",
+      "..."
+    },
+    "papago": ["en", "fi", "..."],
+    "mymemory_iso_639_1": ["en", "fi", "..."]
+  }
+}
 ```
-┌─────────────────┐
-│   Application   │
-│    Startup      │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐     Yes      ┌─────────────────┐
-│  Cache exists?  │─────────────►│   load_cache()  │
-│  (languages_    │              │  (offline, fast)│
-│   cache.json)   │              └─────────────────┘
-└────────┬────────┘
-         │ No
-         ▼
-┌─────────────────┐
-│ generate_cache()│
-│  (network + IO) │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐ ┌──────────┐ ┌─────────────────────┐
-│ fetch_ │ │ fetch_   │ │ load_papago_        │
-│microsoft│ │libretrans│ │ mymemory()          │
-│translator│ │late()    │ │ (static JSON)       │
-└────────┘ └──────────┘ └─────────────────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Save to disk   │
-│languages_cache  │
-│    .json        │
-└─────────────────┘
-```
+
+- `microsoft_translator` and `libretranslate` are dictionaries of `{code: name}`.
+- `papago` and `mymemory_iso_639_1` are sorted lists of lowercase language codes.
+
+---
+
+## Error Handling
+
+- `load_cache()`: If the existing cache file is corrupted, it is backed up to `.json.bak` and regenerated.
+- `generate_cache()`: Failures in `fetch_microsoft_translator()` or `fetch_libretranslate()` are caught with bare `except Exception`, causing those provider entries to be empty dictionaries.
+- `fetch_json()`: Uses a 10-second timeout. Any network or parsing errors propagate to the caller.
 
 ---
 
 ## Usage Example
 
 ```python
-from provider_cache import load_cache, generate_cache
-import os
+from shl.engine.translation.provider_cache import load_cache, generate_cache
 
-# Fast path: try to load existing cache
+# Load existing cache or generate if missing/broken
 cache = load_cache()
 
-# If no cache exists or it's stale, regenerate
-if not cache:
-    print("Cache missing — generating...")
-    cache = generate_cache()
+# Access provider language data
+microsoft_langs = cache["providers"]["microsoft_translator"]
+libre_langs = cache["providers"]["libretranslate"]
+papago_codes = cache["providers"]["papago"]
+mymemory_codes = cache["providers"]["mymemory_iso_639_1"]
 
-# Query provider support
-providers = cache.get("providers", {})
-
-# Microsoft: dict of code -> name
-ms_langs = providers.get("microsoft_translator", {})
-print(f"Microsoft Translator: {len(ms_langs)} languages")
-
-# Papago: list of codes
-papago_langs = providers.get("papago", [])
-print(f"Papago: {len(papago_langs)} languages")
-
-# Check if a specific language is supported
-if "fi" in ms_langs:
-    print("Finnish is supported by Microsoft Translator")
+# Force regeneration
+cache = generate_cache()
 ```
 
 ---
 
-## Error Handling
+## Version
 
-| Function | Error Type | Cause | Recommended Action |
-|----------|-----------|-------|-------------------|
-| `load_cache()` | `json.JSONDecodeError` | Cache file is corrupted JSON. | Delete `CACHE_FILE` and call `generate_cache()`. |
-| `generate_cache()` | `requests.HTTPError` | API returned non-2xx status. | Retry with exponential backoff or use stale cache. |
-| `generate_cache()` | `requests.Timeout` | API did not respond within 10s. | Retry or mark provider unavailable. |
-| `generate_cache()` | `FileNotFoundError` | `PM_FILE` missing. | Ensure `data/papago_mymemory.json` is present in the project. |
-| `fetch_microsoft_translator()` | `KeyError` | Unexpected API response structure. | Check Microsoft API documentation for schema changes. |
-| `fetch_libretranslate()` | `KeyError` | Unexpected API response structure. | Check LibreTranslate API documentation for schema changes. |
+**Module version:** `0.2.5-fix`
 
----
+**Author:** Tuomas Lähteenmäki
 
-## Thread Safety & Concurrency
-
-| Concern | Status | Notes |
-|---------|--------|-------|
-| `load_cache()` | Generally safe | Read-only file access. Concurrent reads are safe. |
-| `generate_cache()` | Not safe | Writes to `CACHE_FILE`. Concurrent calls may corrupt the file or cause race conditions. |
-| `fetch_*` functions | Safe per call | Stateless HTTP requests. Safe for concurrent execution. |
-
-**Recommendation:** Ensure only one thread or process calls `generate_cache()` at a time. Use a file lock or a singleton coordinator if running in a multi-worker environment.
-
----
-
-## File Locations
-
-| File | Purpose | Generated? |
-|------|---------|------------|
-| `languages_cache.json` | Unified provider language cache. | Yes — by `generate_cache()`. |
-| `data/papago_mymemory.json` | Static language code lists for Papago and MyMemory. | No — maintained manually or by external tooling. |
-
----
-
-## Changelog
-
-| Version | Notes |
-|---------|-------|
-| 0.2.5 | Current — separates offline `load_cache()` from online `generate_cache()`, supports Microsoft Translator, LibreTranslate, Papago, and MyMemory. |
+**License:** MIT

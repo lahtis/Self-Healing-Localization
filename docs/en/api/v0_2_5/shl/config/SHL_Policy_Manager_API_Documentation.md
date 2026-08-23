@@ -1,772 +1,544 @@
-# SHL Policy Manager — API Documentation
+# ConfigManager API Documentation
 
-## Module Overview
+## Overview
 
-**File:** `policy-manager.py`
-
-Future version of the SHL policy manager. A thread-safe, zero-dependency configuration manager for SHL provider policies. Handles JSON-based provider configuration with automatic file watching, `.env` support, allow/deny lists, and fallback provider resolution.
-
-**Note:** This is a future implementation — not yet integrated into the active SHL runtime.
+`ConfigManager` is the SHL policy configuration manager. It provides zero-dependency, thread-safe configuration loading from a JSON file with automatic file watching, `.env` support, provider availability checks, and reload callbacks.
 
 ---
 
-## Metadata
+## Module Metadata
 
-| Attribute | Value |
-|-----------|-------|
-| Author | Tuomas Lähteenmäki |
-| Version | 0.2.5 |
-| License | MIT |
-
----
-
-## Dependencies
-
-| Module | Usage |
-|--------|-------|
-| `__future__.annotations` | Postponed evaluation of type annotations. |
-| `json` | JSON configuration file parsing. |
-| `os` | Environment variable access and `.env` file loading. |
-| `threading` | Thread-safe locks and background file watcher. |
-| `time` | Watcher sleep intervals. |
-| `copy.deepcopy` | Immutable configuration snapshots. |
-| `pathlib.Path` | Cross-platform file path handling. |
-| `typing` | Type hints (`Any`, `Callable`, `Dict`, `List`, `Optional`, `Union`). |
+| Field | Value |
+|-------|-------|
+| **File** | `policy_manager.py` |
+| **Description** | SHL policy manager |
+| **Author** | Tuomas Lähteenmäki |
+| **License** | MIT |
+| **Version** | `0.2.5` |
 
 ---
 
-## Module Exports
+## Dependencies and Imports
 
-```python
-__all__ = ["ConfigManager"]
-```
+### Standard Library
+
+- `json`
+- `os`
+- `threading`
+- `copy.deepcopy`
+- `pathlib.Path`
+- `typing` (`Any`, `Callable`, `Dict`, `List`, `Optional`, `Union`)
 
 ---
 
-## Configuration File Format
+## Module Constants
 
-The policy configuration file (`shl-policy-config.json`) defines provider policies:
-
-```json
-{
-    "MyMemory": {
-        "enabled": true,
-        "allow": [],
-        "deny": ["html"]
-    },
-    "DeepL": {
-        "enabled": true,
-        "allow": [],
-        "deny": ["html"]
-    },
-    "Google": {
-        "enabled": true,
-        "allow": [],
-        "deny": ["html"]
-    }
-}
-```
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `enabled` | `bool` | Whether the provider is active. |
-| `allow` | `list[str]` | Explicitly allowed items (empty = no restrictions). |
-| `deny` | `list[str]` | Explicitly denied items (e.g., `"html"`). |
-
-**Fallback Behavior:**
-- Fallback providers are automatically derived from other enabled providers.
-- A provider can never be its own fallback.
-- If no alternative active providers exist, no fallback translation is attempted.
-- `base_lang` fallback is handled by router/runtime logic and is not stored in translation files.
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `__all__` | `["ConfigManager"]` | Public API export list. |
+| `DEFAULT_POLICY_PATH` | `Path.cwd() / "shl-policy-config.json"` | Default path for the policy configuration file. |
 
 ---
 
 ## Class: `ConfigManager`
 
-```python
-class ConfigManager
-```
-
-Thread-safe configuration manager for SHL provider policies. Supports hot-reloading via background file watcher, `.env` file integration, and deep-copied immutable configuration access.
-
 ### Constructor
 
 ```python
-def __init__(
-    self,
-    path: Union[str, Path] = "shl-policy-config.json",
+ConfigManager(
+    path: Optional[Union[str, Path]] = None,
     check_interval: float = 1.0,
     env_path: Optional[Union[str, Path]] = ".env",
-) -> None
+)
 ```
 
-Initializes the configuration manager, loads `.env` (if configured), loads the initial JSON configuration, and starts the background file watcher.
+#### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `path` | `Union[str, Path]` | `"shl-policy-config.json"` | Path to the SHL policy configuration JSON file. |
-| `check_interval` | `float` | `1.0` | File watcher polling interval in seconds. |
-| `env_path` | `Optional[Union[str, Path]]` | `".env"` | Path to the `.env` file. `None` disables `.env` loading. |
+| `path` | `Optional[Union[str, Path]]` | `None` | Path to the policy configuration JSON file. Defaults to `DEFAULT_POLICY_PATH`. |
+| `check_interval` | `float` | `1.0` | Interval in seconds between file change checks in the watcher thread. |
+| `env_path` | `Optional[Union[str, Path]]` | `".env"` | Path to the `.env` file to load. If `None`, `.env` loading is skipped. |
 
-**Initialization Sequence**
-1. Store paths and create `threading.RLock()`.
-2. If `env_path` is set, load `.env` file via `_load_env()`.
-3. Force initial configuration load via `reload(force=True)`.
-4. Start background file watcher via `start_watcher()`.
-
-**Attributes**
+#### Instance Attributes
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `path` | `Path` | Resolved path to the JSON configuration file. |
-| `check_interval` | `float` | Watcher polling interval in seconds. |
+| `path` | `Path` | Resolved path to the policy configuration file. |
+| `check_interval` | `float` | File watcher check interval in seconds. |
 | `env_path` | `Optional[Path]` | Resolved path to the `.env` file, or `None`. |
-| `_lock` | `threading.RLock` | Reentrant lock for thread-safe configuration access. |
+| `_lock` | `threading.RLock` | Reentrant lock for thread-safe access. |
 | `_config` | `Dict[str, Any]` | In-memory configuration dictionary. |
-| `_last_mtime` | `float` | Last known modification time of the JSON config file. |
-| `_last_env_mtime` | `float` | Last known modification time of the `.env` file. |
-| `_stop_event` | `threading.Event` | Signal to stop the background watcher thread. |
-| `_watcher` | `Optional[threading.Thread]` | Background file watcher thread. |
-| `_callbacks` | `List[Callable]` | Registered reload callbacks. |
+| `_last_mtime` | `float` | Last known modification time of the config file. Initialized to `0.0`. |
+| `_last_env_mtime` | `float` | Last known modification time of the `.env` file. Initialized to `0.0`. |
+| `_stop_event` | `threading.Event` | Event used to signal the watcher thread to stop. |
+| `_watcher` | `Optional[threading.Thread]` | The background watcher thread. |
+| `_callbacks` | `List[Callable[[Dict[str, Any]], None]]` | List of callbacks invoked on configuration reload. |
+
+#### Behavior
+
+1. Prints debug information about the config path, current working directory, and whether the file exists.
+2. If `env_path` is set, calls `_load_env()`.
+3. Calls `reload(force=True)`.
+4. Calls `start_watcher()`.
 
 ---
 
-### `.env` Management
+### Methods
 
-#### `_load_env()`
+#### `_load_env() -> bool`
 
-```python
-def _load_env(self) -> bool
-```
+Loads environment variables from the `.env` file.
 
-Loads environment variables from the configured `.env` file.
+##### Behavior
 
-**Parsing Rules**
-- Skips empty lines and lines starting with `#`.
-- Splits on the first `=` only.
-- Strips whitespace from keys and values.
-- Removes surrounding single (`'`) or double (`"`) quotes from values.
-- Sets variables via `os.environ[key] = value`.
-
-**Returns**
-- `bool` — `True` if the file was loaded successfully, `False` if the file does not exist or loading failed.
-
-**Side Effects**
-- Updates `os.environ`.
-- Updates `_last_env_mtime`.
-
-**Logging**
-- Prints `[Config] Loaded .env from {path}` on success.
-- Prints `[Config] Failed to load .env: {exc}` on failure.
+- If `self.env_path` is not set or does not exist, returns `False`.
+- Opens the file with UTF-8 encoding.
+- Iterates line by line:
+  - Strips whitespace.
+  - Skips empty lines, comments (starting with `#`), and lines without `=`.
+  - Splits on the first `=`.
+  - Strips key and value.
+  - Removes surrounding quotes (`"` or `'`) if the value length is at least 2 and the first and last characters match and are quotes.
+  - Sets `os.environ[key] = value`.
+- Updates `_last_env_mtime` to the file's `st_mtime`.
+- Prints a confirmation message.
+- Returns `True` on success, `False` on any exception (with error printed).
 
 ---
 
-#### `_check_env_reload()`
+#### `_check_env_reload() -> bool`
 
-```python
-def _check_env_reload(self) -> bool
-```
+Checks if the `.env` file has been modified and reloads it if necessary.
 
-Checks whether the `.env` file has been modified since the last load and reloads it if necessary.
+##### Behavior
 
-**Returns**
-- `bool` — `True` if the `.env` file was reloaded, `False` otherwise.
-
-**Behavior**
+- If `env_path` does not exist, returns `False`.
 - Compares current `st_mtime` against `_last_env_mtime`.
-- Calls `_load_env()` only if the file is newer.
+- If newer, calls `_load_env()`.
+- Returns `False` if the file has not changed or on `OSError`.
 
 ---
 
-#### `get_env()`
+#### `get_env(key: str, default: Optional[str] = None) -> Optional[str]`
 
-```python
-def get_env(
-    self,
-    key: str,
-    default: Optional[str] = None,
-) -> Optional[str]
-```
+Retrieves an environment variable.
 
-Retrieves a value from the environment variables.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `key` | `str` | Environment variable name. |
-| `default` | `Optional[str]` | Default value if the variable is not set. |
-
-**Returns**
-- `Optional[str]` — The environment variable value, or `default`.
-
-**Example**
-```python
-api_key = config.get_env("DEEPL_API_KEY")
-ttl = config.get_env("MS_TRANSLATOR_TTL", default="600")
-```
-
----
-
-### JSON Configuration Loading
-
-#### `reload()`
-
-```python
-def reload(self, force: bool = False) -> bool
-```
-
-Reloads the configuration from the JSON file. If the new file is invalid, the current working configuration is preserved.
+##### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `force` | `bool` | `False` | Force reload regardless of file modification time. |
+| `key` | `str` | — | Environment variable name. |
+| `default` | `Optional[str]` | `None` | Default value if not set. |
 
-**Returns**
-- `bool` — `True` if a new configuration was loaded, `False` if no changes were detected or loading failed.
+##### Returns
 
-**Behavior**
-1. Checks file existence.
-2. Compares `st_mtime` against `_last_mtime` (skipped if `force=True`).
-3. Parses JSON and validates that the root is a `dict`.
-4. Deep-copies the new configuration to prevent external mutation.
-5. Updates `_config` and `_last_mtime` under lock.
-6. Invokes all registered reload callbacks with a deep-copied config (outside the lock).
-
-**Error Handling**
-- `FileNotFoundError` — Config file not found.
-- `ValueError` — Root is not a JSON object.
-- `json.JSONDecodeError` — Invalid JSON syntax.
-- On any error, the previous configuration is retained.
-
-**Logging**
-- Prints `[Config] Reloaded from {path}` on success.
-- Prints `[Config] Reload failed → keeping previous config. Error: {exc}` on failure.
+- `Optional[str]` — `os.environ.get(key, default)`.
 
 ---
 
-### General Configuration Access
+#### `reload(force: bool = False) -> bool`
 
-#### `get()`
+Reloads the configuration from disk.
 
-```python
-def get(self) -> Dict[str, Any]
-```
+##### Parameters
 
-Returns a deep copy of the entire configuration dictionary.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `force` | `bool` | `False` | If `True`, reloads regardless of modification time. |
 
-**Returns**
-- `Dict[str, Any]` — Immutable snapshot of the current configuration.
+##### Behavior
 
-**Thread Safety**
-- Access is protected by `_lock`.
+1. If `self.path` does not exist, calls `_create_default_config()`.
+2. Gets the file's `st_mtime`.
+3. If not `force` and `mtime <= _last_mtime`, returns `False`.
+4. Opens and parses the JSON file.
+5. Validates that the root is a `dict`.
+6. Deep-copies the new configuration.
+7. Acquires the lock, updates `_config` and `_last_mtime`.
+8. Deep-copies the config for callbacks.
+9. Invokes all registered callbacks with the new config.
+10. Prints a confirmation message.
+11. Returns `True` on success.
+12. On any exception, prints an error and returns `False`.
+
+##### Returns
+
+- `bool` — `True` if the configuration was reloaded; `False` otherwise.
 
 ---
 
-#### `get_value()`
+#### `_create_default_config() -> None`
 
-```python
-def get_value(
-    self,
-    key: str,
-    default: Any = None,
-) -> Any
+Creates the default policy configuration file. This is an internal method.
+
+##### Default Configuration
+
+```json
+{
+  "MyMemory": {
+    "enabled": true,
+    "allow": [],
+    "deny": ["html"],
+    "timeout": 10,
+    "requires_env": ["MYMEMORY_EMAIL"],
+    "priority": 1
+  },
+  "LibreTranslate": {
+    "enabled": true,
+    "allow": [],
+    "deny": ["html"],
+    "timeout": 8,
+    "requires_env": [],
+    "priority": 2
+  },
+  "DeepL": {
+    "enabled": false,
+    "allow": [],
+    "deny": [],
+    "timeout": 5,
+    "requires_env": ["DEEPL_API_KEY"],
+    "priority": 3
+  },
+  "Google": {
+    "enabled": false,
+    "allow": [],
+    "deny": [],
+    "timeout": 5,
+    "requires_env": ["GOOGLE_API_KEY"],
+    "priority": 4
+  },
+  "MicrosoftTranslator": {
+    "enabled": false,
+    "allow": [],
+    "deny": [],
+    "timeout": 5,
+    "requires_env": ["MICROSOFT_TRANSLATOR_KEY"],
+    "priority": 5
+  },
+  "Papago": {
+    "enabled": false,
+    "allow": [],
+    "deny": ["html"],
+    "timeout": 5,
+    "requires_env": ["NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"],
+    "priority": 6
+  }
+}
 ```
 
-Retrieves a top-level configuration value by key.
+##### Behavior
+
+- Creates parent directories if needed (`mkdir(parents=True, exist_ok=True)`).
+- Writes the default config to `self.path` as JSON with `indent=4` and `ensure_ascii=False`.
+- Prints a confirmation message.
+
+---
+
+#### `get() -> Dict[str, Any]`
+
+Returns a deep copy of the entire configuration.
+
+##### Returns
+
+- `Dict[str, Any]` — A copy of the current configuration dictionary.
+
+---
+
+#### `get_value(key: str, default: Any = None) -> Any`
+
+Retrieves a top-level value from the configuration.
+
+##### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `key` | `str` | — | Top-level configuration key. |
+| `default` | `Any` | `None` | Default value if key is missing. |
+
+##### Returns
+
+- `Any` — The value associated with `key`, or `default`. Returned as a deep copy.
+
+---
+
+#### `get_provider(name: str) -> Dict[str, Any]`
+
+Retrieves a provider's configuration dictionary.
+
+##### Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `key` | `str` | Top-level configuration key. |
-| `default` | `Any` | Default value if the key is not found. |
+| `name` | `str` | Provider name (top-level key). |
 
-**Returns**
-- `Any` — The configuration value (deep-copied), or `default`.
+##### Returns
 
-**Example**
-```python
-debug_mode = config.get_value("debug_mode", default=False)
-```
+- `Dict[str, Any]` — The provider's configuration as a deep copy. Returns `{}` if the provider is not found or is not a dictionary.
 
 ---
 
-### Provider Configuration
-
-#### `get_provider()`
-
-```python
-def get_provider(
-    self,
-    name: str,
-) -> Dict[str, Any]
-```
-
-Retrieves a specific provider's configuration.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `name` | `str` | Provider name (e.g., `"DeepL"`, `"MyMemory"`). |
-
-**Returns**
-- `Dict[str, Any]` — Deep-copied provider configuration, or `{}` if the provider does not exist or is not a dict.
-
----
-
-#### `get_provider_setting()`
-
-```python
-def get_provider_setting(
-    self,
-    name: str,
-    key: str,
-    default: Any = None,
-) -> Any
-```
+#### `get_provider_setting(name: str, key: str, default: Any = None) -> Any`
 
 Retrieves a specific setting from a provider's configuration.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
+##### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
 | `name` | `str` | Provider name. |
-| `key` | `str` | Setting key (e.g., `"enabled"`, `"deny"`). |
-| `default` | `Any` | Default value if the provider or key is not found. |
+| `key` | `str` | Setting key within the provider dict. |
+| `default` | `Any` | `None` | Default value if provider or key is missing. |
 
-**Returns**
-- `Any` — The setting value (deep-copied), or `default`.
+##### Returns
 
-**Example**
-```python
-ttl = config.get_provider_setting("DeepL", "ttl", default=3600)
-```
+- `Any` — The setting value as a deep copy, or `default`.
 
 ---
 
-#### `is_enabled()`
+#### `is_enabled(provider_name: str) -> bool`
 
-```python
-def is_enabled(
-    self,
-    provider_name: str,
-) -> bool
-```
+Checks if a provider is enabled.
 
-Checks whether a provider is enabled.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `provider_name` | `str` | Provider name to check. |
-
-**Returns**
-- `bool` — `True` if the provider exists and its `enabled` field is truthy, `False` otherwise.
-
-**Example**
-```python
-if config.is_enabled("DeepL"):
-    print("DeepL is active")
-```
-
----
-
-### Allow / Deny Lists
-
-#### `is_allowed()`
-
-```python
-def is_allowed(
-    self,
-    provider_name: str,
-    item: str,
-    default: bool = True,
-) -> bool
-```
-
-Checks whether a specific item is allowed for a provider based on its `allow` and `deny` lists.
-
-**Evaluation Order:**
-1. If `item` is in `deny` → `False`
-2. If `allow` is empty → `default`
-3. If `item` is in `allow` → `True`
-4. Otherwise → `False`
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `provider_name` | `str` | Provider name. |
-| `item` | `str` | Item to check (e.g., `"html"`). |
-| `default` | `bool` | Default value when `allow` list is empty. |
-
-**Returns**
-- `bool` — Whether the item is allowed for the provider.
-
-**Example**
-```python
-# Config: {"MyMemory": {"enabled": true, "deny": ["html"]}}
-config.is_allowed("MyMemory", "html")       # False
-config.is_allowed("MyMemory", "plain_text") # True (default, allow is empty)
-```
-
----
-
-#### `get_allowed_items()`
-
-```python
-def get_allowed_items(
-    self,
-    provider_name: str,
-) -> Dict[str, List[str]]
-```
-
-Returns a provider's `allow` and `deny` lists.
+##### Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `provider_name` | `str` | Provider name. |
 
-**Returns**
-- `Dict[str, List[str]]` — Dictionary with keys `"allow"` and `"deny"`, each containing a list of strings (deep-copied).
+##### Returns
 
-**Example**
-```python
-items = config.get_allowed_items("DeepL")
-print(items)
-# {"allow": [], "deny": ["html"]}
-```
+- `bool` — `True` if the provider's `"enabled"` setting is truthy; `False` otherwise.
 
 ---
 
-### Provider Lists
+#### `is_available(provider_name: str) -> bool`
 
-#### `get_provider_list()`
+Checks if a provider is available (enabled and has all required environment variables).
 
-```python
-def get_provider_list(self) -> List[str]
-```
-
-Returns all provider names defined in the configuration.
-
-**Returns**
-- `List[str]` — List of top-level keys whose values are dictionaries.
-
-**Example**
-```python
-providers = config.get_provider_list()
-# ["MyMemory", "DeepL", "Google"]
-```
-
----
-
-#### `get_enabled_providers()`
-
-```python
-def get_enabled_providers(self) -> List[str]
-```
-
-Returns all enabled providers, preserving the order from the configuration file.
-
-**Returns**
-- `List[str]` — List of provider names where `enabled` is `True`.
-
-**Example**
-```python
-enabled = config.get_enabled_providers()
-# ["DeepL", "Google"]
-```
-
----
-
-#### `get_fallback_providers()`
-
-```python
-def get_fallback_providers(
-    self,
-    current_provider: Optional[str] = None,
-) -> List[str]
-```
-
-Returns all enabled providers except the current one, suitable for failover routing.
+##### Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `current_provider` | `Optional[str]` | The provider currently in use. Never returned as a fallback. |
+| `provider_name` | `str` | Provider name. |
 
-**Returns**
-- `List[str]` — List of enabled providers excluding `current_provider`.
+##### Behavior
 
-**Example**
-```python
-# Current provider is "DeepL"
-fallbacks = config.get_fallback_providers("DeepL")
-# ["Google", "MyMemory"]
-```
+1. Returns `False` if the provider is not enabled.
+2. Gets the `"requires_env"` list.
+3. If `requires_env` is not a list, returns `True`.
+4. Returns `True` only if all required environment variables are set (truthy).
+
+##### Returns
+
+- `bool` — `True` if the provider is enabled and all required environment variables are present.
 
 ---
 
-### Reload Callbacks
+#### `get_timeout(provider_name: str, default: float = 10.0) -> float`
 
-#### `on_reload()`
+Retrieves the timeout for a provider.
 
-```python
-def on_reload(
-    self,
-    callback: Callable[[Dict[str, Any]], None],
-) -> None
-```
+##### Parameters
 
-Registers a callback to be invoked after a successful configuration reload.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `provider_name` | `str` | Provider name. |
+| `default` | `float` | `10.0` | Default timeout if not configured. |
+
+##### Returns
+
+- `float` — The provider's timeout, cast to `float`.
+
+---
+
+#### `get_enabled_providers() -> List[str]`
+
+Returns a list of all enabled provider names.
+
+##### Returns
+
+- `List[str]` — Names of providers where `config.get("enabled", False) is True`.
+
+---
+
+#### `get_available_providers() -> List[str]`
+
+Returns a list of available provider names, sorted by priority.
+
+##### Behavior
+
+1. Iterates over all top-level configuration entries.
+2. Skips entries that are not dictionaries or are not enabled.
+3. Checks `requires_env`: if it's a non-empty list, verifies all environment variables are set.
+4. Collects `(priority, name)` tuples.
+5. Sorts by priority (ascending).
+6. Returns only the names.
+
+##### Returns
+
+- `List[str]` — Available provider names sorted by priority.
+
+---
+
+#### `get_fallback_providers(current_provider: Optional[str] = None) -> List[str]`
+
+Returns a list of enabled providers excluding the current one.
+
+##### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `current_provider` | `Optional[str]` | `None` | Provider name to exclude. |
+
+##### Returns
+
+- `List[str]` — Enabled provider names except `current_provider`.
+
+---
+
+#### `on_reload(callback: Callable[[Dict[str, Any]], None]) -> None`
+
+Registers a callback to be invoked when the configuration is reloaded.
+
+##### Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `callback` | `Callable[[Dict[str, Any]], None]` | Function receiving a deep-copied configuration dict. |
+| `callback` | `Callable[[Dict[str, Any]], None]` | Function to call on reload. Receives a deep copy of the config. |
 
-**Raises**
+##### Raises
+
 - `TypeError` — If `callback` is not callable.
 
-**Behavior**
-- Callbacks are deduplicated (same callback registered twice = once).
-- Callbacks execute outside the configuration lock to prevent deadlocks.
-- Exceptions in callbacks are caught and logged, not propagated.
+##### Behavior
 
-**Example**
-```python
-def on_config_change(new_config):
-    print("Config reloaded!")
-    print(new_config.keys())
-
-config.on_reload(on_config_change)
-```
+- Acquires the lock.
+- Adds the callback to `_callbacks` if not already present.
 
 ---
 
-#### `remove_reload_callback()`
-
-```python
-def remove_reload_callback(
-    self,
-    callback: Callable[[Dict[str, Any]], None],
-) -> None
-```
+#### `remove_reload_callback(callback: Callable[[Dict[str, Any]], None]) -> None`
 
 Removes a previously registered reload callback.
+
+##### Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `callback` | `Callable[[Dict[str, Any]], None]` | The callback to remove. |
 
----
+##### Behavior
 
-### File Watcher
-
-#### `start_watcher()`
-
-```python
-def start_watcher(self) -> None
-```
-
-Starts a background daemon thread that polls the configuration and `.env` files for changes.
-
-**Behavior**
-- Creates a `threading.Thread` named `"SHLConfigWatcher"` running `_watch()`.
-- Thread is a daemon — does not block program exit.
-- If a watcher is already running, this call is a no-op.
-
-**Logging**
-- Prints `[Config] Watcher started (interval: {check_interval}s)`.
+- Acquires the lock.
+- Removes the callback from `_callbacks` if present.
 
 ---
 
-#### `_watch()`
+#### `start_watcher() -> None`
 
-```python
-def _watch(self) -> None
-```
+Starts the background file watcher thread.
 
-Internal watcher loop. Runs until `_stop_event` is set.
+##### Behavior
 
-**Polling Cycle**
-1. Check `.env` for changes via `_check_env_reload()`.
-2. Check JSON config for changes via `reload()`.
-3. Sleep for `check_interval` seconds (or until `_stop_event` is set).
-
-**Error Handling**
-- Exceptions during the cycle are caught and logged, not propagated.
+- Acquires the lock.
+- If a watcher thread already exists and is alive, returns immediately.
+- Clears the stop event.
+- Creates and starts a daemon thread named `"SHLConfigWatcher"` that runs `_watch()`.
+- Prints a confirmation message with the check interval.
 
 ---
 
-#### `stop_watcher()`
+#### `_watch() -> None`
 
-```python
-def stop_watcher(self) -> None
-```
+The watcher thread's main loop. This is an internal method.
 
-Signals the watcher thread to stop and waits for it to terminate.
+##### Behavior
 
-**Behavior**
+- Runs while `_stop_event` is not set.
+- Each iteration:
+  - Calls `_check_env_reload()`.
+  - Calls `reload()`.
+  - Catches and prints any exceptions.
+  - Waits for `_stop_event` with `timeout=self.check_interval`.
+
+---
+
+#### `stop_watcher() -> None`
+
+Stops the background file watcher thread.
+
+##### Behavior
+
 - Sets `_stop_event`.
-- Joins the watcher thread with a 2-second timeout.
-- Logs whether the thread stopped cleanly or timed out.
+- If the watcher thread exists and is alive, joins it with a 2.0-second timeout.
+- Prints a message indicating whether the thread stopped in time.
+- Sets `_watcher` to `None`.
 
 ---
 
-#### `close()`
+#### `close() -> None`
 
-```python
-def close(self) -> None
-```
+Closes the manager by stopping the watcher.
 
-Shuts down the `ConfigManager` by stopping the watcher thread.
+##### Behavior
 
-**Alias:** `stop_watcher()`
+- Calls `stop_watcher()`.
 
 ---
 
-### Context Manager Support
+#### `__enter__() -> "ConfigManager"`
 
-```python
-def __enter__(self) -> "ConfigManager"
-def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None
-```
+Context manager entry. Returns `self`.
 
-Supports `with` statement for automatic cleanup:
+#### `__exit__(exc_type: Any, exc_value: Any, traceback: Any) -> None`
 
-```python
-with ConfigManager() as config:
-    providers = config.get_enabled_providers()
-# Watcher is automatically stopped on exit
-```
-
----
-
-### Debug
-
-#### `print_config()`
-
-```python
-def print_config(self) -> None
-```
-
-Pretty-prints the current configuration to stdout.
-
-**Warning:** Do not use if the configuration contains secret values.
-
-**Output Format**
-```
-==================================================
-SHL POLICY CONFIGURATION
-==================================================
-
-DeepL:
-  enabled: True
-  allow: []
-  deny: ['html']
-
-Google:
-  enabled: True
-  allow: []
-  deny: ['html']
-
-==================================================
-```
+Context manager exit. Calls `close()`.
 
 ---
 
 ## Thread Safety
 
-| Component | Mechanism | Notes |
-|-----------|-----------|-------|
-| Configuration reads | `threading.RLock` | All `get_*` methods acquire the lock. |
-| Configuration writes | `threading.RLock` | `reload()` and internal updates acquire the lock. |
-| Callbacks | Lock-free | Executed outside the lock to prevent deadlocks. |
-| Watcher thread | Daemon thread | Independent polling loop, exception-safe. |
-
-**Recommendation:** The `ConfigManager` is designed for concurrent read-heavy access. Write operations (`reload`) are infrequent and brief.
+All public methods that access or mutate `_config` or `_callbacks` acquire `self._lock` (a `threading.RLock`). The watcher thread runs in the background as a daemon and is started automatically during construction.
 
 ---
 
 ## Usage Example
 
 ```python
-from policy_manager import ConfigManager
+from shl.config.policy_manager import ConfigManager
 
-# Initialize with default paths
-with ConfigManager(
-    path="shl-policy-config.json",
-    check_interval=2.0,
-    env_path=".env",
-) as config:
+# Initialize with default path
+manager = ConfigManager()
 
-    # Check which providers are enabled
-    enabled = config.get_enabled_providers()
-    print(f"Enabled: {enabled}")
+# Check provider availability
+if manager.is_available("DeepL"):
+    print("DeepL is ready")
 
-    # Check if a provider supports HTML
-    for provider in enabled:
-        if config.is_allowed(provider, "html"):
-            print(f"{provider} supports HTML")
-        else:
-            print(f"{provider} does NOT support HTML")
+# Get timeout
+timeout = manager.get_timeout("LibreTranslate", default=10.0)
 
-    # Get fallback providers for DeepL
-    fallbacks = config.get_fallback_providers("DeepL")
-    print(f"DeepL fallbacks: {fallbacks}")
+# Get available providers (sorted by priority)
+providers = manager.get_available_providers()
 
-    # Register a reload callback
-    def on_change(new_cfg):
-        print("Configuration was hot-reloaded!")
+# Register a reload callback
+def on_config_change(config):
+    print("Config reloaded!")
 
-    config.on_reload(on_change)
+manager.on_reload(on_config_change)
 
-    # Manual reload (e.g., after external edit)
-    config.reload(force=True)
-
-    # Read environment variable
-    api_key = config.get_env("DEEPL_API_KEY")
+# Use as context manager
+with ConfigManager(path="custom-policy.json") as mgr:
+    config = mgr.get()
+    print(config)
 ```
 
 ---
 
-## State Diagram
+## Version
 
-```
-┌─────────────────┐
-│   __init__()    │
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐ ┌──────────┐
-│_load_  │ │ reload() │
-│  env() │ │ (force)  │
-└────────┘ └────┬─────┘
-                │
-                ▼
-        ┌───────────────┐
-        │ start_watcher │
-        │   (daemon)    │
-        └───────┬───────┘
-                │
-        ┌───────┴───────┐
-        ▼               ▼
-   ┌─────────┐    ┌──────────┐
-   │ _watch()│    │ get_*()  │
-   │ (poll)  │    │ (read)   │
-   └────┬────┘    └────┬─────┘
-        │              │
-        ▼              ▼
-   ┌─────────┐    ┌──────────┐
-   │ reload()│    │ __exit__ │
-   │(if mtime│    │ close()  │
-   │ changed)│    │ stop_    │
-   └────┬────┘    │ watcher()│
-        │         └──────────┘
-        ▼
-   ┌─────────┐
-   │callbacks│
-   │ (lock-  │
-   │  free)  │
-   └─────────┘
-```
+**Module version:** `0.2.5`
 
----
+**Author:** Tuomas Lähteenmäki
 
-## Changelog
-
-| Version | Notes |
-|---------|-------|
-| 0.2.5 | Current — future policy manager with thread-safe config loading, `.env` support, file watcher, allow/deny lists, and fallback provider resolution. Not yet integrated into active SHL runtime. |
+**License:** MIT

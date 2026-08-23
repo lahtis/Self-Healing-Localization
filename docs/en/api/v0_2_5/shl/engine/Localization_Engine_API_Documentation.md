@@ -1,54 +1,60 @@
-# Localization Engine — API Documentation
+# LocalizationEngine API Documentation
 
-## Module Overview
+## Overview
 
-**File:** `core.py`
-
-The central engine of the Self-Healing Localization Layer (SHL). Unifies UI text localization, AI prompt template localization, GLFM language validation with fallback chains, and smart machine translation routing. Provides a single, clean API for higher-level applications to manage multilingual content across both user interfaces and AI prompts.
+`LocalizationEngine` is the central engine that unifies the Self-Healing Localization Layer (SHL). It manages UI localization through `Localizer`, AI prompt templates through `TemplateLocalizer`, ensures languages exist across both systems, provides optional GLFM language validation with fallback chains, smart translation routing with automatic fallback, and machine translation (only when enabled). It supports `.env` files for API keys and configuration.
 
 ---
 
-## Metadata
+## Module Metadata
 
-| Attribute | Value |
-|-----------|-------|
-| Author | Tuomas Lähteenmäki |
-| Version | 0.2.4 |
-| License | MIT |
+| Field | Value |
+|-------|-------|
+| **File** | `core.py` |
+| **Author** | Tuomas Lähteenmäki |
+| **Version** | `0.2.5` |
+| **License** | MIT |
 
 ---
 
-## Dependencies
+## Dependencies and Imports
 
-| Module | Usage |
-|--------|-------|
-| `logging` | Engine-level log output. |
-| `os` | Environment variable access and file existence checks. |
-| `typing.Any`, `typing.Callable`, `typing.Dict`, `typing.List`, `typing.Optional` | Type annotations. |
-| `shl.engine.localizer.Localizer` | UI text localization management. |
-| `shl.engine.template_localizer.TemplateLocalizer` | AI prompt template localization. |
-| `shl.engine.translation` | Machine translation adapters and exceptions. |
-| `shl.language_validator.LanguageValidator` | GLFM-based language validation and fallback chains. |
-| `shl.utils.lang_utils` | Language tag normalization and base extraction. |
-| `shl.utils.env_loader` | `.env` file loading and environment variable access. |
+### Standard Library
+
+- `logging`
+- `os`
+- `typing` (`Any`, `Callable`, `Dict`, `List`, `Optional`)
+- `configparser` (imported inside methods)
+
+### SHL Internal Modules
+
+- `shl.engine.localizer.Localizer`
+- `shl.engine.template_localizer.TemplateLocalizer`
+- `shl.engine.translation.translate_text`
+- `shl.engine.translation.TranslationCache`
+- `shl.engine.translation.MyMemoryAdapter`
+- `shl.engine.translation.LibreTranslateAdapter`
+- `shl.engine.translation.TranslationError`
+- `shl.engine.translation.ServiceUnavailableError`
+- `shl.engine.translation.RateLimitExceededError`
+- `shl.engine.translation.LanguageNotSupportedError`
+- `shl.engine.translation.ProviderAccessError`
+- `shl.engine.translation.InvalidRequestError`
+- `shl.language_validator.LanguageValidator`
+- `shl.utils.lang_utils.base_language`
+- `shl.utils.lang_utils.normalize_full_tag`
+- `shl.utils.env_loader.load_shl_env`
+- `shl.utils.env_loader.get_env_value`
+- `shl.config.config.get_cache_config`
 
 ---
 
 ## Class: `LocalizationEngine`
 
-```python
-class LocalizationEngine
-```
-
-Central localization engine that coordinates UI text, prompt templates, language validation, and machine translation. Supports two initialization modes: **SETTINGS-forced** (via `config.conf`) and **auto-detected** (via environment or GLFM).
-
----
-
 ### Constructor
 
 ```python
-def __init__(
-    self,
+LocalizationEngine(
     lang_code: Optional[str] = None,
     base_lang: Optional[str] = None,
     ui_folder: str = "locales",
@@ -65,527 +71,405 @@ def __init__(
     google_backup_api_key: Optional[str] = None,
     papago_client_id: Optional[str] = None,
     papago_client_secret: Optional[str] = None,
-) -> None
+)
 ```
 
-Initializes the localization engine, loading configuration, detecting language, setting up GLFM validation, and configuring translation adapters.
+#### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `lang_code` | `Optional[str]` | `None` | Target language code. Auto-detected if omitted (unless overridden by `config.conf`). |
-| `base_lang` | `Optional[str]` | `None` | Developer's base/source language. Defaults to `"en"` or `config.conf` value. |
-| `ui_folder` | `str` | `"locales"` | Directory for UI translation JSON files. |
-| `template_folder` | `str` | `"prompts"` | Directory for prompt template JSON files. |
-| `config` | `Optional[Dict[str, Any]]` | `None` | Runtime configuration overrides. Merged with defaults and `config.conf`. |
-| `glfm_path` | `Optional[str]` | `None` | Custom path to GLFM database. |
-| `glfm_lite` | `bool` | `True` | Use GLFM Lite mode (~428 KB). |
-| `libretranslate_url` | `Optional[str]` | `None` | LibreTranslate API endpoint URL. |
+| `lang_code` | `Optional[str]` | `None` | Active language code. Auto-detected if not provided (in normal flow). |
+| `base_lang` | `Optional[str]` | `None` | Base language code. Defaults to `"en"` or config value (in normal flow). |
+| `ui_folder` | `str` | `"locales"` | Folder for UI localization files. |
+| `template_folder` | `str` | `"prompts"` | Folder for template localization files. |
+| `config` | `Optional[Dict[str, Any]]` | `None` | Override dictionary merged into default config. |
+| `glfm_path` | `Optional[str]` | `None` | Path to the GLFM database file. |
+| `glfm_lite` | `bool` | `True` | Whether to use GLFM lite mode. |
+| `libretranslate_url` | `Optional[str]` | `None` | LibreTranslate base URL. |
 | `libretranslate_api_key` | `Optional[str]` | `None` | LibreTranslate API key. |
-| `mymemory_email` | `Optional[str]` | `None` | MyMemory API email for higher quota. |
+| `mymemory_email` | `Optional[str]` | `None` | MyMemory email address. |
 | `libretranslate_mirrors` | `Optional[List[Dict[str, Any]]]` | `None` | List of LibreTranslate mirror configurations. |
 | `deepl_key` | `Optional[str]` | `None` | DeepL API key. |
-| `google_api_key` | `Optional[str]` | `None` | Google Translate v2 API key. |
-| `google_backup_api_key` | `Optional[str]` | `None` | Backup Google API key for failover. |
-| `papago_client_id` | `Optional[str]` | `None` | Naver Papago client ID. |
-| `papago_client_secret` | `Optional[str]` | `None` | Naver Papago client secret. |
+| `google_api_key` | `Optional[str]` | `None` | Google Cloud Translation API key. |
+| `google_backup_api_key` | `Optional[str]` | `None` | Google Cloud Translation backup API key. |
+| `papago_client_id` | `Optional[str]` | `None` | Papago (Naver) client ID. |
+| `papago_client_secret` | `Optional[str]` | `None` | Papago (Naver) client secret. |
 
-**Initialization Flow**
+#### Behavior
 
-```
-1. Load .env file (if not already loaded)
-2. Load default config + config.conf
-3. Check config.conf [SETTINGS] section:
-   ├── If "language" exists → SETTINGS-forced mode
-   │   ├── lang_code = SETTINGS.language
-   │   ├── base_lang = SETTINGS.base_lang (default "en")
-   │   ├── GLFM disabled (path=None)
-   │   └── Initialize localizers and adapters
-   └── Else → Normal mode
-       ├── Detect language (config → SHL_LANGUAGE → LANG → "en")
-       ├── Normalize lang_code and base_lang
-       ├── Initialize GLFM validator
-       ├── Build fallback chain
-       └── Initialize localizers and adapters
-```
+The constructor has **two distinct initialization paths**:
 
-**Credential Resolution**
+##### Path 1: SETTINGS Forced (config.conf override)
 
-All API keys follow the priority: **parameter > .env variable > default (None)**.
+If `config.conf` exists and has a `[SETTINGS]` section with a `language` option:
 
-| Parameter | Environment Variable |
-|-----------|---------------------|
-| `mymemory_email` | `MYMEMORY_EMAIL` |
-| `libretranslate_url` | `LIBRETRANSLATE_URL` |
-| `libretranslate_api_key` | `LIBRETRANSLATE_API_KEY` |
-| `deepl_key` | `DEEPL_API_KEY` |
-| `google_api_key` | `GOOGLE_API_KEY` |
-| `google_backup_api_key` | `GOOGLE_BACKUP_API_KEY` |
-| `papago_client_id` | `NAVER_CLIENT_ID` |
-| `papago_client_secret` | `NAVER_CLIENT_SECRET` |
+1. Reads `language` and `base_lang` (fallback `"en"`) from `config.conf`.
+2. Sets `self.lang_code = normalize_full_tag(forced_lang)`.
+3. Sets `self.base_lang = base_language(forced_base)`.
+4. **Disables GLFM completely** by passing `glfm_path=None` to `LanguageValidator`.
+5. Sets `self.glfm_fallback = None` and `self.glfm_fallback_chain = []`.
+6. Initializes folders, cache, adapters, and localizers.
+7. Logs initialization as SETTINGS-forced and returns early.
 
----
+##### Path 2: Normal Flow
 
-### Attributes
+1. Loads default config via `_load_default_config()` and merges the `config` parameter.
+2. If `base_lang` is `None`, reads from config (default `"en"`).
+3. If `lang_code` is `None`, calls `_detect_language()`.
+4. Normalizes `lang_code` with `normalize_full_tag()` and `base_lang` with `base_language()`.
+5. Initializes `LanguageValidator` with `glfm_path`, `base_language`, and `use_lite`.
+6. Builds GLFM fallback chain if validator is loaded and language is valid.
+7. Initializes cache, adapters (with API key resolution: parameter > `.env`), and localizers.
+8. Logs initialization with GLFM mode.
+
+#### API Key Resolution
+
+For all API keys, the resolution order is **parameter > `.env` > default**:
+
+| Attribute | Parameter | Environment Variable |
+|-----------|-----------|---------------------|
+| `_deepl_key` | `deepl_key` | `DEEPL_API_KEY` |
+| `_google_api_key` | `google_api_key` | `GOOGLE_API_KEY` |
+| `_google_backup_api_key` | `google_backup_api_key` | `GOOGLE_BACKUP_API_KEY` |
+| `_papago_client_id` | `papago_client_id` | `NAVER_CLIENT_ID` |
+| `_papago_client_secret` | `papago_client_secret` | `NAVER_CLIENT_SECRET` |
+| `_mymemory_email` | `mymemory_email` | `MYMEMORY_EMAIL` |
+| `_libretranslate_url` | `libretranslate_url` | `LIBRETRANSLATE_URL` |
+| `_libretranslate_api_key` | `libretranslate_api_key` | `LIBRETRANSLATE_API_KEY` |
+
+#### Instance Attributes
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | `config` | `Dict[str, Any]` | Merged configuration dictionary. |
-| `lang_code` | `str` | Active target language code (normalized). |
-| `base_lang` | `str` | Base/source language code (normalized). |
-| `ui_folder` | `str` | UI translations directory path. |
-| `template_folder` | `str` | Prompt templates directory path. |
+| `lang_code` | `str` | Normalized active language code. |
+| `base_lang` | `str` | Normalized base language code. |
+| `ui_folder` | `str` | UI localization folder path. |
+| `template_folder` | `str` | Template localization folder path. |
 | `validator` | `LanguageValidator` | GLFM language validator instance. |
-| `glfm_fallback` | `Optional[str]` | Immediate GLFM fallback language (second in chain). |
-| `glfm_fallback_chain` | `List[str]` | Complete GLFM fallback chain. |
-| `cache` | `TranslationCache` | In-memory translation result cache. |
+| `glfm_fallback` | `Optional[str]` | The first fallback language from the GLFM chain (index 1), or `None`. |
+| `glfm_fallback_chain` | `List[str]` | Full GLFM fallback chain for the active language. |
+| `cache` | `TranslationCache` | Shared translation cache instance. |
+| `mymemory_adapter` | `MyMemoryAdapter` | MyMemory translation adapter. |
+| `libretranslate_adapter` | `LibreTranslateAdapter` | LibreTranslate translation adapter. |
 | `ui_localizer` | `Localizer` | UI text localizer instance. |
-| `template_localizer` | `TemplateLocalizer` | Prompt template localizer instance. |
-| `mymemory_adapter` | `MyMemoryAdapter` | MyMemory translation provider. |
-| `libretranslate_adapter` | `LibreTranslateAdapter` | LibreTranslate provider with mirror support. |
+| `template_localizer` | `TemplateLocalizer` | Template localizer instance. |
 | `_deepl_key` | `Optional[str]` | Resolved DeepL API key. |
 | `_google_api_key` | `Optional[str]` | Resolved Google API key. |
 | `_google_backup_api_key` | `Optional[str]` | Resolved Google backup API key. |
 | `_papago_client_id` | `Optional[str]` | Resolved Papago client ID. |
 | `_papago_client_secret` | `Optional[str]` | Resolved Papago client secret. |
+| `_libretranslate_url` | `Optional[str]` | Resolved LibreTranslate URL. |
+| `_libretranslate_api_key` | `Optional[str]` | Resolved LibreTranslate API key. |
+| `_mymemory_email` | `Optional[str]` | Resolved MyMemory email. |
+| `_libretranslate_mirrors` | `Optional[List[Dict[str, Any]]]` | Mirror configurations. |
 
 ---
 
-### Internal Methods
+### Configuration
 
-#### `_load_default_config()`
+#### `_load_default_config() -> Dict[str, Any]`
+
+Loads default configuration and `config.conf` values. This is an internal method.
+
+##### Default Config
 
 ```python
-def _load_default_config(self) -> Dict[str, Any]
+{
+    "m_translation_enabled": False,
+    "translation_cache_ttl": 3600,
+    "fallback_to_base": True,
+    "strict_mode": False,
+    "default_language": None,
+    "glfm_lite": True,
+    "cache": {
+        "cache_persist": False,
+        "cache_persist_path": ".shl_cache.json",
+        "ttl": 3600,
+        "max_size": 10000,
+    },
+}
 ```
 
-Loads default configuration values and merges with `config.conf` `[SETTINGS]` section.
+##### config.conf Parsing
 
-**Default Values**
+If `config.conf` exists, reads the `[SETTINGS]` section and overrides:
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `m_translation_enabled` | `False` | Whether machine translation is enabled. |
-| `translation_cache_ttl` | `3600` | Translation cache TTL in seconds. |
-| `fallback_to_base` | `True` | Whether to fall back to base language when key is missing. |
-| `strict_mode` | `False` | Strict validation mode. |
-| `default_language` | `None` | Override language code from config. |
-| `glfm_lite` | `True` | Use GLFM Lite database. |
+- `default_language` — from `language` option (stripped).
+- `m_translation_enabled` — from `m_translation_enabled` option (boolean, default `False`).
+- `fallback_to_base` — from `fallback_to_base` option (boolean, default `True`).
+- `glfm_lite` — from `glfm_lite` option (boolean, default `True`).
+- `base_lang` — from `base_lang` option (stripped).
 
-**Config File (`config.conf`)**
-```ini
-[SETTINGS]
-language = fi
-base_lang = en
-m_translation_enabled = false
-fallback_to_base = true
-glfm_lite = true
-```
-
-**Returns**
-- `Dict[str, Any]` — Merged configuration dictionary.
+Catches all exceptions during config reading and logs a debug message.
 
 ---
 
-#### `_detect_language()`
+### Language Detection
 
-```python
-def _detect_language(self) -> str
-```
+#### `_detect_language() -> str`
 
-Detects the active language using a priority cascade.
+Detects the active language using the following priority:
 
-**Detection Order**
-1. `config["default_language"]` — if set.
-2. `SHL_LANGUAGE` environment variable.
-3. `LANG` environment variable (parsed: strips encoding suffix, converts `fi_FI` → `fi-FI`).
-4. `"en"` — absolute fallback.
-
-**Returns**
-- `str` — Detected language code.
+1. `self.config.get("default_language")` — if set, returns it.
+2. `os.environ.get("SHL_LANGUAGE")` — if set, returns it.
+3. `os.environ.get("LANG", "")` — if set:
+   - Splits on `.` and takes the first part.
+   - If contains `_`, splits into two parts and returns `{lang.lower()}-{region.upper()}`.
+   - Otherwise returns the lowercased value.
+4. Falls back to `"en"`.
 
 ---
 
-#### `_validate_key()`
+### Key Validation
 
-```python
-def _validate_key(self, key: str) -> str
-```
+#### `_validate_key(key: str) -> str`
 
 Validates and normalizes a localization key.
 
-**Returns**
-- `str` — Stripped key string, or empty string if invalid.
+##### Behavior
 
-**Logging**
-- `WARNING` — Non-string key type.
-- `DEBUG` — Empty key detected, key normalized.
-
----
-
-#### `_get_with_fallback()`
-
-```python
-def _get_with_fallback(
-    self,
-    getter: Callable[[str, Optional[str], bool], Optional[str]],
-    key: str,
-) -> Optional[str]
-```
-
-Retrieves a localized string through the full fallback chain.
-
-**Fallback Order**
-1. **Active language** — always checked first.
-2. **GLFM fallback chain** — iterates through nearest languages (skipped if `fallback_to_base=False`).
-3. **Base language** — final fallback (skipped if already active language).
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `getter` | `Callable` | Localizer getter function (`get_text` or `get_template`). |
-| `key` | `str` | Localization key to retrieve. |
-
-**Returns**
-- `Optional[str]` — Localized text if found, `None` if all fallbacks exhausted.
+- If `key` is not a `str`, logs a warning and returns `""`.
+- Strips whitespace from `key`.
+- If empty after stripping, logs a debug message and returns `""`.
+- If normalization changed the key, logs a debug message.
+- Returns the normalized key.
 
 ---
 
-#### `_sync_from_lang()`
+### Language Management
 
-```python
-def _sync_from_lang(self, source_lang: str) -> int
-```
+#### `ensure_language(lang_code: str) -> None`
 
-Synchronizes missing keys from a source language to the active language.
+Ensures UI and template files exist for the given language.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `source_lang` | `str` | Source language to copy keys from. |
+##### Behavior
 
-**Returns**
-- `int` — Number of keys synchronized (UI + templates).
-
-**Behavior**
-- Copies keys that exist in the source language but are missing in the active language.
-- Existing keys are left untouched.
+- Normalizes `lang_code` via `normalize_full_tag()`.
+- Instantiates `Localizer` and `TemplateLocalizer` with the validated language code, `self.base_lang`, and respective folders.
+- Logs the operation at debug level.
 
 ---
 
-### Public Methods
+#### `set_language(lang_code: str) -> None`
 
-#### `ensure_language()`
+Switches the active language.
 
-```python
-def ensure_language(self, lang_code: str) -> None
-```
+##### Behavior
 
-Ensures that UI and template JSON files exist for a given language. Creates the language directories and base files if they do not exist.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `lang_code` | `str` | Language code to ensure. |
-
-**Example**
-```python
-engine.ensure_language("fi")
-# Creates locales/fi.json and prompts/fi.json if missing
-```
-
----
-
-#### `set_language()`
-
-```python
-def set_language(self, lang_code: str) -> None
-```
-
-Switches the active language and rebuilds the GLFM fallback chain.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `lang_code` | `str` | New active language code. |
-
-**Side Effects**
+- Normalizes `lang_code` via `normalize_full_tag()`.
 - Updates `self.lang_code`.
-- Reinitializes `ui_localizer` and `template_localizer` with the new language.
-- Rebuilds `glfm_fallback_chain` and `glfm_fallback`.
-
-**Example**
-```python
-engine.set_language("ja")
-# Language switched to: ja
-```
+- Calls `set_language()` on both `ui_localizer` and `template_localizer`.
+- If `self.validator.is_loaded` is `True`, rebuilds `self.glfm_fallback_chain` via `validator.get_fallback_chain()`.
+  - If the chain has more than 1 element, sets `self.glfm_fallback` to the second element (index 1).
+  - Otherwise sets `self.glfm_fallback` to `None`.
+- Logs the language switch at info level.
 
 ---
 
-#### `ensure_ui_key()`
+### Key Management
 
-```python
-def ensure_ui_key(
-    self,
-    key: str,
-    default: str = "",
-) -> str
-```
+#### `ensure_ui_key(key: str, default: str = "") -> str`
 
-Ensures a UI localization key exists. If the key is missing, it is created with the provided default value.
+Ensures a UI key exists.
+
+##### Behavior
+
+1. Validates the key via `_validate_key()`.
+2. If invalid, returns `""`.
+3. Retrieves the text via `_get_with_fallback(self.ui_localizer.get_text, validated_key)`.
+4. If the text is `None` or empty, sets the key to `default` via `ui_localizer.set_text()` and returns `default`.
+5. Otherwise returns the retrieved text.
+
+---
+
+#### `ensure_template_key(key: str, default: str = "") -> str`
+
+Ensures a template key exists.
+
+##### Behavior
+
+Identical to `ensure_ui_key()` but uses `self.template_localizer.get_template` and `set_template()`.
+
+---
+
+### Fallback Retrieval
+
+#### `_get_with_fallback(getter, key) -> Optional[str]`
+
+Retrieves a key through the fallback chain. This is an internal method.
+
+##### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `getter` | `Callable[[str, Optional[str], bool], Optional[str]]` | A getter function (e.g., `ui_localizer.get_text`). |
+| `key` | `str` | The localization key. |
+
+##### Fallback Order
+
+1. **Active language** — Always checked first via `getter(key, self.lang_code, fallback=False)`.
+2. **Fallback disabled** — If `self.config.get("fallback_to_base", True)` is `False`, returns `None`.
+3. **GLFM fallback chain** — If `self.glfm_fallback_chain` has more than 1 element, iterates from index 1 onward, skipping `self.lang_code`. Calls `getter(key, fallback_lang, fallback=False)` for each.
+4. **Base language** — If `self.lang_code != self.base_lang`, calls `getter(key, self.base_lang, fallback=False)`.
+5. Returns `None` if nothing is found.
+
+---
+
+### Retrieval
+
+#### `ui_text(key: str, default_value: str = "") -> str`
+
+Retrieves UI text with fallback and optional machine translation.
+
+##### Behavior
+
+1. Validates the key via `_validate_key()`.
+2. If invalid, returns `default_value`.
+3. Checks the translation cache via `self.cache.get(validated_key, self.base_lang, self.lang_code)`.
+   - If cached, returns the cached value.
+4. Retrieves text via `_get_with_fallback(self.ui_localizer.get_text, validated_key)`.
+5. If text is `None`:
+   - If `m_translation_enabled` is `True`, `lang_code != base_lang`, and `default_value` is truthy:
+     - Calls `translate_text()` with all resolved API keys.
+     - If translation succeeds and differs from `default_value`, stores it via `ui_localizer.set_text()` and `cache.set()`, then returns it.
+     - Catches all exceptions, logs a warning.
+   - Stores `default_value` via `ui_localizer.set_text()` and `cache.set()`, then returns `default_value`.
+6. If text is found, stores it in cache and returns it.
+
+---
+
+#### `template(key: str, default: str = "", **kwargs: Any) -> str`
+
+Retrieves and formats a prompt template.
+
+##### Behavior
+
+1. Validates the key via `_validate_key()`.
+2. If invalid, returns `default if default else key`.
+3. Retrieves text via `_get_with_fallback(self.template_localizer.get_template, validated_key)`.
+4. If text is `None`, uses `default if default else key`, stores it via `template_localizer.set_template()`, and uses that value.
+5. If `kwargs` is provided, attempts `text.format(**kwargs)`.
+   - On `KeyError` or `ValueError`, logs a warning and returns the unformatted text.
+6. Returns the (formatted) text.
+
+---
+
+### Synchronization
+
+#### `_sync_from_lang(source_lang: str) -> int`
+
+Synchronizes keys from a source language. This is an internal method.
+
+##### Behavior
+
+- If `source_lang == self.lang_code`, returns `0`.
+- Instantiates a new `Localizer` and `TemplateLocalizer` for `source_lang`.
+- Iterates over `source_ui.texts.items()`:
+  - Validates each key.
+  - If the key does not exist in `self.ui_localizer.texts`, copies it via `set_text()`.
+  - Counts copied keys.
+- Iterates over `source_templates.templates.items()`:
+  - Validates each key.
+  - If the key does not exist in `self.template_localizer.templates`, copies it via `set_template()`.
+  - Counts copied keys.
+- Logs the sync count at debug level.
+- Returns the total count of synchronized keys.
+
+---
+
+#### `sync() -> int`
+
+Synchronizes keys from fallback and base languages.
+
+##### Behavior
+
+1. If `self.glfm_fallback_chain` has more than 1 element, iterates from index 1 and syncs from each fallback language (skipping `self.lang_code`).
+2. If `self.base_lang != self.lang_code`, syncs from base language.
+3. Logs the result at info level.
+4. Returns the total count of synchronized keys.
+
+---
+
+### Statistics
+
+#### `get_stats() -> Dict[str, Any]`
+
+Returns engine statistics.
+
+##### Returns
+
+- `Dict[str, Any]` with the following keys:
+  - `"lang_code"`: `self.lang_code`
+  - `"base_lang"`: `self.base_lang`
+  - `"glfm_fallback"`: `self.glfm_fallback`
+  - `"glfm_fallback_chain"`: `self.glfm_fallback_chain.copy()`
+  - `"glfm_lite"`: `self.validator.is_lite` if validator else `True`
+  - `"glfm_loaded"`: `self.validator.is_loaded` if validator else `False`
+  - `"ui_keys_count"`: `len(self.ui_localizer.texts)`
+  - `"template_keys_count"`: `len(self.template_localizer.templates)`
+  - `"cache_size"`: `self.cache.size()`
+  - `"m_translation_enabled"`: `self.config.get("m_translation_enabled", False)`
+  - `"config"`: `self.config.copy()`
+  - `"deepl_key_configured"`: `bool(self._deepl_key)`
+  - `"google_api_key_configured"`: `bool(self._google_api_key)`
+  - `"papago_configured"`: `bool(self._papago_client_id and self._papago_client_secret)`
+
+---
+
+### LibreTranslate Mirror Methods
+
+#### `get_mirror_stats() -> List[Dict[str, Any]]`
+
+Returns LibreTranslate mirror statistics.
+
+##### Returns
+
+- `List[Dict[str, Any]]` — Delegates to `self.libretranslate_adapter.get_mirror_stats()`.
+
+---
+
+#### `clear_mirror_cache() -> None`
+
+Clears the LibreTranslate mirror cache.
+
+##### Behavior
+
+- Delegates to `self.libretranslate_adapter.clear_mirror_cache()`.
+
+---
+
+### GLFM Management
+
+#### `reload_glfm(glfm_path: Optional[str] = None, glfm_lite: Optional[bool] = None) -> bool`
+
+Reloads the GLFM database.
+
+##### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `key` | `str` | — | Localization key. |
-| `default` | `str` | `""` | Default text to set if the key does not exist. |
+| `glfm_path` | `Optional[str]` | `None` | New path to the GLFM database. |
+| `glfm_lite` | `Optional[bool]` | `None` | Whether to use lite mode. Defaults to `self.config.get("glfm_lite", True)`. |
 
-**Returns**
-- `str` — Existing text if found, or `default` if created.
+##### Behavior
 
-**Example**
-```python
-text = engine.ensure_ui_key("welcome_message", "Welcome!")
-```
-
----
-
-#### `ensure_template_key()`
-
-```python
-def ensure_template_key(
-    self,
-    key: str,
-    default: str = "",
-) -> str
-```
-
-Ensures a prompt template key exists. If the key is missing, it is created with the provided default value.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `key` | `str` | — | Template key. |
-| `default` | `str` | `""` | Default template to set if the key does not exist. |
-
-**Returns**
-- `str` — Existing template if found, or `default` if created.
+1. Creates a new `LanguageValidator` with the given parameters.
+2. If `validator.is_loaded` is `False`:
+   - Sets `self.glfm_fallback = None` and `self.glfm_fallback_chain = []`.
+   - Logs a warning and returns `False`.
+3. Otherwise, rebuilds `self.glfm_fallback_chain` via `validator.get_fallback_chain()`.
+   - If the chain has more than 1 element, sets `self.glfm_fallback` to index 1.
+   - Otherwise sets it to `None`.
+4. Logs the reload result with the language count.
+5. Returns `True`.
 
 ---
 
-#### `ui_text()`
+## Usage Example
 
 ```python
-def ui_text(
-    self,
-    key: str,
-    default_value: str = "",
-) -> str
-```
-
-Retrieves UI text with full fallback chain and optional machine translation.
-
-**Execution Flow**
-```
-1. Validate key
-2. Check translation cache
-3. Try fallback chain (active → GLFM → base)
-4. If not found and m_translation_enabled:
-   └── Translate default_value via translate_text()
-   └── Save translated text to localizer and cache
-5. If translation fails or disabled:
-   └── Save default_value to localizer and cache
-6. Return result
-```
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `key` | `str` | — | UI localization key. |
-| `default_value` | `str` | `""` | Default text to use if key is missing. Also used as source for machine translation. |
-
-**Returns**
-- `str` — Localized or translated text, or `default_value` if all methods fail.
-
-**Machine Translation**
-- Only triggered if `m_translation_enabled=True`, `lang_code != base_lang`, and `default_value` is non-empty.
-- Uses the full provider routing (DeepL, Google, Papago, MyMemory, LibreTranslate) via `translate_text()`.
-- Failed translations are logged as warnings and fall back to `default_value`.
-
-**Example**
-```python
-# With machine translation disabled
-text = engine.ui_text("greeting", "Hello!")
-# Returns cached/fallback text, or stores "Hello!" if missing
-
-# With machine translation enabled
-text = engine.ui_text("greeting", "Hello!")
-# If "greeting" missing in Finnish, translates "Hello!" → "Hei!"
-```
-
----
-
-#### `template()`
-
-```python
-def template(
-    self,
-    key: str,
-    default: str = "",
-    **kwargs: Any,
-) -> str
-```
-
-Retrieves and optionally formats a prompt template.
-
-**Execution Flow**
-```
-1. Validate key
-2. Try fallback chain (active → GLFM → base)
-3. If not found, use default
-4. If kwargs provided, format with .format(**kwargs)
-5. Return result
-```
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `key` | `str` | — | Template key. |
-| `default` | `str` | `""` | Default template if key is missing. |
-| `**kwargs` | `Any` | — | Format arguments for Python string formatting. |
-
-**Returns**
-- `str` — Template string, with kwargs substituted if provided.
-
-**Example**
-```python
-# Simple retrieval
-prompt = engine.template("summarize_prompt", "Summarize: {text}")
-
-# With formatting
-prompt = engine.template(
-    "summarize_prompt",
-    "Summarize this in {language}: {text}",
-    language="Finnish",
-    text="Long article here..."
-)
-# "Summarize this in Finnish: Long article here..."
-```
-
----
-
-#### `sync()`
-
-```python
-def sync(self) -> int
-```
-
-Synchronizes missing keys from fallback languages and base language into the active language.
-
-**Sync Order**
-1. GLFM fallback chain languages (excluding active language).
-2. Base language (if different from active).
-
-**Returns**
-- `int` — Total number of keys synchronized (UI + templates).
-
-**Example**
-```python
-count = engine.sync()
-print(f"Synced {count} keys")
-# Synchronized 150 UI keys and 20 templates from 'en'
-```
-
----
-
-#### `get_stats()`
-
-```python
-def get_stats(self) -> Dict[str, Any]
-```
-
-Returns comprehensive engine statistics.
-
-**Returns**
-- `Dict[str, Any]` — Dictionary with the following keys:
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `lang_code` | `str` | Active language code. |
-| `base_lang` | `str` | Base language code. |
-| `glfm_fallback` | `Optional[str]` | Immediate GLFM fallback language. |
-| `glfm_fallback_chain` | `List[str]` | Complete fallback chain. |
-| `glfm_lite` | `bool` | Whether GLFM Lite is in use. |
-| `glfm_loaded` | `bool` | Whether GLFM database is loaded. |
-| `ui_keys_count` | `int` | Number of UI keys loaded. |
-| `template_keys_count` | `int` | Number of template keys loaded. |
-| `cache_size` | `int` | Translation cache size. |
-| `m_translation_enabled` | `bool` | Machine translation status. |
-| `config` | `Dict[str, Any]` | Copy of current configuration. |
-| `deepl_key_configured` | `bool` | Whether DeepL API key is set. |
-| `google_api_key_configured` | `bool` | Whether Google API key is set. |
-| `papago_configured` | `bool` | Whether Papago credentials are set. |
-
-**Example**
-```python
-stats = engine.get_stats()
-print(f"UI keys: {stats['ui_keys_count']}")
-print(f"Templates: {stats['template_keys_count']}")
-print(f"Cache size: {stats['cache_size']}")
-print(f"Fallback chain: {stats['glfm_fallback_chain']}")
-```
-
----
-
-#### `get_mirror_stats()`
-
-```python
-def get_mirror_stats(self) -> List[Dict[str, Any]]
-```
-
-Returns LibreTranslate mirror health statistics.
-
-**Returns**
-- `List[Dict[str, Any]]` — List of mirror status dictionaries.
-
----
-
-#### `clear_mirror_cache()`
-
-```python
-def clear_mirror_cache(self) -> None
-```
-
-Clears the LibreTranslate mirror cache, forcing fresh mirror discovery on next use.
-
----
-
-#### `reload_glfm()`
-
-```python
-def reload_glfm(
-    self,
-    glfm_path: Optional[str] = None,
-    glfm_lite: Optional[bool] = None,
-) -> bool
-```
-
-Reloads the GLFM database and rebuilds the fallback chain.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `glfm_path` | `Optional[str]` | `None` | Custom database path. Uses current config if omitted. |
-| `glfm_lite` | `Optional[bool]` | `None` | Force Lite/Full mode. Uses current config if omitted. |
-
-**Returns**
-- `bool` — `True` if GLFM loaded successfully, `False` otherwise.
-
-**Example**
-```python
-# Switch to full database
-success = engine.reload_glfm(glfm_lite=False)
-if success:
-    print(f"Loaded {len(engine.validator.languages)} languages")
-```
-
----
-
-## Complete Usage Example
-
-```python
-from shl.core import LocalizationEngine
-import logging
+from shl.engine.core import LocalizationEngine
 
 # Initialize engine
 engine = LocalizationEngine(
@@ -594,125 +478,42 @@ engine = LocalizationEngine(
     ui_folder="locales",
     template_folder="prompts",
     deepl_key="your-deepl-key",
-    mymemory_email="user@example.com",
 )
 
-# Ensure language files exist
-engine.ensure_language("fi")
+# Retrieve UI text
+text = engine.ui_text("greeting", default_value="Hello")
 
-# Get UI text with fallback and optional translation
-greeting = engine.ui_text(
-    "welcome_message",
-    default_value="Welcome to our app!"
-)
-print(greeting)
+# Retrieve and format template
+prompt = engine.template("summarize", default="Summarize: {text}", text="Article content")
 
-# Get formatted prompt template
-prompt = engine.template(
-    "summarize",
-    default="Summarize in {lang}: {text}",
-    lang="Finnish",
-    text="Long article here..."
-)
-print(prompt)
-
-# Ensure keys exist (creates if missing)
-engine.ensure_ui_key("new_feature", "Check out our new feature!")
-engine.ensure_template_key("code_review", "Review this code: {code}")
+# Ensure keys exist
+engine.ensure_ui_key("new_key", default="Default text")
+engine.ensure_template_key("new_template", default="Template text")
 
 # Switch language
-engine.set_language("ja")
+engine.set_language("sv")
 
-# Sync missing keys from fallback languages
+# Sync keys from fallback and base languages
 synced = engine.sync()
 print(f"Synced {synced} keys")
 
-# Check statistics
+# Get statistics
 stats = engine.get_stats()
-print(f"Active: {stats['lang_code']}")
-print(f"Base: {stats['base_lang']}")
-print(f"Fallback chain: {stats['glfm_fallback_chain']}")
-print(f"UI keys: {stats['ui_keys_count']}")
-print(f"Templates: {stats['template_keys_count']}")
+print(stats)
 
-# Reload GLFM with full database
-engine.reload_glfm(glfm_lite=False)
+# Reload GLFM
+success = engine.reload_glfm(glfm_path="/path/to/glfm.db")
+
+# Clear mirror cache
+engine.clear_mirror_cache()
 ```
 
 ---
 
-## Configuration File (`config.conf`)
+## Version
 
-```ini
-[SETTINGS]
-language = fi
-base_lang = en
-m_translation_enabled = false
-fallback_to_base = true
-glfm_lite = true
-```
+**Module version:** `0.2.5`
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `language` | `str` | — | Forces active language (disables auto-detection and GLFM). |
-| `base_lang` | `str` | `"en"` | Developer's base/source language. |
-| `m_translation_enabled` | `bool` | `false` | Enable machine translation for missing keys. |
-| `fallback_to_base` | `bool` | `true` | Allow fallback to base language when key is missing. |
-| `glfm_lite` | `bool` | `true` | Use GLFM Lite database. |
+**Author:** Tuomas Lähteenmäki
 
----
-
-## Fallback Chain
-
-```
-Active Language (e.g., "fi")
-    │
-    ├── Key found? → Return text
-    │
-    └── Not found → GLFM Fallback Chain
-            │
-            ├── Nearest languages (e.g., "sv", "et", "de")
-            │   ├── Key found? → Return text
-            │   └── Not found → Next nearest
-            │
-            └── All GLFM fallbacks exhausted → Base Language (e.g., "en")
-                    │
-                    ├── Key found? → Return text
-                    │
-                    └── Not found → Return default / trigger translation
-```
-
----
-
-## Thread Safety
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| `LocalizationEngine` instance | Caution | Not designed for concurrent mutation. `set_language()`, `sync()`, and `ui_text()` mutate internal state. |
-| `ui_localizer` / `template_localizer` | Caution | File writes are not atomic. Concurrent writes may corrupt JSON files. |
-| `cache` | Generally safe | Read operations are safe. Writes may race in multi-threaded use. |
-| `validator` | Safe | Read-only after initialization. |
-
-**Recommendation:** Use one `LocalizationEngine` instance per thread, or wrap mutating operations with locks in multi-threaded environments.
-
----
-
-## Logging
-
-The module uses Python's standard `logging` module under the logger name `__name__`.
-
-**Log Levels Used**
-
-| Level | Event |
-|-------|-------|
-| `INFO` | Engine initialization, language switch, sync completion. |
-| `WARNING` | Unparseable language code, machine translation failure, template format error. |
-| `DEBUG` | Key normalization, fallback attempts, config loading, sync details. |
-
----
-
-## Changelog
-
-| Version | Notes |
-|---------|-------|
-| 0.2.4 | Current — unified localization engine with UI/template management, GLFM fallback chains, machine translation integration, and SETTINGS-forced mode via config.conf. |
+**License:** MIT
