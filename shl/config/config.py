@@ -33,6 +33,11 @@ def _create_default_config() -> dict:
             "cache_persist_path": ".shl_cache.json",
             "ttl": 3600,
             "max_size": 10000
+        },
+        "providers": {
+            "yandex": {
+                "folder_id": None
+            }
         }
     }
 
