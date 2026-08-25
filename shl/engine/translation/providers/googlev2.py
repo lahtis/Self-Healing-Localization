@@ -1,7 +1,7 @@
 """
 File: googlev2.py — Google Cloud Translation adapter (Basic v2, API-key auth).
 Author: Tuomas Lähteenmäki
-Version: 0.2.4
+Version: 0.2.6
 License: MIT
 Description: Translation provider adapter for the Google Cloud Translation Basic (v2) API.
              Dependency-free (stdlib urllib only). Includes secondary API key failover,
@@ -11,7 +11,6 @@ Description: Translation provider adapter for the Google Cloud Translation Basic
 
 import json
 import logging
-import os
 import socket
 from typing import Dict, Any, Optional
 from urllib.parse import urlencode
@@ -19,7 +18,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 from shl._version import __version__ as SHL_VERSION
-from shl.utils.env_loader import load_shl_env, mask_api_key
+from shl.utils.env_loader import get_env_value, mask_api_key
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -48,12 +47,10 @@ class GoogleV2Adapter(TranslationProvider):
         api_key: Optional[str] = None,
         backup_api_key: Optional[str] = None,
     ):
-        # Lataa .env-tiedosto ./env/shl/-kansiosta (jos ei jo ladattu)
-        load_shl_env()
-
+        
         # Käytä annettuja avaimia tai lue ympäristömuuttujista
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        self.backup_api_key = backup_api_key or os.getenv("GOOGLE_BACKUP_API_KEY")
+        self.api_key = api_key or get_env_value("GOOGLE_API_KEY")
+        self.backup_api_key = backup_api_key or get_env_value("GOOGLE_BACKUP_API_KEY")
 
         if not self.api_key:
             raise ValueError(
@@ -161,6 +158,7 @@ class GoogleV2Adapter(TranslationProvider):
                     "User-Agent": f"SHL-Client/{SHL_VERSION}",
                     "Accept": "application/json",
                 },
+                method="POST",
             )
 
             with urlopen(req, timeout=GOOGLE_TIMEOUT) as response:

@@ -1,7 +1,7 @@
 """
 File: microsoft_translator.py — module for Microsoft Translator adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.5
+Version: 0.2.6
 License: MIT
 Description: Robust translation provider adapter for the Microsoft Translator API.
 Handles advanced features including context matching,
@@ -11,14 +11,14 @@ and security checks for suspicious output.
 
 import json
 import logging
-import os
 import socket
 from typing import Dict, Any, Optional
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 from shl._version import __version__ as SHL_VERSION
-from shl.utils.env_loader import load_shl_env, mask_api_key
+from shl.config import get_config_value
+from shl.utils.env_loader import get_env_value, mask_api_key
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -48,11 +48,9 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        # Lataa .env-tiedosto ./env/shl/-kansiosta (jos ei jo ladattu)
-        load_shl_env()
-
+    
         # Käytä annettua avainta tai lue ympäristömuuttujasta
-        self.api_key = api_key or os.getenv("MICROSOFT_TRANSLATOR_KEY")
+        self.api_key = api_key or get_env_value("MICROSOFT_TRANSLATOR_KEY")
 
         if not self.api_key:
             raise ValueError(
@@ -66,12 +64,8 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
         self.base_url = "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0"
 
         # Service-level TTL registry (ei kieliparirekisteriä)
-        ttl_env = os.getenv("MS_TRANSLATOR_TTL", "600")
-        try:
-            ttl_seconds = int(ttl_env)
-        except ValueError:
-            ttl_seconds = 600
-
+        ttl_env = float(get_config_value("ttl.microsoft_translator", "86400"))
+        
         self.registry = MicrosoftServiceRegistry(ttl_seconds=ttl_seconds)
 
         logger.debug(
@@ -167,6 +161,7 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
                     "User-Agent": f"SHL-Client/{SHL_VERSION}",
                     "Accept": "application/json",
                 },
+                method="POST",
             )
 
             with urlopen(req, timeout=MS_TIMEOUT) as response:

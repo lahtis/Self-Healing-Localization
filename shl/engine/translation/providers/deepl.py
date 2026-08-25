@@ -1,7 +1,7 @@
 """
 File: deepl.py — module for DeepL translation adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.4
+Version: 0.2.6
 License: MIT
 Description: Robust translation provider adapter for the DeepL API.
 Handles advanced features including context matching,
@@ -11,14 +11,13 @@ and security checks for suspicious output.
 
 import json
 import logging
-import os
 import socket
 from typing import Dict, Any, Optional
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 from shl._version import __version__ as SHL_VERSION
-from shl.utils.env_loader import load_shl_env, mask_api_key
+from shl.utils.env_loader import get_env_value, mask_api_key
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -49,11 +48,7 @@ class DeepLAdapter(TranslationProvider):
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        # Lataa .env-tiedosto ./env/shl/-kansiosta (jos ei jo ladattu)
-        load_shl_env()
-
-        # Käytä annettua avainta tai lue ympäristömuuttujasta
-        self.api_key = api_key or os.getenv("DEEPL_API_KEY")
+        self.api_key = api_key or get_env_value("DEEPL_API_KEY")
 
         if not self.api_key:
             raise ValueError(
@@ -157,6 +152,7 @@ class DeepLAdapter(TranslationProvider):
                     "User-Agent": f"SHL-Client/{SHL_VERSION}",
                     "Accept": "application/json",
                 },
+                method="POST",
             )
 
             with urlopen(req, timeout=DEEPL_TIMEOUT) as response:

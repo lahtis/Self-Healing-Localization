@@ -2,7 +2,7 @@
 file: papago_registry.py - Papago language pair registry.
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.4
+Version: 0.2.6
 Provides runtime blacklist tracking for Papago language pairs.
 Static support is determined by provider_cache; this registry only
 handles dynamic learning of unsupported pairs (TTL-based).
@@ -63,4 +63,3 @@ class PapagoRegistry:
     def clear_blacklist(self) -> None:
         """Clear all runtime Papago blacklist entries."""
         self._unsupported_pairs_cache.clear()
-

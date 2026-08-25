@@ -40,9 +40,15 @@ from shl.engine.translation import (
     # Apufunktiot
     clear_unavailable_cache,
     get_unavailable_cache_stats,
-    # Providerit (suoraan)
+    # Provider Adapters
     MyMemoryAdapter,
     LibreTranslateAdapter,
+    DeepLAdapter,
+    GoogleV2Adapter,
+    PapagoAdapter,
+    MicrosoftTranslatorAdapter,
+    YandexAdapter,
+    LocalTranslatorAdapter,
     # Poikkeukset
     TranslationError,
     RateLimitExceededError,
@@ -90,6 +96,8 @@ __all__ = [
     "GoogleV2Adapter",
     "PapagoAdapter",
     "MicrosoftTranslatorAdapter",
+    "YandexAdapter",
+    "LocalTranslatorAdapter",
     # Translation - poikkeukset
     "TranslationError",
     "RateLimitExceededError",

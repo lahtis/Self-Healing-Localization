@@ -2,12 +2,9 @@
 file: policy_manager.py - SHL policy manager
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.5
-
-Policy-konfiguraatio projektin juuresta (CWD).
+Version: 0.2.6
+Description: Policy-konfiguraatio projektin juuresta (CWD).
 """
-
-from __future__ import annotations
 
 import json
 import os
@@ -144,14 +141,14 @@ class ConfigManager:
             },
             "LibreTranslate": {
                 "enabled": True,
-                "allow": [],
+                "allow": ["text"],
                 "deny": ["html"],
                 "timeout": 8,
                 "requires_env": [],
                 "priority": 2
             },
             "DeepL": {
-                "enabled": False,
+                "enabled": True,
                 "allow": [],
                 "deny": [],
                 "timeout": 5,
@@ -159,28 +156,36 @@ class ConfigManager:
                 "priority": 3
             },
             "Google": {
-                "enabled": False,
-                "allow": [],
+                "enabled": True,
+                "allow": ["text", "html"],
                 "deny": [],
                 "timeout": 5,
                 "requires_env": ["GOOGLE_API_KEY"],
                 "priority": 4
             },
             "MicrosoftTranslator": {
-                "enabled": False,
-                "allow": [],
+                "enabled": True,
+                "allow": ["text", "formality",  "html"],
                 "deny": [],
                 "timeout": 5,
                 "requires_env": ["MICROSOFT_TRANSLATOR_KEY"],
                 "priority": 5
             },
             "Papago": {
-                "enabled": False,
+                "enabled": True,
                 "allow": [],
                 "deny": ["html"],
                 "timeout": 5,
                 "requires_env": ["NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"],
                 "priority": 6
+            },
+            "Yandex": {
+                "enabled": True,
+                "allow": [],
+                "deny": [],
+                "timeout": 5,
+                "requires_env": ["YANDEX_API_KEY"],
+                "priority": 7
             }
         }
 

@@ -1,24 +1,26 @@
 """
-File: local_translator_adapter.py — module for local translation adapter.
+File: local_translator.py — module for local translation adapter.
 Author: Tuomas Lähteenmäki
 Version: 0.2.6
 License: MIT
-Description: Robust translation provider adapter for the local translator API.
-Handles advanced features including context matching,
-formality adjustment, glossary mapping, registry validation,
-and security checks for suspicious output.
+Description: Translation provider adapter for the SHL local translation API.
+Builds metadata-aware translation requests, supports formality, context,
+glossary, honorifics, and HTML handling, validates language pairs through
+the local provider registry, and validates translation responses for
+unexpected or suspicious output.
 """
 
 import json
 import logging
-import os
 import socket
 from typing import Dict, Any, Optional
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 from shl._version import __version__ as SHL_VERSION
-from shl.utils.env_loader import load_shl_env, mask_api_key
+from shl.config import get_config_value
+from shl.utils.env_loader import get_env_value, mask_api_key
+
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -51,11 +53,9 @@ class LocalTranslatorAdapter(TranslationProvider):
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        # Lataa .env-tiedosto ./env/shl/-kansiosta (jos ei jo ladattu)
-        load_shl_env()
-
+  
         # Käytä annettua avainta tai lue ympäristömuuttujasta
-        self.api_key = api_key or os.getenv("LOCAL_TRANSLATOR_API_KEY")
+        self.api_key = api_key or get_env_value("LOCAL_TRANSLATOR_API_KEY")
 
         if not self.api_key:
             raise ValueError(
@@ -65,11 +65,10 @@ class LocalTranslatorAdapter(TranslationProvider):
 
         self.api_key = self.api_key.strip()
 
-        # Auto-detect local vs out endpoint
-        if self.api_key.endswith(":local"):
-            self.base_url = "https://localhost"
-        else:
-            self.base_url = "https://my.example.com"
+        self.base_url = get_config_value(
+            "providers.local.url",
+            "https://localhost",
+        ).rstrip("/")
 
         # Runtime language pair registry
         self.registry = LocalRegistry()
@@ -177,6 +176,7 @@ class LocalTranslatorAdapter(TranslationProvider):
                     "User-Agent": f"SHL-Client/{SHL_VERSION}",
                     "Accept": "application/json",
                 },
+                method="POST",
             )
 
             with urlopen(req, timeout=LOCAL_TRANSLATOR_TIMEOUT) as response:

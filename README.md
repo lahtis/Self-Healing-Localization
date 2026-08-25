@@ -3,9 +3,9 @@
 
 * **Author:**  Tuomas Lähteenmäki  
 * **License:** MIT  
-* **Version:** 0.2.5
+* **Version:** 0.2.6
 * **Type:**    Library
-* **Status:**  Stable
+* **Status:**  Dev
 
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
@@ -21,11 +21,31 @@
 - Canonical Repository (Codeberg): https://codeberg.org/lahtis/Self_Healing_Localization
 - GitHub Mirror: https://github.com/lahtis/Self-Healing-Localization
 - Documentation: https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/docs
+- Demonstration: https://youtu.be/t5veRZtt3dU?si=ADD4yS5C2VwNKx9f
 ---
 
 ## Overview
+Self‑Healing Localization Library (SHL) is a dependency‑free Python library that automates application localization and independently repairs missing translations. The library creates, updates, and synchronizes translation files throughout the application’s lifecycle without manual maintenance.
 
-Self-Healing Localization Layer (SHL) is a Python localization engine that automatically creates, synchronizes, and maintains language files throughout the lifetime of your application.
+SHL follows a self‑healing principle: when the application requests a missing translation key, the library automatically generates it, fetches a machine translation if needed, and stores the result in the correct language file. This makes localization deterministic and reduces developer workload.
+
+### Features
+* Automatic creation of missing translations
+* Automatic generation of new language files
+* BCP‑47 language code support (e.g., fi‑FI, pt‑BR, zh‑TW)
+* GLFM‑based language validation
+* Machine translation support: Microsoft Translator, DeepL, Google Translate, MyMemory, LibreTranslate, Papago Translate, Yandex Translate and Localhost.
+* Self‑healing localization pipeline
+* Unified high‑level localization engine
+* Offline and online support
+* Zero‑dependency core
+* Free and open‑source - SHL is fully free; paid providers may require separate subscriptions.
+
+### Limitations
+SHL does not process user‑audited or user‑modified files. The library does not perform self‑healing corrections on user data files or configuration files; it operates strictly within the application’s own localization layer.
+
+### Architecture
+SHL’s architecture is based on a layered model where the localization engine routes translation requests through a router to different providers. The provider layer uses configuration that defines provider priorities, timeouts, environment variables, and content filtering.
 
 ---
 
@@ -46,12 +66,21 @@ pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.5
 
 ## Environment Variables (.env)
 Create a `.env` file in your project root (optional):
-
 ```ini
 MYMEMORY_EMAIL=your@email.com
+MYMEMORY_API_KEY=your-api-key
 LIBRETRANSLATE_API_KEY=your-api-key
-LIBRETRANSLATE_URL=https://libretranslate.com
+DEEPL_API_KEY=your-api-key
+GOOGLE_API_KEY=your-api-key
+MICROSOFT_TRANSLATOR_KEY=your-api-key
+NAVER_CLIENT_ID=your-api-key
+NAVER_CLIENT_SECRET=your-api-key
+YANDEX_API_KEY=your-api-key
+LOCAL_TRANSLATOR_API_KEY=your-api-key
 ```
+
+> Environment variables are optional, but required for providers that use API keys.
+If a provider has no API key, SHL will still work offline and fall back to local translation or self‑healing behavior
 
 ## Configuration via config.conf
 Create a `config.conf` in your project root:
@@ -62,6 +91,8 @@ language = fi
 base_lang = en
 m_translation_enabled = true
 ```
+
+> The library generates `shl-config.json` and `shl-policy-config.json` automatically in the project root.
 
 ## Quick Start
 
@@ -218,9 +249,7 @@ Localization should never be a burden.
 
 With SHL, any project can become multilingual — automatically, reliably, and without manual maintenance.
 
-**No more missing translations.  
-No more incomplete language packs.  
-Localization that heals itself.**
+> **No more missing translations. No more incomplete language packs. Localization that heals itself.**
 
 
 #localization • #i18n • #l10n • #self-healing • #translation • #multilingual #json • #python • #developer-tools • #automation • #templates • #cli #ai-assisted • #language-files • #internationalization • #localization-engine

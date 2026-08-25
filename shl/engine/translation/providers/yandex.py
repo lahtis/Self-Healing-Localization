@@ -141,6 +141,7 @@ class YandexAdapter(TranslationProvider):
                     "Content-Type": "application/json",
                     "User-Agent": f"SHL-Client/{SHL_VERSION}",
                 },
+                method="POST",
             )
 
             with urlopen(req, timeout=YANDEX_TIMEOUT) as response:

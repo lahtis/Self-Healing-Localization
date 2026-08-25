@@ -1,12 +1,16 @@
 """
-LibreTranslate translation adapter.
+File: libretranslater.py — LibreTranslate translation adapter.
+Author: Tuomas Lähteenmäki
+Version: 0.2.6
+License: MIT
+Description: Robust translation provider adapter for the LibreTranslate API.
+             Handles translation requests, supported-language discovery,
+             language-pair registry validation, configurable API endpoints,
+             mirror support, API authentication, error classification,
+             and security checks for suspicious translation results.
 """
-
-from __future__ import annotations
-
 import json
 import logging
-import os
 import socket
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
@@ -14,7 +18,9 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from shl._version import __version__ as SHL_VERSION
-from shl.utils.env_loader import load_shl_env, mask_api_key
+from shl.config import get_config_value
+from shl.utils.env_loader import get_env_value, mask_api_key
+
 from ..exceptions import (
     InvalidRequestError,
     LanguageNotSupportedError,
@@ -47,18 +53,18 @@ def get_supported_languages(
     Returns:
         A list of dictionaries returned by LibreTranslate.
     """
-    # Lataa .env (jos ei jo ladattu)
-    load_shl_env()
 
     resolved_base_url = (
         base_url
-        or os.environ.get("LIBRETRANSLATE_URL")
-        or LIBRETRANSLATE_DEFAULT_URL
+        or get_config_value(
+            "providers.libretranslate.url",
+            LIBRETRANSLATE_DEFAULT_URL,
+        )
     ).rstrip("/")
 
     resolved_api_key = (
         api_key
-        or os.environ.get("LIBRETRANSLATE_API_KEY")
+        or get_env_value("LIBRETRANSLATE_API_KEY")
         or LIBRETRANSLATE_DEFAULT_API_KEY
     )
 
@@ -156,18 +162,17 @@ class LibreTranslateAdapter(TranslationProvider):
         mirror_manager: Optional[Any] = None,
         mirrors: Optional[List[Dict[str, Any]]] = None,
     ):
-        # Lataa .env-tiedosto ./env/shl/-kansiosta (jos ei jo ladattu)
-        load_shl_env()
-
         self.base_url = (
             base_url
-            or os.environ.get("LIBRETRANSLATE_URL")
-            or LIBRETRANSLATE_DEFAULT_URL
+            or get_config_value(
+                "providers.libretranslate.url",
+                LIBRETRANSLATE_DEFAULT_URL,
+            )
         ).rstrip("/")
 
         self.api_key = (
             api_key
-            or os.environ.get("LIBRETRANSLATE_API_KEY")
+            or get_env_value("LIBRETRANSLATE_API_KEY")
             or LIBRETRANSLATE_DEFAULT_API_KEY
         )
 
@@ -187,8 +192,10 @@ class LibreTranslateAdapter(TranslationProvider):
             )
 
         logger.debug(
-            f"LibreTranslateAdapter initialized (base_url={self.base_url}, "
-            f"api_key={mask_api_key(self.api_key)})"
+            "LibreTranslateAdapter initialized "
+            "(base_url=%s, api_key=%s)",
+            self.base_url,
+            mask_api_key(self.api_key),
         )
 
     @property
