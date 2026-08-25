@@ -61,7 +61,7 @@ pip install self-healing-localization
 
 ### Latest Development (TestPyPI)
 ```bash
-pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.5
+pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.9
 ```
 
 ## Environment Variables (.env)
