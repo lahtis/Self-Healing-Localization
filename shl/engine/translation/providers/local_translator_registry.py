@@ -17,7 +17,7 @@ class PairStatus:
     failure_count: int = 0
 
 
-class EngineRegistry:
+class LocalRegistry:
     def __init__(self, blacklist_threshold: int = 3, retry_after_seconds: int = 3600):
         self._status: Dict[str, Dict[Tuple[str, str], PairStatus]] = {}
         self._blacklist_threshold = blacklist_threshold

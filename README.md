@@ -3,7 +3,7 @@
 
 * **Author:**  Tuomas Lähteenmäki  
 * **License:** MIT  
-* **Version:** 0.2.6
+* **Version:** 0.2.9
 * **Type:**    Library
 * **Status:**  Dev
 

@@ -16,7 +16,7 @@ from .googlev2 import GoogleV2Adapter
 from .papago import PapagoAdapter
 from .microsoft import MicrosoftTranslatorAdapter
 from .yandex import YandexAdapter
-from .local_translalator import LocalTranslatorAdapter
+from .local_translator import LocalTranslatorAdapter
 
 
 __all__ = [

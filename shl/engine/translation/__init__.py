@@ -1,7 +1,7 @@
 """
 File: __init__.py — translation module initialization for SHL.
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.8
 License: MIT
 Description: Central export manifest for the SHL translation subsystem.
              Exposes routing interfaces, provider adapters, caching mechanics,
@@ -39,16 +39,13 @@ from .exceptions import (
 
 # Provider Adapters and Language Utilities
 from .providers.mymemory import MyMemoryAdapter
-from .providers.libretranslate import (
-    LibreTranslateAdapter,
-    get_supported_languages,
-)
+from .providers.libretranslate import (LibreTranslateAdapter, get_supported_languages)
 from .providers.deepl import DeepLAdapter
 from .providers.googlev2 import GoogleV2Adapter
 from .providers.papago import PapagoAdapter
 from .providers.microsoft import MicrosoftTranslatorAdapter
-from .yandex import YandexAdapter
-from .local_translalator import LocalTranslatorAdapter
+from .providers.yandex import YandexAdapter
+from .providers.local_translator import LocalTranslatorAdapter
 
 __all__ = [
     "__version__",
