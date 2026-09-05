@@ -28,8 +28,8 @@ from ..exceptions import (
     InvalidRequestError,
 )
 from ..metadata import TranslationRequest
-from ..errors import ErrorParser
-from ..errors.providers import GOOGLE
+from ...errors.parser import ErrorParser
+from ...errors.providers import GOOGLE
 from .base import TranslationProvider
 from .google_registry import GoogleRegistry
 

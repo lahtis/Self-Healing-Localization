@@ -27,8 +27,8 @@ from ..exceptions import (
     InvalidRequestError,
 )
 from ..metadata import TranslationRequest
-from ..errors import ErrorParser
-from ..errors.providers import DEEPL
+from ...errors.parser import ErrorParser
+from ...errors.providers import DEEPL
 from .base import TranslationProvider
 from .deepl_registry import DeepLRegistry
 

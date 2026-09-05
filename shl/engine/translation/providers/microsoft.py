@@ -30,8 +30,8 @@ from ..exceptions import (
 from ..metadata import TranslationRequest
 from .base import TranslationProvider
 from .microsoft_registry import MicrosoftServiceRegistry
-from ..errors import ErrorParser
-from ..errors.providers import MICROSOFT
+from ...errors.parser import ErrorParser
+from ...errors.providers import MICROSOFT
 
 logger = logging.getLogger(__name__)
 

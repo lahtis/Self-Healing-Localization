@@ -31,8 +31,8 @@ from ..exceptions import (
     TranslationError,
 )
 from ..metadata import TranslationRequest
-from ..errors import ErrorParser
-from ..errors.providers import LIBRETRANSLATE
+from ...errors.parser import ErrorParser
+from ...errors.providers import LIBRETRANSLATE
 from ..providers.base import TranslationProvider
 from .libretranslate_registry import LibreTranslateRegistry
 

@@ -19,8 +19,8 @@ from shl._version import __version__ as SHL_VERSION
 from shl.config import get_config_value
 from shl.utils.env_loader import get_env_value, mask_api_key
 
-from ..errors import ErrorParser
-from ..errors.providers import YANDEX
+from ...errors.parser import ErrorParser
+from ...errors.providers import YANDEX
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,

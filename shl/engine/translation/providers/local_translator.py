@@ -32,8 +32,8 @@ from ..exceptions import (
 from ..metadata import TranslationRequest
 from .base import TranslationProvider, TranslationResult
 from .local_translator_registry import LocalRegistry
-from ..errors import ErrorParser
-from ..errors.providers import LOCAL
+from ...errors.parser import ErrorParser
+from ...errors.providers import LOCAL
 
 logger = logging.getLogger(__name__)
 

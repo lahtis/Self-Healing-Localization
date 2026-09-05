@@ -20,7 +20,7 @@ from .exceptions import (
 )
 
 from .providers.mymemory import MyMemoryAdapter
-from .providers.mymemory_registry import MyMemoryServiceRegistry
+from .providers.mymemory_registry import MyMemoryRegistry
 
 from .providers.microsoft import MicrosoftTranslatorAdapter
 from .providers.microsoft_registry import MicrosoftServiceRegistry

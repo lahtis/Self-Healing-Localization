@@ -31,8 +31,8 @@ from ..exceptions import (
 from ..metadata import TranslationRequest
 from .base import TranslationProvider
 from .mymemory_registry import MyMemoryRegistry
-from ..errors import ErrorParser
-from ..errors.providers import MYMEMORY
+from ...errors.parser import ErrorParser
+from ...errors.providers import MYMEMORY
 
 
 logger = logging.getLogger(__name__)

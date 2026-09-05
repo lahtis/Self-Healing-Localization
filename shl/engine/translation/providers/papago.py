@@ -29,8 +29,8 @@ from ..exceptions import (
 from ..metadata import TranslationRequest
 from .base import TranslationProvider
 from .papago_registry import PapagoRegistry
-from ..errors import ErrorParser
-from ..errors.providers import PAPAGO
+from ...errors.parser import ErrorParser
+from ...errors.providers import PAPAGO
 
 logger = logging.getLogger(__name__)
 

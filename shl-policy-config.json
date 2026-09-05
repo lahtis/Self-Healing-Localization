@@ -1,6 +1,6 @@
 {
     "MyMemory": {
-        "enabled": false,
+        "enabled": true,
         "allow": [],
         "deny": ["html", "honorific"],
         "timeout": 10,
