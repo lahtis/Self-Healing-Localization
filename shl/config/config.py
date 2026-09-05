@@ -57,10 +57,10 @@ def _create_default_config() -> dict:
         },
         "providers": {
             "local": {
-                "url": "https://localhost:8000"
+                "url": "http://localhost:8000"
             },
             "libretranslate": {
-                "url": "https://libretranslate.com"
+                "url": "http://localhost:5002"
             },
             "yandex": {
                 "folder_id": None
@@ -157,6 +157,10 @@ def _recover_config() -> bool:
     The last known valid in-memory configuration is preferred.
     Defaults are used only if no valid configuration has been loaded yet.
     """
+    global _config_cache
+    global _config_mtime
+    global _config_loaded
+
     recovery_config = _get_recovery_config()
 
     if not _backup_broken_config():

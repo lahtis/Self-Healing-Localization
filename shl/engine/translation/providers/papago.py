@@ -1,7 +1,7 @@
 """
 File: papago.py — module for Papago translation adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.10
 License: MIT
 Description: Robust translation provider adapter for the Naver Papago API.
 Handles language pair validation, honorific support, glossary mapping,
@@ -29,6 +29,8 @@ from ..exceptions import (
 from ..metadata import TranslationRequest
 from .base import TranslationProvider
 from .papago_registry import PapagoRegistry
+from ..errors import ErrorParser
+from ..errors.providers import PAPAGO
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +110,14 @@ class PapagoAdapter(TranslationProvider):
         ttl_env = float(get_config_value("ttl.papago", "86400"))
         self.registry = PapagoRegistry(cache_ttl=ttl_env)
 
+        self.error_parser = ErrorParser(
+            provider=self.name,
+            config=PAPAGO,
+        )
+
         logger.debug(
-            f"PapagoAdapter initialized (client_id={mask_api_key(self.client_id)}, ttl={ttl_env}s)"
+            f"PapagoAdapter initialized "
+            f"(client_id={mask_api_key(self.client_id)}, ttl={ttl_env}s)"
         )
 
     @property
@@ -131,17 +139,19 @@ class PapagoAdapter(TranslationProvider):
             # 1. Staattinen tuki
             if (src, tgt) not in self.SUPPORTED_PAIRS:
                 raise LanguageNotSupportedError(
-                    f"Papago does not support language pair {request.source_lang}->{request.target_lang}"
+                    f"Papago does not support language pair "
+                    f"{request.source_lang}->{request.target_lang}"
                 )
 
             # 2. TTL-blacklist check
             if not self.registry.is_pair_supported(
                 request.source_lang,
                 request.target_lang,
-                static_supported=True
+                static_supported=True,
             ):
                 raise ServiceUnavailableError(
-                    f"Papago pair {request.source_lang}->{request.target_lang} temporarily unavailable"
+                    f"Papago pair {request.source_lang}->{request.target_lang} "
+                    "temporarily unavailable"
                 )
 
         payload = self.build_request(request)
@@ -166,16 +176,33 @@ class PapagoAdapter(TranslationProvider):
                 honorific_value = "true" if request.honorific else "false"
             elif isinstance(request.honorific, str):
                 val = request.honorific.lower().strip()
-                if val in ("true", "1", "yes", "formal", "more", "polite", "honorific"):
+                if val in (
+                    "true",
+                    "1",
+                    "yes",
+                    "formal",
+                    "more",
+                    "polite",
+                    "honorific",
+                ):
                     honorific_value = "true"
                 else:
                     honorific_value = "false"
 
         elif getattr(request, "formality", None):
             formality = str(request.formality).lower()
-            if formality in ("formal", "more", "honorific", "polite"):
+            if formality in (
+                "formal",
+                "more",
+                "honorific",
+                "polite",
+            ):
                 honorific_value = "true"
-            elif formality in ("informal", "less", "casual"):
+            elif formality in (
+                "informal",
+                "less",
+                "casual",
+            ):
                 honorific_value = "false"
 
         if honorific_value is not None:
@@ -187,14 +214,19 @@ class PapagoAdapter(TranslationProvider):
 
         return payload
 
-    def _call_api(self, payload: Dict[str, Any], request: TranslationRequest) -> str:
+    def _call_api(
+        self,
+        payload: Dict[str, Any],
+        request: TranslationRequest,
+    ) -> str:
         """Execute request against Papago API endpoint."""
         try:
             url = self.base_url
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"Papago request to {url} (client_id={mask_api_key(self.client_id)}, "
+                f"Papago request to {url} "
+                f"(client_id={mask_api_key(self.client_id)}, "
                 f"text length: {len(payload['text'])})"
             )
 
@@ -212,72 +244,97 @@ class PapagoAdapter(TranslationProvider):
             )
 
             with urlopen(req, timeout=PAPAGO_TIMEOUT) as response:
-                response_data = json.loads(response.read().decode("utf-8"))
+                response_data = json.loads(
+                    response.read().decode("utf-8")
+                )
 
                 message = response_data.get("message", {})
                 result = message.get("result", {})
                 translated = result.get("translatedText")
 
                 if not translated:
-                    raise TranslationError("Papago returned an empty translation payload")
+                    raise TranslationError(
+                        "Papago returned an empty translation payload"
+                    )
 
                 # --- SECURITY CHECKS ---
                 if not translated or translated.strip() == "":
-                    raise TranslationError("Papago returned empty text.")
+                    raise TranslationError(
+                        "Papago returned empty text."
+                    )
 
                 if translated.strip() == payload["text"].strip():
-                    raise TranslationError("Papago returned unchanged text.")
+                    raise TranslationError(
+                        "Papago returned unchanged text."
+                    )
 
                 if not getattr(request, "html_format", False):
                     if "<" in translated and ">" in translated:
-                        raise TranslationError("Papago returned unexpected HTML markup.")
+                        raise TranslationError(
+                            "Papago returned unexpected HTML markup."
+                        )
 
                 if len(translated) < 3 and len(payload["text"]) > 20:
-                    raise TranslationError("Papago returned suspiciously short output.")
+                    raise TranslationError(
+                        "Papago returned suspiciously short output."
+                    )
 
                 logger.debug("Papago translation successful")
                 return translated
 
         except HTTPError as e:
-            code = e.code
             try:
-                error_body = e.read().decode("utf-8")
+                error_body = e.read().decode(
+                    "utf-8",
+                    errors="replace",
+                )
             except Exception:
                 error_body = ""
 
-            if code in (401, 403):
-                raise ProviderAccessError(
-                    "Papago: Invalid or unauthorized API credentials (Client ID / Secret)"
-                )
-
-            if code == 429:
-                raise RateLimitExceededError("Papago: Rate limit or quota exceeded (HTTP 429)")
-
-            if code == 400:
-                # Mark pair as unsupported in TTL registry
-                if request.source_lang and request.source_lang.lower() != "auto":
-                    self.registry.mark_pair_unsupported(request.source_lang, request.target_lang)
-                
-                raise InvalidRequestError(
-                    f"Papago: Invalid request parameters (HTTP 400). Body: {error_body[:200]}"
-                )
-
-            if code in (500, 502, 503, 504):
-                raise ServiceUnavailableError(
-                    f"Papago: Remote endpoint or gateway issue (HTTP {code})"
-                )
-
-            raise TranslationError(
-                f"Papago HTTP error status code: {code}. Body: {error_body[:200]}"
+            normalized = self.error_parser.parse(
+                error_body,
+                http_status=e.code,
             )
 
-        except URLError as e:
-            if isinstance(e.reason, (socket.timeout, TimeoutError)):
-                raise ServiceUnavailableError("Papago network timeout reached")
-            raise ServiceUnavailableError(f"Papago socket pipeline failure: {e.reason}")
+            if normalized is None:
+                raise TranslationError(
+                    f"Papago HTTP error status code: {e.code}"
+                ) from e
 
-        except (socket.timeout, TimeoutError):
-            raise ServiceUnavailableError("Papago connection timeout reached")
+            if normalized.code in {
+                "LANG_UNSUPPORTED",
+                "LANG_PAIR_UNSUPPORTED",
+            }:
+                if (
+                    request.source_lang
+                    and request.source_lang.lower() != "auto"
+                ):
+                    self.registry.mark_pair_unsupported(
+                        request.source_lang,
+                        request.target_lang,
+                    )
+
+            raise self._map_normalized_error(
+                normalized
+            ) from e
+
+        except URLError as e:
+            normalized = self.error_parser.parse(
+                exception=e,
+            )
+
+            raise self._map_normalized_error(
+                normalized
+            ) from e
+
+        except (socket.timeout, TimeoutError) as e:
+            normalized = self.error_parser.parse(
+                exception=e,
+            )
+
+            raise self._map_normalized_error(
+                normalized
+            ) from e
 
         except Exception as e:
             if isinstance(
@@ -297,3 +354,63 @@ class PapagoAdapter(TranslationProvider):
                 f"Papago unexpected execution layer failure: "
                 f"{type(e).__name__}: {e}"
             )
+
+    def _map_normalized_error(self, error) -> Exception:
+        """Map a normalized SHL error to existing Papago exceptions."""
+
+        if error.code == "RATE_LIMIT_EXCEEDED":
+            return RateLimitExceededError(
+                error.message
+                or "Papago rate limit exceeded."
+            )
+
+        if error.code == "QUOTA_EXCEEDED":
+            return RateLimitExceededError(
+                error.message
+                or "Papago quota exceeded."
+            )
+
+        if error.code in {
+            "TIMEOUT",
+            "SERVICE_UNAVAILABLE",
+        }:
+            return ServiceUnavailableError(
+                error.message
+                or "Papago service unavailable."
+            )
+
+        if error.code in {
+            "AUTH_FAILED",
+            "AUTH_EXPIRED",
+            "AUTH_BLOCKED",
+            "ACCESS_DENIED",
+        }:
+            return ProviderAccessError(
+                error.message
+                or "Papago access denied."
+            )
+
+        if error.code in {
+            "LANG_UNSUPPORTED",
+            "LANG_PAIR_UNSUPPORTED",
+        }:
+            return LanguageNotSupportedError(
+                error.message
+                or "Papago language is not supported."
+            )
+
+        if error.code in {
+            "INVALID_REQUEST",
+            "TEXT_TOO_LONG",
+            "REQUEST_TOO_LONG",
+            "METHOD_NOT_ALLOWED",
+        }:
+            return InvalidRequestError(
+                error.message
+                or "Papago request is invalid."
+            )
+
+        return TranslationError(
+            error.message
+            or "Papago translation failed."
+        )

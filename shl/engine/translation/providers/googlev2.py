@@ -1,7 +1,7 @@
 """
 File: googlev2.py — Google Cloud Translation adapter (Basic v2, API-key auth).
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.10
 License: MIT
 Description: Translation provider adapter for the Google Cloud Translation Basic (v2) API.
              Dependency-free (stdlib urllib only). Includes secondary API key failover,
@@ -28,6 +28,8 @@ from ..exceptions import (
     InvalidRequestError,
 )
 from ..metadata import TranslationRequest
+from ..errors import ErrorParser
+from ..errors.providers import GOOGLE
 from .base import TranslationProvider
 from .google_registry import GoogleRegistry
 
@@ -47,10 +49,12 @@ class GoogleV2Adapter(TranslationProvider):
         api_key: Optional[str] = None,
         backup_api_key: Optional[str] = None,
     ):
-        
-        # Käytä annettuja avaimia tai lue ympäristömuuttujista
+        # Use provided keys or read from environment variables
         self.api_key = api_key or get_env_value("GOOGLE_API_KEY")
-        self.backup_api_key = backup_api_key or get_env_value("GOOGLE_BACKUP_API_KEY")
+        self.backup_api_key = (
+            backup_api_key
+            or get_env_value("GOOGLE_BACKUP_API_KEY")
+        )
 
         if not self.api_key:
             raise ValueError(
@@ -59,15 +63,27 @@ class GoogleV2Adapter(TranslationProvider):
             )
 
         self.api_key = self.api_key.strip()
+
         if self.backup_api_key:
             self.backup_api_key = self.backup_api_key.strip()
-        self.has_backup = bool(self.backup_api_key) and self.backup_api_key != self.api_key
+
+        self.has_backup = (
+            bool(self.backup_api_key)
+            and self.backup_api_key != self.api_key
+        )
 
         # Runtime language pair registry (validation + learning)
         self.registry = GoogleRegistry()
 
+        # Provider-independent error parser
+        self.error_parser = ErrorParser(
+            provider=self.name,
+            config=GOOGLE,
+        )
+
         logger.debug(
-            f"GoogleV2Adapter initialized (api_key={mask_api_key(self.api_key)}, "
+            f"GoogleV2Adapter initialized "
+            f"(api_key={mask_api_key(self.api_key)}, "
             f"has_backup={self.has_backup})"
         )
 
@@ -99,7 +115,12 @@ class GoogleV2Adapter(TranslationProvider):
         payload = self.build_request(request)
 
         try:
-            return self._call_api(api_key=self.api_key, payload=payload, is_backup=False)
+            return self._call_api(
+                api_key=self.api_key,
+                payload=payload,
+                is_backup=False,
+            )
+
         except (
             ProviderAccessError,
             RateLimitExceededError,
@@ -110,17 +131,29 @@ class GoogleV2Adapter(TranslationProvider):
                 raise primary_err
 
             logger.warning(
-                f"Primary Google Cloud Translation request failed ({type(primary_err).__name__}). "
+                f"Primary Google Cloud Translation request failed "
+                f"({type(primary_err).__name__}). "
                 "Initiating failover to backup API key."
             )
 
             try:
-                return self._call_api(api_key=self.backup_api_key, payload=payload, is_backup=True)
+                return self._call_api(
+                    api_key=self.backup_api_key,
+                    payload=payload,
+                    is_backup=True,
+                )
+
             except Exception as backup_err:
-                logger.error(f"Backup Google Cloud Translation also failed: {backup_err}")
+                logger.error(
+                    f"Backup Google Cloud Translation also failed: "
+                    f"{backup_err}"
+                )
                 raise primary_err from backup_err
 
-    def build_request(self, request: TranslationRequest) -> Dict[str, Any]:
+    def build_request(
+        self,
+        request: TranslationRequest,
+    ) -> Dict[str, Any]:
         """Build Google Cloud Translation Basic (v2) API JSON payload."""
         payload: Dict[str, Any] = {
             "q": [request.text],
@@ -133,6 +166,52 @@ class GoogleV2Adapter(TranslationProvider):
 
         return payload
 
+    def _raise_normalized_error(self, error) -> None:
+        """
+        Convert a normalized SHL error into the existing adapter
+        exception hierarchy.
+        """
+
+        message = error.message or (
+            f"Google Translate request failed: {error.code}"
+        )
+
+        if error.code == "RATE_LIMIT_EXCEEDED":
+            raise RateLimitExceededError(message)
+
+        if error.code == "QUOTA_EXCEEDED":
+            raise RateLimitExceededError(message)
+
+        if error.code in {
+            "TIMEOUT",
+            "SERVICE_UNAVAILABLE",
+        }:
+            raise ServiceUnavailableError(message)
+
+        if error.code in {
+            "AUTH_FAILED",
+            "AUTH_EXPIRED",
+            "AUTH_BLOCKED",
+            "ACCESS_DENIED",
+        }:
+            raise ProviderAccessError(message)
+
+        if error.code in {
+            "LANG_UNSUPPORTED",
+            "LANG_PAIR_UNSUPPORTED",
+        }:
+            raise LanguageNotSupportedError(message)
+
+        if error.code in {
+            "INVALID_REQUEST",
+            "TEXT_TOO_LONG",
+            "REQUEST_TOO_LONG",
+            "METHOD_NOT_ALLOWED",
+        }:
+            raise InvalidRequestError(message)
+
+        raise TranslationError(message)
+
     def _call_api(
         self,
         api_key: str,
@@ -140,10 +219,12 @@ class GoogleV2Adapter(TranslationProvider):
         is_backup: bool = False,
     ) -> str:
         """Low-level HTTP call executor via urllib."""
+
         url = f"{GOOGLE_V2_ENDPOINT}?{urlencode({'key': api_key})}"
 
         request_data = json.dumps(payload).encode("utf-8")
         target_type = "Backup" if is_backup else "Primary"
+
         logger.debug(
             f"{target_type} Google translation request "
             f"(api_key={mask_api_key(api_key)})"
@@ -161,133 +242,165 @@ class GoogleV2Adapter(TranslationProvider):
                 method="POST",
             )
 
-            with urlopen(req, timeout=GOOGLE_TIMEOUT) as response:
-                response_data = json.loads(response.read().decode("utf-8"))
+            with urlopen(
+                req,
+                timeout=GOOGLE_TIMEOUT,
+            ) as response:
+
+                raw_response = response.read().decode("utf-8")
+
+                try:
+                    response_data = json.loads(raw_response)
+                except json.JSONDecodeError:
+                    error = self.error_parser.parse(
+                        raw_response,
+                        http_status=response.status,
+                    )
+                    self._raise_normalized_error(error)
+
+                if not isinstance(response_data, dict):
+                    error = self.error_parser.parse(
+                        raw_response,
+                        http_status=response.status,
+                    )
+                    self._raise_normalized_error(error)
 
                 if "error" in response_data:
-                    return self._handle_api_error(response_data["error"], payload)
+                    error = self.error_parser.parse(
+                        response_data,
+                        http_status=response.status,
+                    )
+                    self._raise_normalized_error(error)
 
-                translations = response_data.get("data", {}).get("translations", [])
+                translations = response_data.get(
+                    "data",
+                    {},
+                ).get(
+                    "translations",
+                    [],
+                )
+
                 if not translations:
-                    raise TranslationError("Google Translate returned empty translations payload")
+                    raise TranslationError(
+                        "Google Translate returned empty "
+                        "translations payload"
+                    )
 
-                translated = translations[0].get("translatedText", "")
-                detected = translations[0].get("detectedSourceLanguage", "").lower()
+                translated = translations[0].get(
+                    "translatedText",
+                    "",
+                )
+
+                detected = translations[0].get(
+                    "detectedSourceLanguage",
+                    "",
+                ).lower()
 
                 # --- SECURITY CHECK: Google output validation ---
 
                 # 1. Empty or unchanged output
                 if not translated or translated.strip() == "":
-                    raise TranslationError("Google Translate returned empty text.")
+                    raise TranslationError(
+                        "Google Translate returned empty text."
+                    )
 
                 if translated.strip() == payload["q"][0].strip():
-                    raise TranslationError("Google Translate returned unchanged text.")
+                    raise TranslationError(
+                        "Google Translate returned unchanged text."
+                    )
 
                 # 2. Unexpected detected source language
                 if "source" in payload:
                     declared = payload["source"].lower()
+
                     if detected and detected != declared:
                         raise TranslationError(
-                            f"Google detected unexpected source language '{detected}' "
-                            f"for input declared as '{declared}'."
+                            f"Google detected unexpected source language "
+                            f"'{detected}' for input declared as "
+                            f"'{declared}'."
                         )
 
                 # 3. Unexpected HTML markup
                 if payload["format"] == "text":
                     if "<" in translated and ">" in translated:
-                        raise TranslationError("Google Translate returned unexpected HTML markup.")
+                        raise TranslationError(
+                            "Google Translate returned unexpected "
+                            "HTML markup."
+                        )
 
                 # 4. Suspiciously short output
                 if len(translated) < 3 and len(payload["q"][0]) > 20:
-                    raise TranslationError("Google Translate returned suspiciously short output.")
+                    raise TranslationError(
+                        "Google Translate returned suspiciously "
+                        "short output."
+                    )
 
                 logger.debug("Google Translate success")
                 return translated
 
         except HTTPError as e:
-            code = e.code
+            response_data = None
 
-            # Access / auth
-            if code in (401, 403):
-                raise ProviderAccessError("Google Translate: Unauthorized or forbidden API key")
+            try:
+                raw_body = e.read().decode("utf-8")
 
-            # Rate limits
-            elif code == 429:
-                raise RateLimitExceededError("Google Translate: Rate limit exceeded (HTTP 429)")
+                if raw_body:
+                    response_data = json.loads(raw_body)
 
-            # Request errors
-            elif code == 400:
-                self._mark_unsupported_if_needed(payload)
-                raise InvalidRequestError("Google Translate: Invalid request (HTTP 400)")
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                response_data = None
 
-            elif code in (409, 413, 415, 422):
-                self._mark_unsupported_if_needed(payload)
-                raise InvalidRequestError(f"Google Translate: Request not acceptable ({code})")
+            if response_data is None:
+                response_data = {}
 
-            # Server errors
-            elif code in (500, 502, 503, 504):
-                raise ServiceUnavailableError(f"Google Translate: Server or gateway error ({code})")
+            error = self.error_parser.parse(
+                response_data,
+                http_status=e.code,
+            )
 
-            else:
-                raise TranslationError(f"Google Translate HTTP error: {code}")
+            self._raise_normalized_error(error)
 
         except URLError as e:
-            if isinstance(e.reason, (socket.timeout, TimeoutError)):
-                raise ServiceUnavailableError("Google Translate network timeout reached")
-            raise ServiceUnavailableError(f"Google Translate socket failure: {e.reason}")
+            if isinstance(
+                e.reason,
+                (socket.timeout, TimeoutError),
+            ):
+                error = self.error_parser.parse(
+                    {},
+                    exception=TimeoutError(
+                        "Google Translate network timeout reached"
+                    ),
+                )
+            else:
+                error = self.error_parser.parse(
+                    {},
+                    exception=ConnectionError(
+                        f"Google Translate socket failure: {e.reason}"
+                    ),
+                )
 
-        except (socket.timeout, TimeoutError):
-            raise ServiceUnavailableError("Google Translate connection timeout reached")
+            self._raise_normalized_error(error)
+
+        except (socket.timeout, TimeoutError) as e:
+            error = self.error_parser.parse(
+                {},
+                exception=e,
+            )
+            self._raise_normalized_error(error)
+
+        except (
+            RateLimitExceededError,
+            ServiceUnavailableError,
+            LanguageNotSupportedError,
+            ProviderAccessError,
+            InvalidRequestError,
+            TranslationError,
+        ):
+            raise
 
         except Exception as e:
-            if isinstance(
-                e,
-                (
-                    RateLimitExceededError,
-                    ServiceUnavailableError,
-                    LanguageNotSupportedError,
-                    ProviderAccessError,
-                    InvalidRequestError,
-                    TranslationError,
-                ),
-            ):
-                raise
-
-            raise TranslationError(
-                f"Google Translate unexpected execution layer failure: "
-                f"{type(e).__name__}: {e}"
+            error = self.error_parser.parse(
+                {},
+                exception=e,
             )
-
-    # --- INTERNAL HELPERS -----------------------------------------------------
-
-    def _handle_api_error(self, error: Dict[str, Any], payload: Dict[str, Any]) -> str:
-        """Handle Google API error JSON structure."""
-        code = error.get("code", 0)
-        message = error.get("message", "Unknown Google API error")
-
-        if code in (401, 403):
-            raise ProviderAccessError(message)
-
-        elif code == 429:
-            raise RateLimitExceededError(message)
-
-        elif code == 400:
-            self._mark_unsupported_if_needed(payload)
-            raise InvalidRequestError(message)
-
-        elif code in (409, 413, 415, 422):
-            self._mark_unsupported_if_needed(payload)
-            raise InvalidRequestError(message)
-
-        elif code in (500, 502, 503, 504):
-            raise ServiceUnavailableError(message)
-
-        raise TranslationError(message)
-
-    def _mark_unsupported_if_needed(self, payload: Dict[str, Any]) -> None:
-        """Mark language pair unsupported if source language is explicitly declared."""
-        if "source" in payload:
-            self.registry.mark_pair_unsupported(
-                payload["source"],
-                payload["target"],
-            )
+            self._raise_normalized_error(error)

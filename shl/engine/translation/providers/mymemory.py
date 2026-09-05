@@ -1,7 +1,7 @@
 """
 File: mymemory.py — module for MyMemory translation adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.10
 License: MIT
 Description: Robust translation provider adapter for the MyMemory API.
 Handles optional email-based quota enhancement, optional private
@@ -31,6 +31,8 @@ from ..exceptions import (
 from ..metadata import TranslationRequest
 from .base import TranslationProvider
 from .mymemory_registry import MyMemoryRegistry
+from ..errors import ErrorParser
+from ..errors.providers import MYMEMORY
 
 
 logger = logging.getLogger(__name__)
@@ -87,6 +89,11 @@ class MyMemoryAdapter(TranslationProvider):
 
         if cache_ttl is not None:
             _registry.cache_ttl = cache_ttl
+
+        self.error_parser = ErrorParser(
+            provider=self.name,
+            config=MYMEMORY,
+        )
 
         logger.debug(
             "MyMemoryAdapter initialized "
@@ -273,49 +280,17 @@ class MyMemoryAdapter(TranslationProvider):
 
             # --- STATUS HANDLING ---
 
-            if response_status in (401, 403):
-                raise ProviderAccessError(
-                    "MyMemory: access denied"
+            if response_status != 200:
+                normalized = self.error_parser.parse(
+                    response_data,
+                    http_status=response_status,
                 )
 
-            if response_status == 429:
-                raise RateLimitExceededError(
-                    "MyMemory: rate limit exceeded"
-                )
-
-            if (
-                isinstance(response_status, int)
-                and response_status >= 500
-            ):
-                raise ServiceUnavailableError(
-                    "MyMemory: server error "
-                    f"{response_status}"
-                )
-
-            if response_status == 404:
-                raise LanguageNotSupportedError(
-                    "MyMemory: language not supported"
-                )
-
-            if response_status == 400:
-                body = json.dumps(
-                    response_data
-                ).lower()
-
-                if (
-                    "language" in body
-                    or "invalid" in body
-                ):
-                    raise LanguageNotSupportedError(
-                        "MyMemory: language not supported"
+                if normalized is not None:
+                    raise self._map_normalized_error(
+                        normalized
                     )
 
-                raise InvalidRequestError(
-                    "MyMemory: bad request "
-                    f"{response_status}"
-                )
-
-            if response_status != 200:
                 raise TranslationError(
                     "MyMemory: unexpected status "
                     f"{response_status}"
@@ -381,71 +356,49 @@ class MyMemoryAdapter(TranslationProvider):
             return translated
 
         except HTTPError as error:
-            if error.code in (401, 403):
-                raise ProviderAccessError(
+            response_body = None
+
+            try:
+                response_body = error.read().decode(
+                    "utf-8",
+                    errors="replace",
+                )
+            except Exception:
+                response_body = None
+
+            normalized = self.error_parser.parse(
+                response_body,
+                http_status=error.code,
+            )
+
+            if normalized is None:
+                raise TranslationError(
                     f"MyMemory HTTP {error.code}"
                 ) from error
 
-            if error.code == 429:
-                raise RateLimitExceededError(
-                    "MyMemory HTTP 429"
-                ) from error
-
-            if error.code >= 500:
-                raise ServiceUnavailableError(
-                    f"MyMemory HTTP {error.code}"
-                ) from error
-
-            if error.code == 404:
-                raise LanguageNotSupportedError(
-                    "MyMemory: language not supported"
-                ) from error
-
-            if error.code == 400:
-                try:
-                    body = error.read().decode(
-                        "utf-8",
-                        errors="replace",
-                    ).lower()
-                except Exception:
-                    body = ""
-
-                if (
-                    "language" in body
-                    or "invalid" in body
-                ):
-                    raise LanguageNotSupportedError(
-                        "MyMemory: language not supported"
-                    ) from error
-
-                raise InvalidRequestError(
-                    "MyMemory HTTP 400"
-                ) from error
-
-            raise TranslationError(
-                f"MyMemory HTTP {error.code}"
+            raise self._map_normalized_error(
+                normalized
             ) from error
 
         except URLError as error:
-            if isinstance(
-                error.reason,
-                (socket.timeout, TimeoutError),
-            ):
-                raise ServiceUnavailableError(
-                    "MyMemory timeout"
-                ) from error
+            normalized = self.error_parser.parse(
+                exception=error,
+            )
 
-            raise ServiceUnavailableError(
-                "MyMemory network error: "
-                f"{error.reason}"
+            raise self._map_normalized_error(
+                normalized
             ) from error
 
         except (
             socket.timeout,
             TimeoutError,
         ) as error:
-            raise ServiceUnavailableError(
-                "MyMemory timeout"
+            normalized = self.error_parser.parse(
+                exception=error,
+            )
+
+            raise self._map_normalized_error(
+                normalized
             ) from error
 
         except (
@@ -468,3 +421,57 @@ class MyMemoryAdapter(TranslationProvider):
                 "MyMemory unexpected error: "
                 f"{type(error).__name__}: {error}"
             ) from error
+
+    @staticmethod
+    def _map_normalized_error(error) -> Exception:
+        """Map a normalized SHL error to existing adapter exceptions."""
+
+        if error.code == "RATE_LIMIT_EXCEEDED":
+            return RateLimitExceededError(
+                error.message or "MyMemory rate limit exceeded."
+            )
+
+        if error.code == "QUOTA_EXCEEDED":
+            return RateLimitExceededError(
+                error.message or "MyMemory quota exceeded."
+            )
+
+        if error.code in {
+            "TIMEOUT",
+            "SERVICE_UNAVAILABLE",
+        }:
+            return ServiceUnavailableError(
+                error.message or "MyMemory service unavailable."
+            )
+
+        if error.code in {
+            "AUTH_FAILED",
+            "AUTH_EXPIRED",
+            "AUTH_BLOCKED",
+            "ACCESS_DENIED",
+        }:
+            return ProviderAccessError(
+                error.message or "MyMemory access denied."
+            )
+
+        if error.code in {
+            "LANG_UNSUPPORTED",
+            "LANG_PAIR_UNSUPPORTED",
+        }:
+            return LanguageNotSupportedError(
+                error.message or "MyMemory language is not supported."
+            )
+
+        if error.code in {
+            "INVALID_REQUEST",
+            "TEXT_TOO_LONG",
+            "REQUEST_TOO_LONG",
+            "METHOD_NOT_ALLOWED",
+        }:
+            return InvalidRequestError(
+                error.message or "MyMemory request is invalid."
+            )
+
+        return TranslationError(
+            error.message or "MyMemory translation failed."
+        )

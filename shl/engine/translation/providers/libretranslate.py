@@ -1,7 +1,7 @@
 """
 File: libretranslater.py — LibreTranslate translation adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.10
 License: MIT
 Description: Robust translation provider adapter for the LibreTranslate API.
              Handles translation requests, supported-language discovery,
@@ -9,6 +9,7 @@ Description: Robust translation provider adapter for the LibreTranslate API.
              mirror support, API authentication, error classification,
              and security checks for suspicious translation results.
 """
+
 import json
 import logging
 import socket
@@ -30,6 +31,8 @@ from ..exceptions import (
     TranslationError,
 )
 from ..metadata import TranslationRequest
+from ..errors import ErrorParser
+from ..errors.providers import LIBRETRANSLATE
 from ..providers.base import TranslationProvider
 from .libretranslate_registry import LibreTranslateRegistry
 
@@ -40,6 +43,53 @@ LIBRETRANSLATE_TIMEOUT = 15
 LIBRETRANSLATE_LANGUAGES_TIMEOUT = 10
 LIBRETRANSLATE_DEFAULT_URL = "https://libretranslate.com"
 LIBRETRANSLATE_DEFAULT_API_KEY = ""
+
+
+def _raise_normalized_error(error) -> None:
+    """
+    Convert a normalized SHL error into the existing
+    LibreTranslate adapter exception hierarchy.
+    """
+
+    message = error.message or (
+        f"LibreTranslate request failed: {error.code}"
+    )
+
+    if error.code == "RATE_LIMIT_EXCEEDED":
+        raise RateLimitExceededError(message)
+
+    if error.code == "QUOTA_EXCEEDED":
+        raise RateLimitExceededError(message)
+
+    if error.code in {
+        "TIMEOUT",
+        "SERVICE_UNAVAILABLE",
+    }:
+        raise ServiceUnavailableError(message)
+
+    if error.code in {
+        "AUTH_FAILED",
+        "AUTH_EXPIRED",
+        "AUTH_BLOCKED",
+        "ACCESS_DENIED",
+    }:
+        raise ProviderAccessError(message)
+
+    if error.code in {
+        "LANG_UNSUPPORTED",
+        "LANG_PAIR_UNSUPPORTED",
+    }:
+        raise LanguageNotSupportedError(message)
+
+    if error.code in {
+        "INVALID_REQUEST",
+        "TEXT_TOO_LONG",
+        "REQUEST_TOO_LONG",
+        "METHOD_NOT_ALLOWED",
+    }:
+        raise InvalidRequestError(message)
+
+    raise TranslationError(message)
 
 
 def get_supported_languages(
@@ -82,65 +132,87 @@ def get_supported_languages(
         method="GET",
     )
 
+    error_parser = ErrorParser(
+        provider="libretranslate",
+        config=LIBRETRANSLATE,
+    )
+
     try:
         with urlopen(
             request,
             timeout=timeout,
         ) as response:
-            payload = json.loads(
-                response.read().decode("utf-8")
-            )
+            raw_response = response.read().decode("utf-8")
+
+            try:
+                payload = json.loads(raw_response)
+            except json.JSONDecodeError:
+                error = error_parser.parse(
+                    raw_response,
+                    http_status=response.status,
+                )
+                _raise_normalized_error(error)
 
     except HTTPError as error:
-        if error.code in (401, 403):
-            raise ProviderAccessError(
-                "LibreTranslate: access denied "
-                "when retrieving supported languages"
-            ) from error
+        try:
+            error_body = error.read().decode(
+                "utf-8",
+                errors="replace",
+            )
+        except Exception:
+            error_body = ""
 
-        if error.code == 429:
-            raise RateLimitExceededError(
-                "LibreTranslate: rate limit exceeded "
-                "when retrieving supported languages"
-            ) from error
+        try:
+            response_data = json.loads(error_body)
+        except json.JSONDecodeError:
+            response_data = {}
 
-        if error.code >= 500:
-            raise ServiceUnavailableError(
-                "LibreTranslate: server error "
-                f"{error.code} from /languages"
-            ) from error
+        normalized_error = error_parser.parse(
+            response_data,
+            http_status=error.code,
+        )
 
-        raise TranslationError(
-            "LibreTranslate: HTTP error "
-            f"{error.code} from /languages"
-        ) from error
+        _raise_normalized_error(normalized_error)
 
     except URLError as error:
         if isinstance(
             error.reason,
             (socket.timeout, TimeoutError),
         ):
-            raise ServiceUnavailableError(
-                "LibreTranslate: timeout "
-                "when retrieving supported languages"
-            ) from error
+            normalized_error = error_parser.parse(
+                {},
+                exception=TimeoutError(
+                    "LibreTranslate: timeout "
+                    "when retrieving supported languages"
+                ),
+            )
+        else:
+            normalized_error = error_parser.parse(
+                {},
+                exception=ConnectionError(
+                    "LibreTranslate: network error "
+                    f"when retrieving supported languages: {error.reason}"
+                ),
+            )
 
-        raise ServiceUnavailableError(
-            "LibreTranslate: network error "
-            f"when retrieving supported languages: {error.reason}"
-        ) from error
+        _raise_normalized_error(normalized_error)
 
     except (socket.timeout, TimeoutError) as error:
-        raise ServiceUnavailableError(
-            "LibreTranslate: timeout "
-            "when retrieving supported languages"
-        ) from error
+        normalized_error = error_parser.parse(
+            {},
+            exception=error,
+        )
+        _raise_normalized_error(normalized_error)
 
-    except json.JSONDecodeError as error:
-        raise TranslationError(
-            "LibreTranslate: invalid JSON response "
-            "from /languages"
-        ) from error
+    except (
+        RateLimitExceededError,
+        ServiceUnavailableError,
+        LanguageNotSupportedError,
+        ProviderAccessError,
+        InvalidRequestError,
+        TranslationError,
+    ):
+        raise
 
     if not isinstance(payload, list):
         raise TranslationError(
@@ -191,6 +263,11 @@ class LibreTranslateAdapter(TranslationProvider):
                 mirrors=mirrors
             )
 
+        self.error_parser = ErrorParser(
+            provider=self.name,
+            config=LIBRETRANSLATE,
+        )
+
         logger.debug(
             "LibreTranslateAdapter initialized "
             "(base_url=%s, api_key=%s)",
@@ -219,6 +296,7 @@ class LibreTranslateAdapter(TranslationProvider):
         """
         Translate text using LibreTranslate API.
         """
+
         source = request.source_lang
         target = request.target_lang
 
@@ -249,6 +327,7 @@ class LibreTranslateAdapter(TranslationProvider):
         request: TranslationRequest,
     ) -> Dict[str, Any]:
         """Build LibreTranslate API request."""
+
         payload: Dict[str, Any] = {
             "q": request.text,
             "source": request.source_lang,
@@ -268,6 +347,7 @@ class LibreTranslateAdapter(TranslationProvider):
         If a mirror manager is available, use its best mirror.
         Otherwise use the configured base URL.
         """
+
         if self.mirror_manager is not None:
             mirror = self.mirror_manager.get_best_mirror()
 
@@ -285,12 +365,14 @@ class LibreTranslateAdapter(TranslationProvider):
         payload: Dict[str, Any],
     ) -> str:
         """Call LibreTranslate /translate."""
+
         source = payload.get("source", "")
         target = payload.get("target", "")
         base_url = self._get_translation_base_url()
 
         try:
             url = f"{base_url}/translate"
+
             request_data = json.dumps(
                 payload
             ).encode("utf-8")
@@ -318,9 +400,16 @@ class LibreTranslateAdapter(TranslationProvider):
                 request,
                 timeout=LIBRETRANSLATE_TIMEOUT,
             ) as response:
-                response_data = json.loads(
-                    response.read().decode("utf-8")
-                )
+                raw_response = response.read().decode("utf-8")
+
+                try:
+                    response_data = json.loads(raw_response)
+                except json.JSONDecodeError:
+                    normalized_error = self.error_parser.parse(
+                        raw_response,
+                        http_status=response.status,
+                    )
+                    _raise_normalized_error(normalized_error)
 
             translated = response_data.get(
                 "translatedText"
@@ -337,7 +426,7 @@ class LibreTranslateAdapter(TranslationProvider):
                 )
                 return translated
 
-            raise ServiceUnavailableError(
+            raise TranslationError(
                 "LibreTranslate returned empty "
                 "or unmodified text"
             )
@@ -356,61 +445,46 @@ class LibreTranslateAdapter(TranslationProvider):
                 error_body,
             )
 
-            if error.code == 403:
-                raise ProviderAccessError(
-                    "LibreTranslate: access denied "
-                    "(invalid or banned API key)"
-                ) from error
+            try:
+                response_data = json.loads(error_body)
+            except json.JSONDecodeError:
+                response_data = {}
 
-            if error.code == 429:
-                raise RateLimitExceededError(
-                    "LibreTranslate: rate limit exceeded"
-                ) from error
+            normalized_error = self.error_parser.parse(
+                response_data,
+                http_status=error.code,
+            )
 
-            if error.code >= 500:
-                raise ServiceUnavailableError(
-                    f"LibreTranslate: server error {error.code}"
-                ) from error
-
-            if error.code == 404:
-                raise LanguageNotSupportedError(
-                    "LibreTranslate: language not supported "
-                    f"(HTTP {error.code})"
-                ) from error
-
-            if error.code == 400:
-                if "language" in error_body.lower():
-                    raise LanguageNotSupportedError(
-                        "LibreTranslate: language not supported "
-                        f"(HTTP {error.code})"
-                    ) from error
-
-                raise InvalidRequestError(
-                    f"LibreTranslate: bad request {error.code}"
-                ) from error
-
-            raise TranslationError(
-                f"LibreTranslate: HTTP error {error.code}"
-            ) from error
+            _raise_normalized_error(normalized_error)
 
         except URLError as error:
             if isinstance(
                 error.reason,
                 (socket.timeout, TimeoutError),
             ):
-                raise ServiceUnavailableError(
-                    "LibreTranslate: request timeout"
-                ) from error
+                normalized_error = self.error_parser.parse(
+                    {},
+                    exception=TimeoutError(
+                        "LibreTranslate: request timeout"
+                    ),
+                )
+            else:
+                normalized_error = self.error_parser.parse(
+                    {},
+                    exception=ConnectionError(
+                        "LibreTranslate: network error "
+                        f"{error.reason}"
+                    ),
+                )
 
-            raise ServiceUnavailableError(
-                "LibreTranslate: network error "
-                f"{error.reason}"
-            ) from error
+            _raise_normalized_error(normalized_error)
 
         except (socket.timeout, TimeoutError) as error:
-            raise ServiceUnavailableError(
-                "LibreTranslate: request timeout"
-            ) from error
+            normalized_error = self.error_parser.parse(
+                {},
+                exception=error,
+            )
+            _raise_normalized_error(normalized_error)
 
         except (
             RateLimitExceededError,
@@ -422,13 +496,9 @@ class LibreTranslateAdapter(TranslationProvider):
         ):
             raise
 
-        except json.JSONDecodeError as error:
-            raise TranslationError(
-                "LibreTranslate: invalid JSON response"
-            ) from error
-
         except Exception as error:
-            raise TranslationError(
-                "LibreTranslate: unexpected error "
-                f"{type(error).__name__}: {error}"
-            ) from error
+            normalized_error = self.error_parser.parse(
+                {},
+                exception=error,
+            )
+            _raise_normalized_error(normalized_error)

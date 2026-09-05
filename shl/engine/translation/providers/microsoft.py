@@ -1,7 +1,7 @@
 """
 File: microsoft_translator.py — module for Microsoft Translator adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.10
 License: MIT
 Description: Robust translation provider adapter for the Microsoft Translator API.
 Handles advanced features including context matching,
@@ -23,12 +23,15 @@ from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
     RateLimitExceededError,
+    LanguageNotSupportedError,
     ProviderAccessError,
     InvalidRequestError,
 )
 from ..metadata import TranslationRequest
 from .base import TranslationProvider
 from .microsoft_registry import MicrosoftServiceRegistry
+from ..errors import ErrorParser
+from ..errors.providers import MICROSOFT
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +51,7 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
     """
 
     def __init__(self, api_key: Optional[str] = None):
-    
+
         # Käytä annettua avainta tai lue ympäristömuuttujasta
         self.api_key = api_key or get_env_value("MICROSOFT_TRANSLATOR_KEY")
 
@@ -65,11 +68,17 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
 
         # Service-level TTL registry (ei kieliparirekisteriä)
         ttl_env = float(get_config_value("ttl.microsoft_translator", "86400"))
-        
-        self.registry = MicrosoftServiceRegistry(ttl_seconds=ttl_seconds)
+
+        self.registry = MicrosoftServiceRegistry(ttl_seconds=ttl_env)
+
+        self.error_parser = ErrorParser(
+            provider=self.name,
+            config=MICROSOFT,
+        )
 
         logger.debug(
-            f"MicrosoftTranslatorAdapter initialized (api_key={mask_api_key(self.api_key)}, ttl={ttl_seconds}s)"
+            f"MicrosoftTranslatorAdapter initialized "
+            f"(api_key={mask_api_key(self.api_key)}, ttl={ttl_env}s)"
         )
 
     @property
@@ -138,18 +147,28 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
 
         return {"params": params, "body": body}
 
-    def _call_api(self, payload: Dict[str, Any], request: TranslationRequest) -> str:
+    def _call_api(
+        self,
+        payload: Dict[str, Any],
+        request: TranslationRequest,
+    ) -> str:
         """Execute request against Microsoft Translator API."""
         try:
             # Build query string
-            params = "&".join(f"{k}={v}" for k, v in payload["params"].items())
+            params = "&".join(
+                f"{k}={v}"
+                for k, v in payload["params"].items()
+            )
             url = f"{self.base_url}&{params}"
 
-            request_data = json.dumps(payload["body"]).encode("utf-8")
+            request_data = json.dumps(
+                payload["body"]
+            ).encode("utf-8")
 
             logger.debug(
                 f"Microsoft Translator request to {url} "
-                f"(api_key={mask_api_key(self.api_key)}, text length={len(payload['body'][0]['text'])})"
+                f"(api_key={mask_api_key(self.api_key)}, "
+                f"text length={len(payload['body'][0]['text'])})"
             )
 
             req = Request(
@@ -165,26 +184,40 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
             )
 
             with urlopen(req, timeout=MS_TIMEOUT) as response:
-                response_data = json.loads(response.read().decode("utf-8"))
+                response_data = json.loads(
+                    response.read().decode("utf-8")
+                )
 
-                if not response_data or not isinstance(response_data, list):
+                if not response_data or not isinstance(
+                    response_data,
+                    list,
+                ):
                     raise TranslationError(
                         "Microsoft Translator returned an empty or invalid payload"
                     )
 
-                translations = response_data[0].get("translations", [])
+                translations = response_data[0].get(
+                    "translations",
+                    [],
+                )
+
                 if not translations:
                     raise TranslationError(
                         "Microsoft Translator returned no translations array"
                     )
 
-                translated = translations[0].get("text", "")
+                translated = translations[0].get(
+                    "text",
+                    "",
+                )
 
                 # --- SECURITY CHECKS ---
 
                 # 1. Empty or unchanged output
                 if not translated or translated.strip() == "":
-                    raise TranslationError("Microsoft Translator returned empty text.")
+                    raise TranslationError(
+                        "Microsoft Translator returned empty text."
+                    )
 
                 if translated.strip() == request.text.strip():
                     raise TranslationError(
@@ -204,63 +237,58 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
                         "Microsoft Translator returned suspiciously short output."
                     )
 
-                logger.debug("Microsoft Translator translation successful")
+                logger.debug(
+                    "Microsoft Translator translation successful"
+                )
+
                 return translated
 
         except HTTPError as e:
-            code = e.code
+            response_body = None
 
-            # Access / auth
-            if code in (401, 403):
-                raise ProviderAccessError(
-                    "Microsoft Translator: Invalid or unauthorized API key"
+            try:
+                response_body = e.read().decode(
+                    "utf-8",
+                    errors="replace",
                 )
+            except Exception:
+                response_body = None
 
-            # Rate limits
-            elif code == 429:
-                raise RateLimitExceededError(
-                    "Microsoft Translator: Rate limit exceeded (HTTP 429)"
-                )
+            normalized = self.error_parser.parse(
+                response_body,
+                http_status=e.code,
+            )
 
-            # Server / gateway issues
-            elif code in (500, 502, 503, 504):
-                self.registry.mark_unavailable()
-                raise ServiceUnavailableError(
-                    f"Microsoft Translator: Remote endpoint or gateway issue ({code})"
-                )
-
-            # Request / payload errors
-            elif code == 400:
-                raise InvalidRequestError(
-                    "Microsoft Translator: Invalid request configuration (HTTP 400)"
-                )
-
-            elif code in (409, 413, 415, 422):
-                raise InvalidRequestError(
-                    f"Microsoft Translator: Request payload or configuration not acceptable ({code})"
-                )
-
-            else:
+            if normalized is None:
                 raise TranslationError(
-                    f"Microsoft Translator HTTP error status code: {code}"
+                    f"Microsoft Translator HTTP error status code: {e.code}"
                 )
+
+            if normalized.code in {
+                "SERVICE_UNAVAILABLE",
+                "TIMEOUT",
+            }:
+                self.registry.mark_unavailable()
+
+            raise self._map_normalized_error(normalized)
 
         except URLError as e:
-            if isinstance(e.reason, (socket.timeout, TimeoutError)):
-                self.registry.mark_unavailable()
-                raise ServiceUnavailableError(
-                    "Microsoft Translator network timeout reached"
-                )
-            self.registry.mark_unavailable()
-            raise ServiceUnavailableError(
-                f"Microsoft Translator socket pipeline failure: {e.reason}"
+            normalized = self.error_parser.parse(
+                exception=e,
             )
 
-        except (socket.timeout, TimeoutError):
             self.registry.mark_unavailable()
-            raise ServiceUnavailableError(
-                "Microsoft Translator connection timeout reached"
+
+            raise self._map_normalized_error(normalized)
+
+        except (socket.timeout, TimeoutError) as e:
+            normalized = self.error_parser.parse(
+                exception=e,
             )
+
+            self.registry.mark_unavailable()
+
+            raise self._map_normalized_error(normalized)
 
         except Exception as e:
             if isinstance(
@@ -268,6 +296,7 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
                 (
                     RateLimitExceededError,
                     ServiceUnavailableError,
+                    LanguageNotSupportedError,
                     ProviderAccessError,
                     InvalidRequestError,
                     TranslationError,
@@ -276,8 +305,64 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
                 raise
 
             self.registry.mark_unavailable()
+
             raise TranslationError(
                 f"Microsoft Translator unexpected execution layer failure: "
                 f"{type(e).__name__}: {e}"
             )
 
+    @staticmethod
+    def _map_normalized_error(error) -> Exception:
+        """Map a normalized SHL error to existing adapter exceptions."""
+
+        if error.code == "RATE_LIMIT_EXCEEDED":
+            return RateLimitExceededError(
+                error.message or "Microsoft Translator rate limit exceeded."
+            )
+
+        if error.code == "QUOTA_EXCEEDED":
+            return RateLimitExceededError(
+                error.message or "Microsoft Translator quota exceeded."
+            )
+
+        if error.code in {
+            "TIMEOUT",
+            "SERVICE_UNAVAILABLE",
+        }:
+            return ServiceUnavailableError(
+                error.message or "Microsoft Translator service unavailable."
+            )
+
+        if error.code in {
+            "AUTH_FAILED",
+            "AUTH_EXPIRED",
+            "AUTH_BLOCKED",
+            "ACCESS_DENIED",
+        }:
+            return ProviderAccessError(
+                error.message or "Microsoft Translator access denied."
+            )
+
+        if error.code in {
+            "LANG_UNSUPPORTED",
+            "LANG_PAIR_UNSUPPORTED",
+        }:
+            return LanguageNotSupportedError(
+                error.message
+                or "Microsoft Translator language is not supported."
+            )
+
+        if error.code in {
+            "INVALID_REQUEST",
+            "TEXT_TOO_LONG",
+            "REQUEST_TOO_LONG",
+            "METHOD_NOT_ALLOWED",
+        }:
+            return InvalidRequestError(
+                error.message
+                or "Microsoft Translator request is invalid."
+            )
+
+        return TranslationError(
+            error.message or "Microsoft Translator translation failed."
+        )

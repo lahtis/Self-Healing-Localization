@@ -2,7 +2,7 @@
 file: policy_manager.py - SHL policy manager
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.6
+Version: 0.2.10
 Description: Policy-konfiguraatio projektin juuresta (CWD).
 """
 
@@ -134,7 +134,7 @@ class ConfigManager:
             "MyMemory": {
                 "enabled": True,
                 "allow": [],
-                "deny": ["html"],
+                "deny": ["html", "honorific"],
                 "timeout": 10,
                 "requires_env": ["MYMEMORY_EMAIL"],
                 "priority": 1
@@ -142,7 +142,7 @@ class ConfigManager:
             "LibreTranslate": {
                 "enabled": True,
                 "allow": ["text"],
-                "deny": ["html"],
+                "deny": ["html", "honorific"],
                 "timeout": 8,
                 "requires_env": [],
                 "priority": 2
@@ -150,7 +150,7 @@ class ConfigManager:
             "DeepL": {
                 "enabled": True,
                 "allow": [],
-                "deny": [],
+                "deny": ["honorific"],
                 "timeout": 5,
                 "requires_env": ["DEEPL_API_KEY"],
                 "priority": 3
@@ -158,7 +158,7 @@ class ConfigManager:
             "Google": {
                 "enabled": True,
                 "allow": ["text", "html"],
-                "deny": [],
+                "deny": ["honorific"],
                 "timeout": 5,
                 "requires_env": ["GOOGLE_API_KEY"],
                 "priority": 4
@@ -166,14 +166,14 @@ class ConfigManager:
             "MicrosoftTranslator": {
                 "enabled": True,
                 "allow": ["text", "formality",  "html"],
-                "deny": [],
+                "deny": ["honorific"],
                 "timeout": 5,
                 "requires_env": ["MICROSOFT_TRANSLATOR_KEY"],
                 "priority": 5
             },
             "Papago": {
                 "enabled": True,
-                "allow": [],
+                "allow": ["honorific"],
                 "deny": ["html"],
                 "timeout": 5,
                 "requires_env": ["NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"],
@@ -182,10 +182,18 @@ class ConfigManager:
             "Yandex": {
                 "enabled": True,
                 "allow": [],
-                "deny": [],
+                "deny": ["honorific"],
                 "timeout": 5,
                 "requires_env": ["YANDEX_API_KEY"],
                 "priority": 7
+            },
+            "Local": {
+                "enabled": True,
+                "allow": [],
+                "deny": ["honorific"],
+                "timeout": 5,
+                "requires_env": ["LOCAL_API_KEY"],
+                "priority": 8
             }
         }
 

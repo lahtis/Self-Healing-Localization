@@ -5,6 +5,7 @@ License: MIT
 Version: 0.2.6
 
 Checks the language support of service providers and saves it to the cache.
+puuttuu google ja DeepL
 """
 
 import json

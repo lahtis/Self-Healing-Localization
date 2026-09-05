@@ -1,7 +1,7 @@
 """
 File: yandex.py — module for Yandex Translate adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.10
 License: MIT
 Description: Robust translation provider adapter for the Yandex Cloud Translate API.
 Handles advanced features including HTML formatting, glossary mapping,
@@ -19,6 +19,8 @@ from shl._version import __version__ as SHL_VERSION
 from shl.config import get_config_value
 from shl.utils.env_loader import get_env_value, mask_api_key
 
+from ..errors import ErrorParser
+from ..errors.providers import YANDEX
 from ..exceptions import (
     TranslationError,
     ServiceUnavailableError,
@@ -52,9 +54,15 @@ class YandexAdapter(TranslationProvider):
     - security checks
     """
 
-    def __init__(self, api_key: Optional[str] = None, folder_id: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        folder_id: Optional[str] = None,
+    ):
         self.api_key = api_key or get_env_value("YANDEX_API_KEY")
-        self.folder_id = folder_id or get_config_value("providers.yandex.folder_id")
+        self.folder_id = folder_id or get_config_value(
+            "providers.yandex.folder_id"
+        )
 
         if not self.api_key:
             raise ValueError(
@@ -74,7 +82,17 @@ class YandexAdapter(TranslationProvider):
         # Runtime language pair registry
         self.registry = YandexRegistry()
 
-        logger.debug(f"YandexAdapter initialized (api_key={mask_api_key(self.api_key)}, folder_id={self.folder_id})")
+        # Centralized error parser
+        self.error_parser = ErrorParser(
+            provider=self.name,
+            config=YANDEX,
+        )
+
+        logger.debug(
+            f"YandexAdapter initialized "
+            f"(api_key={mask_api_key(self.api_key)}, "
+            f"folder_id={self.folder_id})"
+        )
 
     @property
     def name(self) -> str:
@@ -101,7 +119,10 @@ class YandexAdapter(TranslationProvider):
         payload = self.build_request(request)
         return self._call_api(payload, request)
 
-    def build_request(self, request: TranslationRequest) -> Dict[str, Any]:
+    def build_request(
+        self,
+        request: TranslationRequest,
+    ) -> Dict[str, Any]:
         """Build Yandex Cloud Translate API JSON payload."""
         payload = {
             "folderId": self.folder_id,
@@ -116,20 +137,25 @@ class YandexAdapter(TranslationProvider):
             payload["format"] = "HTML"
 
         if request.glossary and "id" in request.glossary:
-            # Yandex käyttää glossaryConfig-rakennetta sanastoille tarvittaessa
+            # Yandex uses glossaryConfig for glossary configuration.
             payload["glossaryConfig"] = {
                 "glossaryPairs": request.glossary.get("pairs", [])
             }
 
         return payload
 
-    def _call_api(self, payload: Dict[str, Any], request: TranslationRequest) -> str:
+    def _call_api(
+        self,
+        payload: Dict[str, Any],
+        request: TranslationRequest,
+    ) -> str:
         """Execute request against Yandex Cloud Translate API endpoint."""
         try:
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"Yandex request to {YANDEX_TRANSLATE_URL} (api_key={mask_api_key(self.api_key)}, "
+                f"Yandex request to {YANDEX_TRANSLATE_URL} "
+                f"(api_key={mask_api_key(self.api_key)}, "
                 f"text length: {len(payload['texts'][0])})"
             )
 
@@ -145,7 +171,9 @@ class YandexAdapter(TranslationProvider):
             )
 
             with urlopen(req, timeout=YANDEX_TIMEOUT) as response:
-                response_data = json.loads(response.read().decode("utf-8"))
+                response_data = json.loads(
+                    response.read().decode("utf-8")
+                )
                 translations = response_data.get("translations", [])
 
                 if not translations:
@@ -154,103 +182,114 @@ class YandexAdapter(TranslationProvider):
                     )
 
                 translated = translations[0].get("text")
-                # Yandex ei välttämättä palauta havaitsemakseen kieltä samassa kentässä, 
-                # joten tarkistetaan se tarvittaessa erikseen tai ohitetaan.
-                detected = translations[0].get("detectedLanguageCode", "").lower()
+
+                # Yandex may not return the detected language in all responses.
+                detected = translations[0].get(
+                    "detectedLanguageCode",
+                    "",
+                ).lower()
 
                 # --- SECURITY CHECK: Yandex output validation ---
 
                 # 1. Empty or unchanged output
                 if not translated or translated.strip() == "":
-                    raise TranslationError("Yandex returned empty text.")
+                    raise TranslationError(
+                        "Yandex returned empty text."
+                    )
 
                 if translated.strip() == payload["texts"][0].strip():
-                    raise TranslationError("Yandex returned unchanged text.")
+                    raise TranslationError(
+                        "Yandex returned unchanged text."
+                    )
 
                 # 2. Unexpected detected source language
                 if request.source_lang and detected:
                     if detected != request.source_lang.lower():
                         raise TranslationError(
-                            f"Yandex detected unexpected source language '{detected}' "
-                            f"for input declared as '{request.source_lang}'."
+                            f"Yandex detected unexpected source language "
+                            f"'{detected}' for input declared as "
+                            f"'{request.source_lang}'."
                         )
 
                 # 3. Unexpected HTML markup
                 if not request.html_format:
                     if "<" in translated and ">" in translated:
-                        raise TranslationError("Yandex returned unexpected HTML markup.")
+                        raise TranslationError(
+                            "Yandex returned unexpected HTML markup."
+                        )
 
                 # 4. Suspiciously short output
-                if len(translated) < 3 and len(payload["texts"][0]) > 20:
-                    raise TranslationError("Yandex returned suspiciously short output.")
+                if (
+                    len(translated) < 3
+                    and len(payload["texts"][0]) > 20
+                ):
+                    raise TranslationError(
+                        "Yandex returned suspiciously short output."
+                    )
 
                 logger.debug("Yandex translation successful")
                 return translated
 
         except HTTPError as e:
-            code = e.code
+            try:
+                error_body = e.read().decode(
+                    "utf-8",
+                    errors="replace",
+                )
+            except Exception:
+                error_body = ""
 
-            # Access / auth / billing
-            if code in (401, 403):
-                raise ProviderAccessError(
-                    "Yandex: Invalid or unauthorized API token initialization"
-                )
-            elif code == 402:
-                raise ProviderAccessError(
-                    "Yandex: Billing issue or payment required (HTTP 402)"
-                )
-
-            # Timeouts / availability / gateway
-            elif code == 408:
-                raise ServiceUnavailableError(
-                    "Yandex: Request timeout (HTTP 408)"
-                )
-            elif code in (500, 502, 503, 504):
-                raise ServiceUnavailableError(
-                    f"Yandex: Remote endpoint or gateway issue ({code})"
-                )
-
-            # Rate limits / quotas
-            elif code == 429:
-                raise RateLimitExceededError(
-                    "Yandex: Maximum burst request cadence exceeded (HTTP 429)"
-                )
-
-            # Request / payload / configuration errors
-            elif code == 400:
-                if request.source_lang:
-                    self.registry.mark_pair_unsupported(
-                        request.source_lang,
-                        request.target_lang,
-                    )
-                raise InvalidRequestError(
-                    f"Yandex: Invalid request configuration parameters ({code})"
-                )
-
-            elif code in (409, 413, 415, 422):
-                if request.source_lang:
-                    self.registry.mark_pair_unsupported(
-                        request.source_lang,
-                        request.target_lang,
-                    )
-                raise InvalidRequestError(
-                    f"Yandex: Request payload or configuration not acceptable ({code})"
-                )
-
-            else:
-                raise TranslationError(
-                    f"Yandex HTTP error status code: {code}"
-                )
-
-        except URLError as e:
-            if isinstance(e.reason, (socket.timeout, TimeoutError)):
-                raise ServiceUnavailableError("Yandex network timeout reached")
-            raise ServiceUnavailableError(
-                f"Yandex socket pipeline failure: {e.reason}"
+            normalized = self.error_parser.parse(
+                error_body,
+                http_status=e.code,
             )
 
-        except (socket.timeout, TimeoutError):
-            raise ServiceUnavailableError("Yandex connection timeout reached")
+            if normalized is None:
+                raise TranslationError(
+                    f"Yandex HTTP error status code: {e.code}"
+                ) from e
+
+            if normalized.code in {
+                "LANG_UNSUPPORTED",
+                "LANG_PAIR_UNSUPPORTED",
+            }:
+                if request.source_lang:
+                    self.registry.mark_pair_unsupported(
+                        request.source_lang,
+                        request.target_lang,
+                    )
+
+            raise self._map_normalized_error(
+                normalized
+            ) from e
+
+        except URLError as e:
+            normalized = self.error_parser.parse(
+                exception=e,
+            )
+
+            if normalized is None:
+                raise ServiceUnavailableError(
+                    f"Yandex socket pipeline failure: {e.reason}"
+                ) from e
+
+            raise self._map_normalized_error(
+                normalized
+            ) from e
+
+        except (socket.timeout, TimeoutError) as e:
+            normalized = self.error_parser.parse(
+                exception=e,
+            )
+
+            if normalized is None:
+                raise ServiceUnavailableError(
+                    "Yandex connection timeout reached"
+                ) from e
+
+            raise self._map_normalized_error(
+                normalized
+            ) from e
 
         except Exception as e:
             if isinstance(
@@ -269,4 +308,64 @@ class YandexAdapter(TranslationProvider):
             raise TranslationError(
                 f"Yandex unexpected execution layer failure: "
                 f"{type(e).__name__}: {e}"
+            ) from e
+
+    def _map_normalized_error(self, error) -> Exception:
+        """Map a normalized SHL error to the existing Yandex exceptions."""
+
+        if error.code == "RATE_LIMIT_EXCEEDED":
+            return RateLimitExceededError(
+                error.message
+                or "Yandex rate limit exceeded"
             )
+
+        if error.code == "QUOTA_EXCEEDED":
+            return RateLimitExceededError(
+                error.message
+                or "Yandex quota exceeded"
+            )
+
+        if error.code in {
+            "TIMEOUT",
+            "SERVICE_UNAVAILABLE",
+        }:
+            return ServiceUnavailableError(
+                error.message
+                or "Yandex service unavailable"
+            )
+
+        if error.code in {
+            "AUTH_FAILED",
+            "AUTH_EXPIRED",
+            "AUTH_BLOCKED",
+            "ACCESS_DENIED",
+        }:
+            return ProviderAccessError(
+                error.message
+                or "Yandex access denied"
+            )
+
+        if error.code in {
+            "LANG_UNSUPPORTED",
+            "LANG_PAIR_UNSUPPORTED",
+        }:
+            return LanguageNotSupportedError(
+                error.message
+                or "Yandex does not support the requested language"
+            )
+
+        if error.code in {
+            "INVALID_REQUEST",
+            "TEXT_TOO_LONG",
+            "REQUEST_TOO_LONG",
+            "METHOD_NOT_ALLOWED",
+        }:
+            return InvalidRequestError(
+                error.message
+                or "Yandex rejected the request"
+            )
+
+        return TranslationError(
+            error.message
+            or f"Yandex translation error: {error.code}"
+        )

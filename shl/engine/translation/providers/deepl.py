@@ -1,7 +1,7 @@
 """
 File: deepl.py — module for DeepL translation adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.10
 License: MIT
 Description: Robust translation provider adapter for the DeepL API.
 Handles advanced features including context matching,
@@ -27,6 +27,8 @@ from ..exceptions import (
     InvalidRequestError,
 )
 from ..metadata import TranslationRequest
+from ..errors import ErrorParser
+from ..errors.providers import DEEPL
 from .base import TranslationProvider
 from .deepl_registry import DeepLRegistry
 
@@ -67,7 +69,16 @@ class DeepLAdapter(TranslationProvider):
         # Runtime language pair registry
         self.registry = DeepLRegistry()
 
-        logger.debug(f"DeepLAdapter initialized (api_key={mask_api_key(self.api_key)})")
+        # Provider-independent error parser
+        self.error_parser = ErrorParser(
+            provider=self.name,
+            config=DEEPL,
+        )
+
+        logger.debug(
+            f"DeepLAdapter initialized "
+            f"(api_key={mask_api_key(self.api_key)})"
+        )
 
     @property
     def name(self) -> str:
@@ -132,14 +143,77 @@ class DeepLAdapter(TranslationProvider):
 
         return payload
 
-    def _call_api(self, payload: Dict[str, Any], request: TranslationRequest) -> str:
+    def _raise_normalized_error(
+        self,
+        error,
+    ) -> None:
+        """
+        Convert a normalized SHL error into the existing adapter
+        exception hierarchy.
+        """
+
+        message = error.message or (
+            f"DeepL request failed: {error.code}"
+        )
+
+        if error.code == "RATE_LIMIT_EXCEEDED":
+            raise RateLimitExceededError(message)
+
+        if error.code == "QUOTA_EXCEEDED":
+            raise RateLimitExceededError(message)
+
+        if error.code in {
+            "TIMEOUT",
+            "SERVICE_UNAVAILABLE",
+        }:
+            raise ServiceUnavailableError(message)
+
+        if error.code in {
+            "AUTH_FAILED",
+            "AUTH_EXPIRED",
+            "AUTH_BLOCKED",
+            "ACCESS_DENIED",
+        }:
+            raise ProviderAccessError(message)
+
+        if error.code in {
+            "LANG_UNSUPPORTED",
+            "LANG_PAIR_UNSUPPORTED",
+        }:
+            if (
+                error.code == "LANG_PAIR_UNSUPPORTED"
+                and request is not None
+            ):
+                self.registry.mark_pair_unsupported(
+                    request.source_lang,
+                    request.target_lang,
+                )
+
+            raise LanguageNotSupportedError(message)
+
+        if error.code in {
+            "INVALID_REQUEST",
+            "TEXT_TOO_LONG",
+            "REQUEST_TOO_LONG",
+            "METHOD_NOT_ALLOWED",
+        }:
+            raise InvalidRequestError(message)
+
+        raise TranslationError(message)
+
+    def _call_api(
+        self,
+        payload: Dict[str, Any],
+        request: TranslationRequest,
+    ) -> str:
         """Execute request against DeepL API endpoints."""
         try:
             url = f"{self.base_url}/translate"
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"DeepL request to {url} (api_key={mask_api_key(self.api_key)}, "
+                f"DeepL request to {url} "
+                f"(api_key={mask_api_key(self.api_key)}, "
                 f"text length: {len(payload['text'][0])})"
             )
 
@@ -156,130 +230,184 @@ class DeepLAdapter(TranslationProvider):
             )
 
             with urlopen(req, timeout=DEEPL_TIMEOUT) as response:
-                response_data = json.loads(response.read().decode("utf-8"))
-                translations = response_data.get("translations", [])
+                raw_response = response.read().decode("utf-8")
+
+                response_data = self.error_parser._decode_payload(
+                    raw_response
+                )
+
+                if response_data is None:
+                    error = self.error_parser.parse(
+                        raw_response,
+                        http_status=response.status,
+                    )
+                    self._raise_normalized_error(error)
+
+                translations = response_data.get(
+                    "translations",
+                    [],
+                )
 
                 if not translations:
-                    raise TranslationError(
-                        "DeepL returned an empty translations payload"
+                    error = self.error_parser.parse(
+                        {
+                            "message": (
+                                "DeepL returned an empty "
+                                "translations payload"
+                            )
+                        },
+                        http_status=response.status,
                     )
+                    self._raise_normalized_error(error)
 
                 translated = translations[0].get("text")
-                detected = translations[0].get("detected_source_language", "").lower()
+                detected = translations[0].get(
+                    "detected_source_language",
+                    "",
+                ).lower()
 
                 # --- SECURITY CHECK: DeepL output validation ---
 
                 # 1. Empty or unchanged output
                 if not translated or translated.strip() == "":
-                    raise TranslationError("DeepL returned empty text.")
+                    error = self.error_parser.parse(
+                        {
+                            "message": "DeepL returned empty text."
+                        },
+                        http_status=response.status,
+                    )
+                    self._raise_normalized_error(error)
 
                 if translated.strip() == payload["text"][0].strip():
-                    raise TranslationError("DeepL returned unchanged text.")
+                    error = self.error_parser.parse(
+                        {
+                            "message": (
+                                "DeepL returned unchanged text."
+                            )
+                        },
+                        http_status=response.status,
+                    )
+                    self._raise_normalized_error(error)
 
                 # 2. Unexpected detected source language
                 if request.source_lang:
-                    if detected and detected != request.source_lang.lower():
-                        raise TranslationError(
-                            f"DeepL detected unexpected source language '{detected}' "
-                            f"for input declared as '{request.source_lang}'."
+                    if (
+                        detected
+                        and detected != request.source_lang.lower()
+                    ):
+                        error = self.error_parser.parse(
+                            {
+                                "message": (
+                                    "DeepL detected unexpected source "
+                                    f"language '{detected}' for input "
+                                    f"declared as "
+                                    f"'{request.source_lang}'."
+                                )
+                            },
+                            http_status=response.status,
                         )
+                        self._raise_normalized_error(error)
 
                 # 3. Unexpected HTML markup
                 if not request.html_format:
                     if "<" in translated and ">" in translated:
-                        raise TranslationError("DeepL returned unexpected HTML markup.")
+                        error = self.error_parser.parse(
+                            {
+                                "message": (
+                                    "DeepL returned unexpected "
+                                    "HTML markup."
+                                )
+                            },
+                            http_status=response.status,
+                        )
+                        self._raise_normalized_error(error)
 
                 # 4. Suspiciously short output
-                if len(translated) < 3 and len(payload["text"][0]) > 20:
-                    raise TranslationError("DeepL returned suspiciously short output.")
+                if len(translated) < 3 and len(
+                    payload["text"][0]
+                ) > 20:
+                    error = self.error_parser.parse(
+                        {
+                            "message": (
+                                "DeepL returned suspiciously "
+                                "short output."
+                            )
+                        },
+                        http_status=response.status,
+                    )
+                    self._raise_normalized_error(error)
 
                 logger.debug("DeepL translation successful")
                 return translated
 
         except HTTPError as e:
-            code = e.code
+            response_data = None
 
-            # Access / auth / billing
-            if code in (401, 403):
-                raise ProviderAccessError(
-                    "DeepL: Invalid or unauthorized API token initialization"
-                )
-            elif code == 402:
-                raise ProviderAccessError(
-                    "DeepL: Billing issue or payment required (HTTP 402)"
-                )
+            try:
+                raw_body = e.read().decode("utf-8")
 
-            # Timeouts / availability / gateway
-            elif code == 408:
-                raise ServiceUnavailableError(
-                    "DeepL: Request timeout (HTTP 408)"
-                )
-            elif code in (500, 502, 503, 504):
-                raise ServiceUnavailableError(
-                    f"DeepL: Remote endpoint or gateway issue ({code})"
-                )
+                if raw_body:
+                    response_data = json.loads(raw_body)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                response_data = None
 
-            # Rate limits / quotas
-            elif code == 429:
-                raise RateLimitExceededError(
-                    "DeepL: Maximum burst request cadence exceeded (HTTP 429)"
-                )
-            elif code == 456:
-                raise RateLimitExceededError(
-                    "DeepL: Periodic character quota limit reached (HTTP 456)"
+            if response_data is None:
+                response_data = {}
+
+            error = self.error_parser.parse(
+                response_data,
+                http_status=e.code,
+            )
+
+            if error is None:
+                error = self.error_parser.parse(
+                    {},
+                    http_status=e.code,
                 )
 
-            # Request / payload / configuration errors
-            elif code == 400:
-                if request.source_lang:
-                    self.registry.mark_pair_unsupported(
-                        request.source_lang,
-                        request.target_lang,
-                    )
-                raise InvalidRequestError(
-                    f"DeepL: Invalid request configuration parameters ({code})"
-                )
-
-            elif code in (409, 413, 415, 422):
-                if request.source_lang:
-                    self.registry.mark_pair_unsupported(
-                        request.source_lang,
-                        request.target_lang,
-                    )
-                raise InvalidRequestError(
-                    f"DeepL: Request payload or configuration not acceptable ({code})"
-                )
-
-            else:
-                raise TranslationError(
-                    f"DeepL HTTP error status code: {code}"
-                )
+            self._raise_normalized_error(error)
 
         except URLError as e:
-            if isinstance(e.reason, (socket.timeout, TimeoutError)):
-                raise ServiceUnavailableError("DeepL network timeout reached")
-            raise ServiceUnavailableError(
-                f"DeepL socket pipeline failure: {e.reason}"
-            )
+            if isinstance(
+                e.reason,
+                (socket.timeout, TimeoutError),
+            ):
+                error = self.error_parser.parse(
+                    {},
+                    exception=TimeoutError(
+                        "DeepL network timeout reached"
+                    ),
+                )
+            else:
+                error = self.error_parser.parse(
+                    {},
+                    exception=ConnectionError(
+                        f"DeepL socket pipeline failure: {e.reason}"
+                    ),
+                )
 
-        except (socket.timeout, TimeoutError):
-            raise ServiceUnavailableError("DeepL connection timeout reached")
+            self._raise_normalized_error(error)
+
+        except (socket.timeout, TimeoutError) as e:
+            error = self.error_parser.parse(
+                {},
+                exception=e,
+            )
+            self._raise_normalized_error(error)
+
+        except (
+            RateLimitExceededError,
+            ServiceUnavailableError,
+            LanguageNotSupportedError,
+            ProviderAccessError,
+            InvalidRequestError,
+            TranslationError,
+        ):
+            raise
 
         except Exception as e:
-            if isinstance(
-                e,
-                (
-                    RateLimitExceededError,
-                    ServiceUnavailableError,
-                    LanguageNotSupportedError,
-                    ProviderAccessError,
-                    InvalidRequestError,
-                    TranslationError,
-                ),
-            ):
-                raise
-
-            raise TranslationError(
-                f"DeepL unexpected execution layer failure: "
-                f"{type(e).__name__}: {e}"
+            error = self.error_parser.parse(
+                {},
+                exception=e,
             )
+            self._raise_normalized_error(error)

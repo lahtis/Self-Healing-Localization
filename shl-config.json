@@ -1,16 +1,33 @@
 {
     "ttl": {
-        "mymemory": 10,
-        "libretranslate": 8,
-        "deepl": 5,
-        "google": 5,
-        "microsoft_translator": 5,
-        "papago": 5
+        "local": 86400,
+        "mymemory": 86400,
+        "libretranslate": 86400,
+        "deepl": 86400,
+        "google": 86400,
+        "microsoft_translator": 86400,
+        "papago": 86400,
+        "yandex": 86400
     },
     "cache": {
-        "cache_persist": true,
+        "cache_persist": false,
         "cache_persist_path": ".shl_cache.json",
         "ttl": 3600,
         "max_size": 10000
+    },
+    "reload": {
+        "enabled": true,
+        "check_interval": 1.0
+    },
+    "providers": {
+        "local": {
+            "url": "http://localhost:8000"
+        },
+        "libretranslate": {
+            "url": "http://127.0.0.1:5001"
+        },
+        "yandex": {
+            "folder_id": null
+        }
     }
 }

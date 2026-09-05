@@ -1,7 +1,7 @@
 """
 File: local_translator.py — module for local translation adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.10
 License: MIT
 Description: Translation provider adapter for the SHL local translation API.
 Builds metadata-aware translation requests, supports formality, context,
@@ -32,6 +32,8 @@ from ..exceptions import (
 from ..metadata import TranslationRequest
 from .base import TranslationProvider, TranslationResult
 from .local_translator_registry import LocalRegistry
+from ..errors import ErrorParser
+from ..errors.providers import LOCAL
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +54,11 @@ class LocalTranslatorAdapter(TranslationProvider):
     - security checks
     """
 
-    def __init__(self, api_key: Optional[str] = None):
-  
-        # Käytä annettua avainta tai lue ympäristömuuttujasta
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        registry: Optional[LocalRegistry] = None,
+    ):
         self.api_key = api_key or get_env_value("LOCAL_TRANSLATOR_API_KEY")
 
         if not self.api_key:
@@ -70,10 +74,18 @@ class LocalTranslatorAdapter(TranslationProvider):
             "https://localhost",
         ).rstrip("/")
 
-        # Runtime language pair registry
-        self.registry = LocalRegistry()
+        # Use a shared registry when one is not explicitly supplied.
+        self.registry = registry or LocalRegistry.shared()
 
-        logger.debug(f"local_translator_adapter initialized (api_key={mask_api_key(self.api_key)})")
+        self.error_parser = ErrorParser(
+            provider=self.name,
+            config=LOCAL,
+        )
+
+        logger.debug(
+            f"local_translator_adapter initialized "
+            f"(api_key={mask_api_key(self.api_key)})"
+        )
 
     @property
     def name(self) -> str:
@@ -84,28 +96,32 @@ class LocalTranslatorAdapter(TranslationProvider):
         return ["formality", "context", "glossary", "honorific", "html_format"]
 
     def translate(self, request: TranslationRequest) -> str:
-        """Translate text using Local API. Backward-compatible str-paluu."""
+        """Translate text using Local API. Backward-compatible str return."""
         return self.translate_with_metadata(request).text
 
-    def translate_with_metadata(self, request: TranslationRequest) -> TranslationResult:
-        """Translate text using Local API and palauta täysi metadata.
-        """
+    def translate_with_metadata(
+        self,
+        request: TranslationRequest,
+    ) -> TranslationResult:
+        """Translate text using Local API and return full metadata."""
 
-        # Pre-validate language pair using registry
-        if request.source_lang:
-            if not self.registry.is_pair_supported(
-                request.source_lang,
-                request.target_lang,
-            ):
-                raise LanguageNotSupportedError(
-                    f"Local does not support language pair "
-                    f"{request.source_lang}->{request.target_lang}"
-                )
+        if not self.registry.is_supported(
+            self.name,
+            request.source_lang,
+            request.target_lang,
+        ):
+            raise LanguageNotSupportedError(
+                f"Local does not support language pair "
+                f"{request.source_lang or 'auto'}->{request.target_lang}"
+            )
 
         payload = self.build_request(request)
         return self._call_api(payload, request)
 
-    def build_request(self, request: TranslationRequest) -> Dict[str, Any]:
+    def build_request(
+        self,
+        request: TranslationRequest,
+    ) -> Dict[str, Any]:
         """Build local translator API JSON payload."""
         payload = {
             "text": [request.text],
@@ -145,25 +161,20 @@ class LocalTranslatorAdapter(TranslationProvider):
 
         return payload
 
-    def _call_api(self, payload: Dict[str, Any], request: TranslationRequest) -> TranslationResult:
-        """Execute request against Local API endpoints.
+    def _call_api(
+        self,
+        payload: Dict[str, Any],
+        request: TranslationRequest,
+    ) -> TranslationResult:
+        """Execute request against Local API endpoints."""
 
-        Odotettu vastausmuoto palvelimelta:
-        {
-            "translations": [{"text": "...", "detected_source_language": "FI"}],
-            "engine": "local",
-            "fallback": true | false,
-            "confidence": 0.0-1.0  (valinnainen)
-        }
-        `engine`, `fallback` ja `confidence` ovat kaikki valinnaisia -
-        jos palvelin ei ilmoita niitä, ne jäävät None/False-oletuksiin.
-        """
         try:
             url = f"{self.base_url}/translate"
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"Local request to {url} (api_key={mask_api_key(self.api_key)}, "
+                f"Local request to {url} "
+                f"(api_key={mask_api_key(self.api_key)}, "
                 f"text length: {len(payload['text'][0])})"
             )
 
@@ -180,7 +191,9 @@ class LocalTranslatorAdapter(TranslationProvider):
             )
 
             with urlopen(req, timeout=LOCAL_TRANSLATOR_TIMEOUT) as response:
-                response_data = json.loads(response.read().decode("utf-8"))
+                response_data = json.loads(
+                    response.read().decode("utf-8")
+                )
                 translations = response_data.get("translations", [])
 
                 if not translations:
@@ -189,42 +202,54 @@ class LocalTranslatorAdapter(TranslationProvider):
                     )
 
                 translated = translations[0].get("text")
-                detected = (translations[0].get("detected_source_language") or "").lower()
+                detected = (
+                    translations[0].get(
+                        "detected_source_language"
+                    ) or ""
+                ).lower()
 
                 engine = response_data.get("engine")
                 fallback = bool(response_data.get("fallback", False))
                 confidence = response_data.get("confidence")
 
-                # --- SECURITY CHECK: Local output validation ---
-
-                # 1. Empty or unchanged output
                 if not translated or translated.strip() == "":
                     raise TranslationError("Local returned empty text.")
 
                 if translated.strip() == payload["text"][0].strip():
-                    raise TranslationError("Local returned unchanged text.")
+                    raise TranslationError(
+                        "Local returned unchanged text."
+                    )
 
-                # 2. Unexpected detected source language
                 if request.source_lang:
                     if detected and detected != request.source_lang.lower():
                         raise TranslationError(
-                            f"Local detected unexpected source language '{detected}' "
-                            f"for input declared as '{request.source_lang}'."
+                            f"Local detected unexpected source language "
+                            f"'{detected}' for input declared as "
+                            f"'{request.source_lang}'."
                         )
 
-                # 3. Unexpected HTML markup
                 if not request.html_format:
                     if "<" in translated and ">" in translated:
-                        raise TranslationError("Local returned unexpected HTML markup.")
+                        raise TranslationError(
+                            "Local returned unexpected HTML markup."
+                        )
 
-                # 4. Suspiciously short output
                 if len(translated) < 3 and len(payload["text"][0]) > 20:
-                    raise TranslationError("Local returned suspiciously short output.")
+                    raise TranslationError(
+                        "Local returned suspiciously short output."
+                    )
+
+                self.registry.mark_success(
+                    self.name,
+                    request.source_lang,
+                    request.target_lang,
+                )
 
                 logger.debug(
                     f"Local translation successful "
                     f"(engine={engine}, fallback={fallback})"
                 )
+
                 return TranslationResult(
                     text=translated,
                     provider=self.name,
@@ -234,73 +259,51 @@ class LocalTranslatorAdapter(TranslationProvider):
                 )
 
         except HTTPError as e:
-            code = e.code
+            response_body = None
 
-            # Access / auth / billing
-            if code in (401, 403):
-                raise ProviderAccessError(
-                    "Local: Invalid or unauthorized API token initialization"
+            try:
+                response_body = e.read().decode(
+                    "utf-8",
+                    errors="replace",
                 )
-            elif code == 402:
-                raise ProviderAccessError(
-                    "Local: Billing issue or payment required (HTTP 402)"
-                )
+            except Exception:
+                response_body = None
 
-            # Timeouts / availability / gateway
-            elif code == 408:
-                raise ServiceUnavailableError(
-                    "Local: Request timeout (HTTP 408)"
-                )
-            elif code in (500, 502, 503, 504):
-                raise ServiceUnavailableError(
-                    f"Local: Remote endpoint or gateway issue ({code})"
-                )
-
-            # Rate limits / quotas
-            elif code == 429:
-                raise RateLimitExceededError(
-                    "Local: Maximum burst request cadence exceeded (HTTP 429)"
-                )
-            elif code == 456:
-                raise RateLimitExceededError(
-                    "Local: Periodic character quota limit reached (HTTP 456)"
-                )
-
-            # Request / payload / configuration errors
-            elif code == 400:
-                if request.source_lang:
-                    self.registry.mark_pair_unsupported(
-                        request.source_lang,
-                        request.target_lang,
-                    )
-                raise InvalidRequestError(
-                    f"Local: Invalid request configuration parameters ({code})"
-                )
-
-            elif code in (409, 413, 415, 422):
-                if request.source_lang:
-                    self.registry.mark_pair_unsupported(
-                        request.source_lang,
-                        request.target_lang,
-                    )
-                raise InvalidRequestError(
-                    f"Local: Request payload or configuration not acceptable ({code})"
-                )
-
-            else:
-                raise TranslationError(
-                    f"Local HTTP error status code: {code}"
-                )
-
-        except URLError as e:
-            if isinstance(e.reason, (socket.timeout, TimeoutError)):
-                raise ServiceUnavailableError("Local network timeout reached")
-            raise ServiceUnavailableError(
-                f"Local socket pipeline failure: {e.reason}"
+            normalized = self.error_parser.parse(
+                response_body,
+                http_status=e.code,
             )
 
-        except (socket.timeout, TimeoutError):
-            raise ServiceUnavailableError("Local connection timeout reached")
+            if normalized is None:
+                raise TranslationError(
+                    f"Local HTTP error status code: {e.code}"
+                )
+
+            if normalized.code in {
+                "LANG_UNSUPPORTED",
+                "LANG_PAIR_UNSUPPORTED",
+            }:
+                self.registry.mark_failure(
+                    self.name,
+                    request.source_lang,
+                    request.target_lang,
+                )
+
+            raise self._map_normalized_error(normalized)
+
+        except URLError as e:
+            normalized = self.error_parser.parse(
+                exception=e,
+            )
+
+            raise self._map_normalized_error(normalized)
+
+        except (socket.timeout, TimeoutError) as e:
+            normalized = self.error_parser.parse(
+                exception=e,
+            )
+
+            raise self._map_normalized_error(normalized)
 
         except Exception as e:
             if isinstance(
@@ -320,3 +323,57 @@ class LocalTranslatorAdapter(TranslationProvider):
                 f"Local unexpected execution layer failure: "
                 f"{type(e).__name__}: {e}"
             )
+
+    @staticmethod
+    def _map_normalized_error(error) -> Exception:
+        """Map a normalized SHL error to the existing adapter exceptions."""
+
+        if error.code == "RATE_LIMIT_EXCEEDED":
+            return RateLimitExceededError(
+                error.message or "Local rate limit exceeded."
+            )
+
+        if error.code == "QUOTA_EXCEEDED":
+            return RateLimitExceededError(
+                error.message or "Local quota exceeded."
+            )
+
+        if error.code in {
+            "TIMEOUT",
+            "SERVICE_UNAVAILABLE",
+        }:
+            return ServiceUnavailableError(
+                error.message or "Local service unavailable."
+            )
+
+        if error.code in {
+            "AUTH_FAILED",
+            "AUTH_EXPIRED",
+            "AUTH_BLOCKED",
+            "ACCESS_DENIED",
+        }:
+            return ProviderAccessError(
+                error.message or "Local access denied."
+            )
+
+        if error.code in {
+            "LANG_UNSUPPORTED",
+            "LANG_PAIR_UNSUPPORTED",
+        }:
+            return LanguageNotSupportedError(
+                error.message or "Local language is not supported."
+            )
+
+        if error.code in {
+            "INVALID_REQUEST",
+            "TEXT_TOO_LONG",
+            "REQUEST_TOO_LONG",
+            "METHOD_NOT_ALLOWED",
+        }:
+            return InvalidRequestError(
+                error.message or "Local request is invalid."
+            )
+
+        return TranslationError(
+            error.message or "Local translation failed."
+        )

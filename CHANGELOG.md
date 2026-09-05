@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.2.10] - 2026-09-05 Router Error Handling
+- Updated the translation router to work with the new provider error-code handling.
+- Provider adapters now normalize service-specific error responses, while the router is responsible for interpreting those errors and deciding the next action.
+
+The router will use the error type to determine whether to:
+
+- retry the provider,
+- fall back to another translation provider,
+- temporarily mark a language pair as unavailable,
+- or stop immediately for permanent errors.
+
+This keeps provider-specific error handling inside the adapters and routing decisions centralized in the router.
+No changes were made to the existing provider error-code implementations.
+
+## [v0.2.5]- no date
+
+- Repair router provider cache, add a new policy manager and config.
+
 ## [0.2.0] - 2026-08-08 - dev log
 
 ### Added
