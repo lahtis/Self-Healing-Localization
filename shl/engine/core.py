@@ -1,287 +1,86 @@
 """
 File: core.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.5
+Version: 0.2.6
 License: MIT
 Description:
-    Central engine that unifies the Self-Healing Localization Layer.
+    Central localization engine for the Self-Healing Localization Layer.
 
-    - Manages UI localization through Localizer
-    - Manages AI prompt templates through TemplateLocalizer
-    - Ensures languages exist across both systems
-    - Optional GLFM language validation with fallback chains
-    - Smart translation routing with automatic fallback
-    - Machine translation only when enabled
-    - Provides a clean API for higher-level applications
-    - Supports .env file for API keys and configuration
+    Responsibilities:
+    - Manages UI localization through Localizer.
+    - Manages AI prompt templates through TemplateLocalizer.
+    - Ensures languages exist across both systems.
+    - Validates and normalizes language codes.
+    - Manages GLFM language fallback chains.
+    - Synchronizes localized keys and templates.
+    - Provides optional machine translation through the translation layer.
+
+    Translation providers, provider failover, provider policies, retries,
+    provider registries, and translation caching are handled by the
+    translation subsystem rather than by this class.
 """
 
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from shl.engine.localizer import Localizer
 from shl.engine.template_localizer import TemplateLocalizer
-
-from shl.engine.translation import (
-    translate_text,
-    TranslationCache,
-    MyMemoryAdapter,
-    LibreTranslateAdapter,
-    TranslationError,
-    ServiceUnavailableError,
-    RateLimitExceededError,
-    LanguageNotSupportedError,
-    ProviderAccessError,
-    InvalidRequestError,
-)
+from shl.engine.translation import translate_text
 
 from shl.language_validator import LanguageValidator
-from shl.utils.lang_utils import (
-    base_language,
-    normalize_full_tag,
-)
-from shl.utils.env_loader import load_shl_env, get_env_value
-from shl.config.config import get_cache_config
+from shl.utils.lang_utils import base_language, normalize_full_tag
+from shl.utils.env_loader import get_env_value, load_shl_env
 
 
 logger = logging.getLogger(__name__)
 
 
 class LocalizationEngine:
-    """Central localization engine for UI text and templates."""
+    """High-level localization engine for UI text and prompt templates."""
 
     def __init__(
         self,
         lang_code: Optional[str] = None,
-        base_lang: Optional[str] = None,
+        base_lang: str = "en",
         ui_folder: str = "locales",
         template_folder: str = "prompts",
         config: Optional[Dict[str, Any]] = None,
         glfm_path: Optional[str] = None,
-        glfm_lite: bool = True,
-        libretranslate_url: Optional[str] = None,
-        libretranslate_api_key: Optional[str] = None,
-        mymemory_email: Optional[str] = None,
-        libretranslate_mirrors: Optional[
-            List[Dict[str, Any]]
-        ] = None,
-        deepl_key: Optional[str] = None,
-        google_api_key: Optional[str] = None,
-        google_backup_api_key: Optional[str] = None,
-        papago_client_id: Optional[str] = None,
-        papago_client_secret: Optional[str] = None,
-    ):
-        # Lataa .env-tiedosto (jos ei jo ladattu)
+        glfm_lite: Optional[bool] = None,
+    ) -> None:
         load_shl_env()
 
-        default_config = self._load_default_config()
-
-        if config:
-            default_config.update(config)
-
-        self.config = default_config
-
-        # ------------------------------------------------------------------
-        # SETTINGS overrides GLFM and locale completely
-        # ------------------------------------------------------------------
-        import configparser
-
-        if os.path.exists("config.conf"):
-            parser = configparser.ConfigParser()
-            parser.read("config.conf", encoding="utf-8")
-
-            if parser.has_option("SETTINGS", "language"):
-                forced_lang = parser.get("SETTINGS", "language").strip()
-                forced_base = parser.get("SETTINGS", "base_lang", fallback="en").strip()
-
-                self.lang_code = normalize_full_tag(forced_lang)
-                self.base_lang = base_language(forced_base)
-
-                logger.info(
-                    "LocalizationEngine forced by SETTINGS: lang=%s, base=%s",
-                    self.lang_code,
-                    self.base_lang,
-                )
-
-                # Disable GLFM completely when SETTINGS forces language
-                self.validator = LanguageValidator(
-                    glfm_path=None,
-                    base_language=self.base_lang,
-                    use_lite=True,
-                )
-                self.glfm_fallback = None
-                self.glfm_fallback_chain = []
-
-                # Folders
-                self.ui_folder = ui_folder
-                self.template_folder = template_folder
-
-                # Cache & adapters (required elsewhere in the class)
-                cache_cfg = get_cache_config()
-                self.cache = TranslationCache(
-                    persist=cache_cfg.get("persist", False),
-                    persist_path=cache_cfg.get("persist_path", ".shl_cache.json"),
-                    ttl=cache_cfg.get("ttl", 3600),
-                    max_size=cache_cfg.get("max_size", 10000),
-                )
-                # Resolve API keys: parametrit > .env > oletus
-                resolved_mymemory_email = (
-                    mymemory_email
-                    or get_env_value("MYMEMORY_EMAIL")
-                )
-                resolved_libretranslate_url = (
-                    libretranslate_url
-                    or get_env_value("LIBRETRANSLATE_URL")
-                )
-                resolved_libretranslate_api_key = (
-                    libretranslate_api_key
-                    or get_env_value("LIBRETRANSLATE_API_KEY")
-                )
-                self._deepl_key = deepl_key or get_env_value("DEEPL_API_KEY")
-                self._google_api_key = google_api_key or get_env_value("GOOGLE_API_KEY")
-                self._google_backup_api_key = google_backup_api_key or get_env_value("GOOGLE_BACKUP_API_KEY")
-                self._papago_client_id = papago_client_id or get_env_value("NAVER_CLIENT_ID")
-                self._papago_client_secret = papago_client_secret or get_env_value("NAVER_CLIENT_SECRET")
-
-                self.mymemory_adapter = MyMemoryAdapter(
-                    email=resolved_mymemory_email,
-                )
-                self.libretranslate_adapter = LibreTranslateAdapter(
-                    base_url=resolved_libretranslate_url,
-                    api_key=resolved_libretranslate_api_key,
-                    mirrors=libretranslate_mirrors,
-                )
-
-                self._libretranslate_url = resolved_libretranslate_url
-                self._libretranslate_api_key = resolved_libretranslate_api_key
-                self._mymemory_email = resolved_mymemory_email
-                self._libretranslate_mirrors = libretranslate_mirrors
-
-                # Localizers
-                self.ui_localizer = Localizer(
-                    lang_code=self.lang_code,
-                    base_lang=self.base_lang,
-                    folder=self.ui_folder,
-                )
-                self.template_localizer = TemplateLocalizer(
-                    lang_code=self.lang_code,
-                    base_lang=self.base_lang,
-                    folder=self.template_folder,
-                )
-
-                logger.info(
-                    "LocalizationEngine initialized: "
-                    "lang=%s, base=%s (SETTINGS forced)",
-                    self.lang_code,
-                    self.base_lang,
-                )
-                return
-
-        # ------------------------------------------------------------------
-        # Normal flow
-        # ------------------------------------------------------------------
-        if base_lang is None:
-            base_lang = self.config.get(
-                "base_lang",
-                "en",
-            )
-
-        if lang_code is None:
-            lang_code = self._detect_language()
-
-        self.lang_code = normalize_full_tag(lang_code)
-        self.base_lang = base_language(base_lang)
+        self.config = self._build_config(config)
 
         self.ui_folder = ui_folder
         self.template_folder = template_folder
 
-        self.validator = LanguageValidator(
-            glfm_path=glfm_path,
-            base_language=self.base_lang,
-            use_lite=glfm_lite,
+        self.base_lang = base_language(
+            self.config.get("base_lang", base_lang)
         )
 
-        self.glfm_fallback: Optional[str] = None
-        self.glfm_fallback_chain: List[str] = []
+        selected_language = lang_code or self.config.get("language")
 
-        if self.validator.is_loaded:
-            if not self.validator.is_valid(self.lang_code):
-                logger.warning(
-                    "Language '%s' not found in GLFM",
-                    self.lang_code,
-                )
-            else:
-                self.glfm_fallback_chain = (
-                    self.validator.get_fallback_chain(
-                        self.lang_code,
-                        base_language=self.base_lang,
-                        max_nearest=None,
-                    )
-                )
+        if not selected_language:
+            selected_language = self._detect_language()
 
-                if len(self.glfm_fallback_chain) > 1:
-                    self.glfm_fallback = (
-                        self.glfm_fallback_chain[1]
-                    )
+        self.lang_code = normalize_full_tag(selected_language)
 
-                logger.debug(
-                    "GLFM fallback chain for '%s': %s",
-                    self.lang_code,
-                    self.glfm_fallback_chain,
-                )
-
-        cache_cfg = get_cache_config()
-        self.cache = TranslationCache(
-            persist=cache_cfg.get("persist", False),
-            persist_path=cache_cfg.get("persist_path", ".shl_cache.json"),
-            ttl=cache_cfg.get("ttl", 3600),
-            max_size=cache_cfg.get("max_size", 10000),
+        self.fallback_to_base = bool(
+            self.config.get("fallback_to_base", True)
         )
 
-        # Resolve API keys: parametrit > .env > oletus
-        resolved_mymemory_email = (
-            mymemory_email
-            or get_env_value("MYMEMORY_EMAIL")
-        )
-        resolved_libretranslate_url = (
-            libretranslate_url
-            or get_env_value("LIBRETRANSLATE_URL")
-        )
-        resolved_libretranslate_api_key = (
-            libretranslate_api_key
-            or get_env_value("LIBRETRANSLATE_API_KEY")
-        )
-        self._deepl_key = deepl_key or get_env_value("DEEPL_API_KEY")
-        self._google_api_key = google_api_key or get_env_value("GOOGLE_API_KEY")
-        self._google_backup_api_key = google_backup_api_key or get_env_value("GOOGLE_BACKUP_API_KEY")
-        self._papago_client_id = papago_client_id or get_env_value("NAVER_CLIENT_ID")
-        self._papago_client_secret = papago_client_secret or get_env_value("NAVER_CLIENT_SECRET")
-
-        self.mymemory_adapter = MyMemoryAdapter(
-            email=resolved_mymemory_email,
+        self.m_translation_enabled = bool(
+            self.config.get("m_translation_enabled", False)
         )
 
-        self.libretranslate_adapter = (
-            LibreTranslateAdapter(
-                base_url=resolved_libretranslate_url,
-                api_key=resolved_libretranslate_api_key,
-                mirrors=libretranslate_mirrors,
-            )
-        )
+        self.validator = LanguageValidator(glfm_path)
 
-        self._libretranslate_url = (
-            resolved_libretranslate_url
-        )
-        self._libretranslate_api_key = (
-            resolved_libretranslate_api_key
-        )
-        self._mymemory_email = (
-            resolved_mymemory_email
-        )
-        self._libretranslate_mirrors = (
-            libretranslate_mirrors
-        )
+        self.glfm_fallback: List[str] = []
+
+        self._validate_language()
+        self._build_fallback_chain()
 
         self.ui_localizer = Localizer(
             lang_code=self.lang_code,
@@ -296,257 +95,232 @@ class LocalizationEngine:
         )
 
         logger.info(
-            "LocalizationEngine initialized: "
-            "lang=%s, base=%s%s",
+            "LocalizationEngine initialized: lang=%s, base=%s",
             self.lang_code,
             self.base_lang,
-            " (GLFM Lite)"
-            if glfm_lite
-            else " (GLFM Full)",
         )
 
     # ------------------------------------------------------------------
     # Configuration
     # ------------------------------------------------------------------
 
-    def _load_default_config(self) -> Dict[str, Any]:
-        """Load default configuration and config.conf values."""
-        config: Dict[str, Any] = {
+    def _build_config(
+        self,
+        config: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Build the localization configuration."""
+
+        defaults = {
             "m_translation_enabled": False,
-            "translation_cache_ttl": 3600,
             "fallback_to_base": True,
             "strict_mode": False,
             "default_language": None,
             "glfm_lite": True,
-            "cache": {
-                "cache_persist": False,
-                "cache_persist_path": ".shl_cache.json",
-                "ttl": 3600,
-                "max_size": 10000,
-            },
         }
 
-        # Lue config.conf
-        try:
-            import configparser
+        if config:
+            defaults.update(config)
 
-            if os.path.exists("config.conf"):
-                parser = configparser.ConfigParser()
-                parser.read(
-                    "config.conf",
-                    encoding="utf-8",
-                )
-
-                if parser.has_section("SETTINGS"):
-                    language = parser.get(
-                        "SETTINGS",
-                        "language",
-                        fallback=None,
-                    )
-
-                    if language:
-                        config["default_language"] = (
-                            language.strip()
-                        )
-
-                    if parser.has_option(
-                        "SETTINGS",
-                        "m_translation_enabled",
-                    ):
-                        config[
-                            "m_translation_enabled"
-                        ] = parser.getboolean(
-                            "SETTINGS",
-                            "m_translation_enabled",
-                            fallback=False,
-                        )
-
-                    if parser.has_option(
-                        "SETTINGS",
-                        "fallback_to_base",
-                    ):
-                        config[
-                            "fallback_to_base"
-                        ] = parser.getboolean(
-                            "SETTINGS",
-                            "fallback_to_base",
-                            fallback=True,
-                        )
-
-                    if parser.has_option(
-                        "SETTINGS",
-                        "glfm_lite",
-                    ):
-                        config["glfm_lite"] = (
-                            parser.getboolean(
-                                "SETTINGS",
-                                "glfm_lite",
-                                fallback=True,
-                            )
-                        )
-
-                    configured_base = parser.get(
-                        "SETTINGS",
-                        "base_lang",
-                        fallback=None,
-                    )
-
-                    if configured_base:
-                        config["base_lang"] = (
-                            configured_base.strip()
-                        )
-
-                    logger.debug(
-                        "Loaded settings from config.conf"
-                    )
-
-        except Exception as error:
-            logger.debug(
-                "Could not read config.conf: %s",
-                error,
-            )
-
-        return config
+        return defaults
 
     # ------------------------------------------------------------------
-    # Language detection
+    # Language detection and validation
     # ------------------------------------------------------------------
 
     def _detect_language(self) -> str:
-        """Detect the active language."""
-        configured_language = self.config.get(
-            "default_language"
+        """Detect the active language from configuration or environment."""
+
+        language = get_env_value("SHL_LANGUAGE")
+
+        if not language:
+            language = get_env_value("LANG")
+
+        if not language:
+            language = self.config.get("default_language")
+
+        return normalize_full_tag(language or "en")
+
+    def _validate_language(self) -> None:
+        """Validate the active language against GLFM when available."""
+
+        if not self.validator.is_loaded:
+            return
+
+        if self.validator.is_valid(self.lang_code):
+            return
+
+        logger.warning(
+            "Language '%s' not found in GLFM; using base language '%s'",
+            self.lang_code,
+            self.base_lang,
         )
 
-        if configured_language:
-            return configured_language
+        self.lang_code = self.base_lang
 
-        environment_language = os.environ.get(
-            "SHL_LANGUAGE"
-        )
+    def _build_fallback_chain(self) -> None:
+        """Build the GLFM localization fallback chain."""
 
-        if environment_language:
-            return environment_language
+        self.glfm_fallback = []
 
-        raw_language = os.environ.get(
-            "LANG",
-            "",
-        )
+        if not self.validator.is_loaded:
+            return
 
-        if raw_language:
-            language = raw_language.split(".")[0]
-
-            if "_" in language:
-                parts = language.split("_")
-
-                if len(parts) == 2:
-                    return (
-                        f"{parts[0].lower()}-"
-                        f"{parts[1].upper()}"
-                    )
-
-            return language.lower()
-
-        return "en"
-
-    # ------------------------------------------------------------------
-    # Key validation
-    # ------------------------------------------------------------------
-
-    def _validate_key(self, key: str) -> str:
-        """Validate and normalize a localization key."""
-        if not isinstance(key, str):
+        try:
+            fallback = self.validator.get_fallback(self.lang_code)
+        except Exception as error:
             logger.warning(
-                "Invalid key type: %s",
-                type(key),
+                "Unable to build GLFM fallback for '%s': %s",
+                self.lang_code,
+                error,
             )
-            return ""
+            return
 
-        normalized_key = key.strip()
+        if not fallback:
+            return
 
-        if not normalized_key:
-            logger.debug(
-                "Empty key detected"
-            )
-            return ""
+        if isinstance(fallback, str):
+            fallback = [fallback]
 
-        if normalized_key != key:
-            logger.debug(
-                "Key normalized: '%s' -> '%s'",
-                key,
-                normalized_key,
-            )
+        for language in fallback:
+            normalized = normalize_full_tag(language)
 
-        return normalized_key
+            if normalized == self.lang_code:
+                continue
+
+            if normalized not in self.glfm_fallback:
+                self.glfm_fallback.append(normalized)
+
+        logger.debug(
+            "GLFM fallback chain for '%s': %s",
+            self.lang_code,
+            self.glfm_fallback,
+        )
 
     # ------------------------------------------------------------------
     # Language management
     # ------------------------------------------------------------------
 
-    def ensure_language(
-        self,
-        lang_code: str,
-    ) -> None:
-        """Ensure UI and template files exist."""
-        validated_lang = normalize_full_tag(lang_code)
+    def ensure_language(self, lang_code: str) -> None:
+        """Ensure UI and template localization files exist."""
 
-        logger.debug(
-            "Ensuring language: %s",
-            validated_lang,
-        )
+        normalized = normalize_full_tag(lang_code)
 
         Localizer(
-            lang_code=validated_lang,
+            lang_code=normalized,
             base_lang=self.base_lang,
             folder=self.ui_folder,
         )
 
         TemplateLocalizer(
-            lang_code=validated_lang,
+            lang_code=normalized,
             base_lang=self.base_lang,
             folder=self.template_folder,
         )
 
-    def set_language(
-        self,
-        lang_code: str,
-    ) -> None:
-        """Switch active language."""
-        validated_lang = normalize_full_tag(lang_code)
+    def set_language(self, lang_code: str) -> None:
+        """Switch the active localization language."""
 
-        self.lang_code = validated_lang
+        normalized = normalize_full_tag(lang_code)
 
-        self.ui_localizer.set_language(
-            validated_lang
+        if normalized == self.lang_code:
+            return
+
+        self.lang_code = normalized
+
+        self._validate_language()
+        self._build_fallback_chain()
+
+        self.ui_localizer = Localizer(
+            lang_code=self.lang_code,
+            base_lang=self.base_lang,
+            folder=self.ui_folder,
         )
 
-        self.template_localizer.set_language(
-            validated_lang
+        self.template_localizer = TemplateLocalizer(
+            lang_code=self.lang_code,
+            base_lang=self.base_lang,
+            folder=self.template_folder,
         )
-
-        if self.validator.is_loaded:
-            self.glfm_fallback_chain = (
-                self.validator.get_fallback_chain(
-                    validated_lang,
-                    base_language=self.base_lang,
-                    max_nearest=None,
-                )
-            )
-
-            if len(self.glfm_fallback_chain) > 1:
-                self.glfm_fallback = (
-                    self.glfm_fallback_chain[1]
-                )
-            else:
-                self.glfm_fallback = None
 
         logger.info(
-            "Language switched to: %s",
-            validated_lang,
+            "Localization language changed to '%s'",
+            self.lang_code,
         )
 
     # ------------------------------------------------------------------
-    # Key management
+    # Key validation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_key(key: Any) -> str:
+        """Validate and normalize a localization key."""
+
+        if not isinstance(key, str):
+            raise TypeError("Localization key must be a string")
+
+        key = key.strip()
+
+        if not key:
+            raise ValueError("Localization key cannot be empty")
+
+        return key
+
+    # ------------------------------------------------------------------
+    # Localization fallback
+    # ------------------------------------------------------------------
+
+    def _get_with_fallback(
+        self,
+        localizer: Any,
+        key: str,
+    ) -> Optional[str]:
+        """
+        Resolve a localized value through the localization fallback chain.
+
+        Order:
+            active language
+            GLFM fallback languages
+            base language
+
+        This is localization fallback, not translation-provider fallback.
+        """
+
+        value = localizer.get_text(key)
+
+        if value is not None:
+            return value
+
+        if not self.fallback_to_base:
+            return None
+
+        for language in self.glfm_fallback:
+            fallback_localizer = Localizer(
+                lang_code=language,
+                base_lang=self.base_lang,
+                folder=self.ui_folder,
+            )
+
+            value = fallback_localizer.get_text(key)
+
+            if value is not None:
+                return value
+
+        if self.lang_code != self.base_lang:
+            base_localizer = Localizer(
+                lang_code=self.base_lang,
+                base_lang=self.base_lang,
+                folder=self.ui_folder,
+            )
+
+            value = base_localizer.get_text(key)
+
+            if value is not None:
+                return value
+
+        return None
+
+    # ------------------------------------------------------------------
+    # UI localization
     # ------------------------------------------------------------------
 
     def ensure_ui_key(
@@ -554,136 +328,24 @@ class LocalizationEngine:
         key: str,
         default: str = "",
     ) -> str:
-        """Ensure a UI key exists."""
+        """Ensure a UI key exists and return its localized value."""
+
         validated_key = self._validate_key(key)
 
-        if not validated_key:
-            return ""
-
-        text = self._get_with_fallback(
-            self.ui_localizer.get_text,
+        value = self._get_with_fallback(
+            self.ui_localizer,
             validated_key,
         )
 
-        if text is None or text == "":
-            self.ui_localizer.set_text(
-                validated_key,
-                default,
-            )
-            return default
+        if value is not None:
+            return value
 
-        return text
-
-    def ensure_template_key(
-        self,
-        key: str,
-        default: str = "",
-    ) -> str:
-        """Ensure a template key exists."""
-        validated_key = self._validate_key(key)
-
-        if not validated_key:
-            return ""
-
-        text = self._get_with_fallback(
-            self.template_localizer.get_template,
+        self.ui_localizer.set_text(
             validated_key,
+            default,
         )
 
-        if text is None or text == "":
-            self.template_localizer.set_template(
-                validated_key,
-                default,
-            )
-            return default
-
-        return text
-
-    # ------------------------------------------------------------------
-    # Fallback
-    # ------------------------------------------------------------------
-
-    def _get_with_fallback(
-        self,
-        getter: Callable[
-            [str, Optional[str], bool],
-            Optional[str],
-        ],
-        key: str,
-    ) -> Optional[str]:
-        """
-        Retrieve a key through the fallback chain.
-
-        If fallback_to_base is False, only the active language is
-        checked. GLFM and base-language fallback are both disabled.
-        """
-        fallback_enabled = self.config.get(
-            "fallback_to_base",
-            True,
-        )
-
-        # 1. Active language is always checked.
-        text = getter(
-            key,
-            self.lang_code,
-            fallback=False,
-        )
-
-        if text and text.strip():
-            return text
-
-        # 2. Fallback disabled: stop here.
-        if not fallback_enabled:
-            return None
-
-        # 3. GLFM fallback languages.
-        if (
-            self.glfm_fallback_chain
-            and len(self.glfm_fallback_chain) > 1
-        ):
-            for fallback_lang in (
-                self.glfm_fallback_chain[1:]
-            ):
-                if fallback_lang == self.lang_code:
-                    continue
-
-                logger.debug(
-                    "Fallback: '%s' -> GLFM language '%s'",
-                    key,
-                    fallback_lang,
-                )
-
-                text = getter(
-                    key,
-                    fallback_lang,
-                    fallback=False,
-                )
-
-                if text and text.strip():
-                    return text
-
-        # 4. Base language.
-        if self.lang_code != self.base_lang:
-            logger.debug(
-                "Fallback: '%s' -> base language '%s'",
-                key,
-                self.base_lang,
-            )
-
-            text = getter(
-                key,
-                self.base_lang,
-                fallback=False,
-            )
-
-            if text and text.strip():
-                return text
-
-        return None
-
-    # ------------------------------------------------------------------
-    # Retrieval
-    # ------------------------------------------------------------------
+        return default
 
     def ui_text(
         self,
@@ -691,95 +353,83 @@ class LocalizationEngine:
         default_value: str = "",
     ) -> str:
         """
-        Retrieve UI text with fallback and optional translation.
+        Return localized UI text.
+
+        Existing localization always has priority. Missing text may be
+        machine-translated when translation is explicitly enabled.
+
+        Translation failures are not converted into successful translations.
+        The translation subsystem is responsible for provider failover and
+        translation caching.
         """
+
         validated_key = self._validate_key(key)
 
-        if not validated_key:
-            return default_value
-
-        cached = self.cache.get(
-            validated_key,
-            self.base_lang,
-            self.lang_code,
-        )
-
-        if cached is not None:
-            return cached
-
-        text = self._get_with_fallback(
-            self.ui_localizer.get_text,
+        value = self._get_with_fallback(
+            self.ui_localizer,
             validated_key,
         )
 
-        if text is None:
-            if (
-                self.config.get(
-                    "m_translation_enabled",
-                    False,
+        if value is not None:
+            return value
+
+        if (
+            self.m_translation_enabled
+            and self.lang_code != self.base_lang
+            and default_value
+        ):
+            try:
+                translated = translate_text(
+                    text=default_value,
+                    target_lang=self.lang_code,
+                    source_lang=self.base_lang,
                 )
-                and self.lang_code != self.base_lang
-                and default_value
-            ):
-                try:
-                    translated = translate_text(
-                        text=default_value,
-                        target_lang=self.lang_code,
-                        source_lang=self.base_lang,
-                        mymemory_email=self._mymemory_email,
-                        deepl_key=self._deepl_key,
-                        google_api_key=self._google_api_key,
-                        google_backup_api_key=self._google_backup_api_key,
-                        papago_client_id=self._papago_client_id,
-                        papago_client_secret=self._papago_client_secret,
+
+                if translated is not None:
+                    self.ui_localizer.set_text(
+                        validated_key,
+                        translated,
                     )
+                    return translated
 
-                    if (
-                        translated
-                        and translated != default_value
-                    ):
-                        self.ui_localizer.set_text(
-                            validated_key,
-                            translated,
-                        )
+            except Exception as error:
+                logger.warning(
+                    "Machine translation failed for key '%s': %s",
+                    validated_key,
+                    error,
+                )
 
-                        self.cache.set(
-                            validated_key,
-                            translated,
-                            self.base_lang,
-                            self.lang_code,
-                        )
-
-                        return translated
-
-                except Exception as error:
-                    logger.warning(
-                        "Machine translation failed: %s",
-                        error,
-                    )
-
-            self.ui_localizer.set_text(
-                validated_key,
-                default_value,
-            )
-
-            self.cache.set(
-                validated_key,
-                default_value,
-                self.base_lang,
-                self.lang_code,
-            )
-
-            return default_value
-
-        self.cache.set(
+        self.ui_localizer.set_text(
             validated_key,
-            text,
-            self.base_lang,
-            self.lang_code,
+            default_value,
         )
 
-        return text
+        return default_value
+
+    # ------------------------------------------------------------------
+    # Prompt templates
+    # ------------------------------------------------------------------
+
+    def ensure_template_key(
+        self,
+        key: str,
+        default: str = "",
+    ) -> str:
+        """Ensure a prompt template key exists."""
+
+        validated_key = self._validate_key(key)
+
+        value = self.template_localizer.get_text(validated_key)
+
+        if value is not None:
+            return value
+
+        self.template_localizer.set_text(
+            validated_key,
+            default,
+        )
+
+        return default
 
     def template(
         self,
@@ -787,42 +437,35 @@ class LocalizationEngine:
         default: str = "",
         **kwargs: Any,
     ) -> str:
-        """Retrieve and format a prompt template."""
+        """Return a localized prompt template and format it."""
+
         validated_key = self._validate_key(key)
 
-        if not validated_key:
-            return default if default else key
-
-        text = self._get_with_fallback(
-            self.template_localizer.get_template,
-            validated_key,
+        value = self.template_localizer.get_text(
+            validated_key
         )
 
-        if text is None:
-            text = default if default else key
+        if value is None:
+            value = default
 
-            self.template_localizer.set_template(
+            self.template_localizer.set_text(
                 validated_key,
-                text,
+                value,
             )
 
+        if not kwargs:
+            return value
+
         try:
-            if kwargs:
-                return text.format(**kwargs)
+            return value.format(**kwargs)
 
-            return text
-
-        except (
-            KeyError,
-            ValueError,
-        ) as error:
+        except (KeyError, ValueError) as error:
             logger.warning(
-                "Template '%s' format error: %s",
+                "Template formatting failed for key '%s': %s",
                 validated_key,
                 error,
             )
-
-            return text
+            return value
 
     # ------------------------------------------------------------------
     # Synchronization
@@ -831,21 +474,8 @@ class LocalizationEngine:
     def _sync_from_lang(
         self,
         source_lang: str,
-    ) -> int:
-        """
-        Synchronize keys from source language.
-
-        Existing keys are counted as synchronized because Localizer may
-        already have copied them from the base language.
-        """
-        if source_lang == self.lang_code:
-            return 0
-
-        logger.debug(
-            "Syncing from '%s' to '%s'",
-            source_lang,
-            self.lang_code,
-        )
+    ) -> None:
+        """Synchronize missing UI and template keys from one language."""
 
         source_ui = Localizer(
             lang_code=source_lang,
@@ -853,209 +483,61 @@ class LocalizationEngine:
             folder=self.ui_folder,
         )
 
-        ui_count = 0
-
-        for key, value in source_ui.texts.items():
-            validated_key = self._validate_key(key)
-
-            if not validated_key:
-                continue
-
-            if validated_key not in self.ui_localizer.texts:
-                self.ui_localizer.set_text(
-                    validated_key,
-                    value,
-                )
-
-            ui_count += 1
-
         source_templates = TemplateLocalizer(
             lang_code=source_lang,
             base_lang=self.base_lang,
             folder=self.template_folder,
         )
 
-        template_count = 0
+        for key, value in source_ui.texts.items():
+            if key not in self.ui_localizer.texts:
+                self.ui_localizer.set_text(key, value)
 
         for key, value in source_templates.templates.items():
-            validated_key = self._validate_key(key)
+            if key not in self.template_localizer.templates:
+                self.template_localizer.set_text(key, value)
 
-            if not validated_key:
-                continue
+    def sync(self) -> None:
+        """Synchronize missing keys from fallback languages and base."""
 
-            if (
-                validated_key
-                not in self.template_localizer.templates
-            ):
-                self.template_localizer.set_template(
-                    validated_key,
-                    value,
-                )
-
-            template_count += 1
-
-        total_count = ui_count + template_count
-
-        if total_count:
-            logger.debug(
-                "Synchronized %s UI keys and %s templates "
-                "from '%s'",
-                ui_count,
-                template_count,
-                source_lang,
-            )
-
-        return total_count
-
-    def sync(self) -> int:
-        """Synchronize keys from fallback and base languages."""
-        logger.info(
-            "Synchronizing to '%s'",
-            self.lang_code,
-        )
-
-        total_synced = 0
-
-        if (
-            self.glfm_fallback_chain
-            and len(self.glfm_fallback_chain) > 1
-        ):
-            for fallback_lang in (
-                self.glfm_fallback_chain[1:]
-            ):
-                if fallback_lang != self.lang_code:
-                    total_synced += (
-                        self._sync_from_lang(
-                            fallback_lang
-                        )
-                    )
+        for language in self.glfm_fallback:
+            if language != self.lang_code:
+                self._sync_from_lang(language)
 
         if self.base_lang != self.lang_code:
-            logger.info(
-                "Syncing from base language: '%s'",
-                self.base_lang,
-            )
+            self._sync_from_lang(self.base_lang)
 
-            total_synced += self._sync_from_lang(
-                self.base_lang
-            )
+    # ------------------------------------------------------------------
+    # GLFM
+    # ------------------------------------------------------------------
 
-        if total_synced == 0:
-            logger.info(
-                "No new keys to synchronize"
-            )
-        else:
-            logger.info(
-                "Synchronization complete: %s keys synced",
-                total_synced,
-            )
+    def reload_glfm(self) -> None:
+        """Reload GLFM data and rebuild the localization fallback chain."""
 
-        return total_synced
+        self.validator = LanguageValidator(
+            self.validator.path
+            if hasattr(self.validator, "path")
+            else None
+        )
+
+        self._validate_language()
+        self._build_fallback_chain()
 
     # ------------------------------------------------------------------
     # Statistics
     # ------------------------------------------------------------------
 
     def get_stats(self) -> Dict[str, Any]:
-        """Return engine statistics."""
+        """Return localization engine statistics."""
+
         return {
             "lang_code": self.lang_code,
             "base_lang": self.base_lang,
+            "glfm_loaded": self.validator.is_loaded,
             "glfm_fallback": self.glfm_fallback,
-            "glfm_fallback_chain": (
-                self.glfm_fallback_chain.copy()
-            ),
-            "glfm_lite": (
-                self.validator.is_lite
-                if self.validator
-                else True
-            ),
-            "glfm_loaded": (
-                self.validator.is_loaded
-                if self.validator
-                else False
-            ),
-            "ui_keys_count": len(
-                self.ui_localizer.texts
-            ),
-            "template_keys_count": len(
-                self.template_localizer.templates
-            ),
-            "cache_size": self.cache.size(),
-            "m_translation_enabled": self.config.get(
-                "m_translation_enabled",
-                False,
-            ),
-            "config": self.config.copy(),
-            "deepl_key_configured": bool(self._deepl_key),
-            "google_api_key_configured": bool(self._google_api_key),
-            "papago_configured": bool(self._papago_client_id and self._papago_client_secret),
+            "fallback_to_base": self.fallback_to_base,
+            "m_translation_enabled": self.m_translation_enabled,
+            "ui_keys": len(self.ui_localizer.texts),
+            "template_keys": len(self.template_localizer.templates),
+            "config": dict(self.config),
         }
-
-    # ------------------------------------------------------------------
-    # LibreTranslate
-    # ------------------------------------------------------------------
-
-    def get_mirror_stats(
-        self,
-    ) -> List[Dict[str, Any]]:
-        """Return LibreTranslate mirror statistics."""
-        return self.libretranslate_adapter.get_mirror_stats()
-
-    def clear_mirror_cache(self) -> None:
-        """Clear LibreTranslate mirror cache."""
-        self.libretranslate_adapter.clear_mirror_cache()
-
-    # ------------------------------------------------------------------
-    # GLFM
-    # ------------------------------------------------------------------
-
-    def reload_glfm(
-        self,
-        glfm_path: Optional[str] = None,
-        glfm_lite: Optional[bool] = None,
-    ) -> bool:
-        """Reload the GLFM database."""
-        if glfm_lite is None:
-            glfm_lite = self.config.get(
-                "glfm_lite",
-                True,
-            )
-
-        self.validator = LanguageValidator(
-            glfm_path=glfm_path,
-            base_language=self.base_lang,
-            use_lite=glfm_lite,
-        )
-
-        if not self.validator.is_loaded:
-            self.glfm_fallback = None
-            self.glfm_fallback_chain = []
-
-            logger.warning(
-                "GLFM reload failed"
-            )
-
-            return False
-
-        self.glfm_fallback_chain = (
-            self.validator.get_fallback_chain(
-                self.lang_code,
-                base_language=self.base_lang,
-                max_nearest=None,
-            )
-        )
-
-        if len(self.glfm_fallback_chain) > 1:
-            self.glfm_fallback = (
-                self.glfm_fallback_chain[1]
-            )
-        else:
-            self.glfm_fallback = None
-
-        logger.info(
-            "GLFM reloaded: %s languages",
-            len(self.validator.languages),
-        )
-
-        return True

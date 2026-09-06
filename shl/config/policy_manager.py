@@ -1,5 +1,5 @@
 """
-file: policy_manager.py - SHL policy manager
+file: /shl/config/policy_manager.py - SHL policy manager
 Author: Tuomas Lähteenmäki
 License: MIT
 Version: 0.2.10

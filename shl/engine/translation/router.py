@@ -1,13 +1,13 @@
 """
 File: router.py — Policy-aware routing for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.11
 License: MIT
 """
 
 import time
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 
 from .provider_cache import load_cache
 from .cache import TranslationCache
@@ -18,6 +18,7 @@ from .exceptions import (
     LanguageNotSupportedError,
     RateLimitExceededError,
 )
+from .processor import TranslationProcessor
 
 from .providers.mymemory import MyMemoryAdapter
 from .providers.mymemory_registry import MyMemoryRegistry
@@ -78,6 +79,156 @@ _local_registry = LocalRegistry()
 _ms_registry = MicrosoftServiceRegistry(
     ttl_seconds=get_config_value("microsoft_translator.ttl")
 )
+
+
+# ---------------------------------------------------------------------------
+# HTML POLICY
+# ---------------------------------------------------------------------------
+
+_POLICY_PROVIDER_NAMES = {
+    "mymemory": "MyMemory",
+    "libretranslate": "LibreTranslate",
+    "deepl": "DeepL",
+    "google": "Google",
+    "microsoft_translator": "MicrosoftTranslator",
+    "papago": "Papago",
+    "yandex": "Yandex",
+    "local": "Local",
+}
+
+
+def get_provider_html_policy(
+    provider_name: str,
+) -> Optional[bool]:
+    """
+    Return the HTML handling policy for a provider.
+
+    Returns:
+        True:
+            Provider explicitly allows HTML.
+
+        False:
+            Provider explicitly denies HTML, so SHL must preprocess it.
+
+        None:
+            Policy does not explicitly define HTML handling.
+    """
+    if not _USE_POLICY or _policy is None:
+        return None
+
+    policy_name = _POLICY_PROVIDER_NAMES.get(
+        provider_name.lower()
+    )
+
+    if policy_name is None:
+        return None
+
+    provider = _policy.get_provider(
+        policy_name
+    )
+
+    if not provider:
+        return None
+
+    allow = provider.get(
+        "allow",
+        [],
+    )
+
+    deny = provider.get(
+        "deny",
+        [],
+    )
+
+    if not isinstance(allow, list):
+        allow = []
+
+    if not isinstance(deny, list):
+        deny = []
+
+    normalized_allow = {
+        str(value).lower()
+        for value in allow
+    }
+
+    normalized_deny = {
+        str(value).lower()
+        for value in deny
+    }
+
+    # Explicit deny takes precedence.
+    if "html" in normalized_deny:
+        return False
+
+    if "html" in normalized_allow:
+        return True
+
+    return None
+
+def _translate_with_processor(
+    request: TranslationRequest,
+    translator: Callable[[TranslationRequest], str],
+    html_policy: Optional[bool],
+) -> str:
+    """
+    Translate a request through TranslationProcessor when required.
+
+    HTML policy semantics:
+
+        False:
+            Provider denies HTML. SHL preprocesses HTML.
+
+        True:
+            Provider explicitly accepts HTML. Original request is sent
+            directly to the provider.
+
+        None:
+            Preserve the request's existing html_format behavior.
+
+    Placeholder configuration is carried by TranslationRequest and
+    passed to TranslationProcessor unchanged.
+    """
+    if html_policy is True:
+        return translator(request)
+
+    if html_policy is False:
+        if request.html_format:
+            return TranslationProcessor(
+                translator,
+                placeholder_pattern=request.placeholder_pattern,
+            ).process(request).text
+
+        forced_request = TranslationRequest(
+            text=request.text,
+            source_lang=request.source_lang,
+            target_lang=request.target_lang,
+            context_type=request.context_type,
+            domain=request.domain,
+            formality=request.formality,
+            honorific=request.honorific,
+            glossary=request.glossary,
+            glossary_id=request.glossary_id,
+            html_format=True,
+            placeholder_pattern=request.placeholder_pattern,
+            key=request.key,
+            screen=request.screen,
+            component=request.component,
+            source_id=request.source_id,
+            metadata=request.metadata,
+        )
+
+        return TranslationProcessor(
+            translator,
+            placeholder_pattern=forced_request.placeholder_pattern,
+        ).process(forced_request).text
+
+    if request.html_format:
+        return TranslationProcessor(
+            translator,
+            placeholder_pattern=request.placeholder_pattern,
+        ).process(request).text
+
+    return translator(request)
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +477,6 @@ def clear_unavailable_cache() -> None:
     _papago_registry.clear_blacklist()
     _yandex_registry.clear_blacklist()
 
-    # LocalRegistry uses engine-specific shared runtime state.
     _local_registry.clear("local")
 
     _ms_registry.clear()
@@ -389,6 +539,7 @@ def translate_text_with_metadata(
     max_retries: int = 2,
     retry_delay: float = 1.0,
     total_timeout: float = 30.0,
+    placeholder_pattern: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> TranslationResult:
 
@@ -411,6 +562,7 @@ def translate_text_with_metadata(
             text=text,
             source_lang=source_lang,
             target_lang=target_lang,
+            placeholder_pattern=placeholder_pattern,
         )
 
     formality = request.formality
@@ -479,7 +631,11 @@ def translate_text_with_metadata(
                     adapter = MicrosoftTranslatorAdapter(
                         api_key=ms_key,
                     )
-                    translated = adapter.translate(request)
+                    translated = _translate_with_processor(
+                        request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
 
                 elif service == "deepl":
                     adapter = (
@@ -487,7 +643,11 @@ def translate_text_with_metadata(
                         if deepl_key
                         else DeepLAdapter()
                     )
-                    translated = adapter.translate(request)
+                    translated = _translate_with_processor(
+                        request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
 
                 elif service == "google":
                     adapter = (
@@ -498,7 +658,11 @@ def translate_text_with_metadata(
                         if google_api_key
                         else GoogleV2Adapter()
                     )
-                    translated = adapter.translate(request)
+                    translated = _translate_with_processor(
+                        request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
 
                 elif service == "papago":
                     adapter = (
@@ -512,7 +676,11 @@ def translate_text_with_metadata(
                         )
                         else PapagoAdapter()
                     )
-                    translated = adapter.translate(request)
+                    translated = _translate_with_processor(
+                        request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
 
                 elif service == "yandex":
                     adapter = (
@@ -522,27 +690,43 @@ def translate_text_with_metadata(
                         if yandex_api_key
                         else YandexAdapter()
                     )
-                    translated = adapter.translate(request)
+                    translated = _translate_with_processor(
+                        request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
 
                 elif service == "libretranslate":
                     adapter = LibreTranslateAdapter(
                         mirror_manager=_mirror_manager,
                     )
-                    translated = adapter.translate(request)
+                    translated = _translate_with_processor(
+                        request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
 
                 elif service == "mymemory":
                     adapter = MyMemoryAdapter(
                         email=mymemory_email,
                         api_key=mymemory_api_key,
                     )
-                    translated = adapter.translate(request)
+                    translated = _translate_with_processor(
+                        request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
 
                 elif service == "local":
                     adapter = LocalTranslatorAdapter(
                         api_key=local_api_key,
                         registry=_local_registry,
                     )
-                    translated = adapter.translate(request)
+                    translated = _translate_with_processor(
+                        request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
 
                 if translated is not None:
                     if use_cache:
@@ -586,8 +770,6 @@ def translate_text_with_metadata(
                         target_lang,
                     )
 
-                # LocalTranslatorAdapter handles LocalRegistry state
-                # directly because LocalRegistry uses failure thresholds.
                 break
 
             except RateLimitExceededError:
@@ -638,6 +820,7 @@ def translate_text(
     max_retries: int = 2,
     retry_delay: float = 1.0,
     total_timeout: float = 30.0,
+    placeholder_pattern: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> str:
 
@@ -660,6 +843,7 @@ def translate_text(
             max_retries=max_retries,
             retry_delay=retry_delay,
             total_timeout=total_timeout,
+            placeholder_pattern=placeholder_pattern,
             request=request,
         )
 
@@ -673,7 +857,7 @@ def translate_text(
             target_lang,
             e,
         )
-        return text
+        return None
 
     except Exception as e:
         logger.error(
@@ -682,4 +866,5 @@ def translate_text(
             e,
             exc_info=True,
         )
-        return text
+        return None
+

@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+
+## [0.2.10] - 2026-09-06 HTML Handling & Placeholder Protection
+
+### HTML Handling
+- Added HTML-aware translation handling.
+- HTML content is now processed separately from plain text.
+- HTML tags are protected during translation to prevent translation providers from modifying or translating the markup.
+- Text nodes inside HTML are translated while preserving the original HTML structure.
+- HTML handling is integrated with provider policy routing, allowing providers without native HTML support to use the protected translation path.
+
+### Placeholder Protection
+- Reworked placeholder protection to use provider-safe tokens.
+- Replaced the previous private-use Unicode token format with a `{session_id_index_random}` format.
+- Added reliable preservation of both named placeholders such as `{name}` and empty placeholders such as `{}`.
+- Protected placeholders are restored to their exact original form after translation.
+- Prevented provider-side changes such as inserted spaces or modified placeholder contents from causing validation failures.
+
+### Cache
+- Prevented failed translations (`None`) from being stored in the translation cache.
+- Cache loading now ignores invalid `null` translation entries.
+- Normal cache write logging was changed from warning level to informational level.
+
+### Documentation
+- Added placeholder handling guidance to the API description.
+- Documented that named placeholders are recommended when possible, while empty `{}` placeholders are also supported.
+- Documented that placeholders must remain unchanged during translation.
+
+### Verification
+- Verified placeholder preservation with MyMemory.
+- Verified:
+  - `Saved: {}` → `Gespeichert: {}`
+  - `Clear the {} database` → `Löschen der {} Datenbank`
+- Confirmed that the restored translation, rather than the internal protection token, is stored in the cache.
+
+
+
 ## [0.2.10] - 2026-09-05 Router Error Handling
 - Updated the translation router to work with the new provider error-code handling.
 - Provider adapters now normalize service-specific error responses, while the router is responsible for interpreting those errors and deciding the next action.

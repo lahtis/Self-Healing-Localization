@@ -90,6 +90,8 @@ class TranslationCache:
                     if not isinstance(entry, list) or len(entry) != 2:
                         continue
                     cached_text, timestamp = entry
+                    if cached_text is None:
+                        continue
                     if now - timestamp > self.ttl:
                         continue  # Expired, skip
                     self.cache[key] = (cached_text, timestamp)
@@ -170,14 +172,31 @@ class TranslationCache:
     def set(
         self,
         text: str,
-        translated: str,
+        translated: Optional[str],
         source_lang: str,
         target_lang: str,
         formality: Optional[str] = None,
         context_type: Optional[str] = None,
     ) -> None:
-        """Commit an evaluated translation string into the tracking dictionary."""
+        """Commit a successful translation into the cache."""
+        if translated is None:
+            logger.debug(
+                "CACHE SKIP: translation failed for text=%r source=%s target=%s",
+                text,
+                source_lang,
+                target_lang,
+            )
+            return
+
         with self._lock:
+            logger.info(
+            "CACHE SET: text=%r translated=%r source=%s target=%s",
+            text,
+            translated,
+            source_lang,
+            target_lang,
+            )
+
             if len(self.cache) >= self.max_size:
                 self._evict_stale_or_oldest()
 
