@@ -4,6 +4,7 @@ Tests for SHL Router HTML policy handling.
 
 from shl.engine.translation.metadata import TranslationRequest
 from shl.engine.translation import router
+from shl.engine.translation.exceptions import LanguageNotSupportedError
 
 
 def test_provider_html_policy_deny() -> None:
@@ -89,6 +90,38 @@ def test_provider_html_policy_disabled() -> None:
 
     finally:
         router._USE_POLICY = original_use_policy
+
+
+def test_blacklisted_deepl_pair_skips_adapter() -> None:
+    """A rejected DeepL pair must not construct an adapter again."""
+    original_priority = router.get_provider_priority
+    original_adapter = router.DeepLAdapter
+
+    class UnexpectedAdapter:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("blacklisted DeepL pair reached adapter")
+
+    router._deepl_registry.clear_blacklist()
+    router._deepl_registry.mark_pair_unsupported("en", "zh-cn")
+    router.get_provider_priority = lambda **kwargs: ["deepl"]
+    router.DeepLAdapter = UnexpectedAdapter
+
+    try:
+        try:
+            router.translate_text_with_metadata(
+                "Guestbook",
+                target_lang="zh-cn",
+                source_lang="en",
+                max_retries=1,
+            )
+        except LanguageNotSupportedError:
+            pass
+        else:
+            raise AssertionError("expected no available translation service")
+    finally:
+        router.get_provider_priority = original_priority
+        router.DeepLAdapter = original_adapter
+        router._deepl_registry.clear_blacklist()
 
 def test_translate_with_processor_denies_html() -> None:
     """HTML-denying providers must receive text without HTML markup."""
@@ -210,4 +243,3 @@ def test_translate_with_processor_placeholder_is_not_configured() -> None:
 
     assert result == "Сохранено:"
     assert received == ["Saved: {}"]
-

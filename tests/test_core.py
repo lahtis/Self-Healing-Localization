@@ -8,6 +8,8 @@ import pytest
 
 from shl.engine.core import LocalizationEngine
 from shl.engine.localizer import Localizer
+from shl.engine.translation.exceptions import LanguageNotSupportedError
+from shl.engine.translation import router
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +208,37 @@ def test_engine_ui_text_with_machine_translation_disabled():
     )
 
     assert result == "Hello World"
+
+
+def test_engine_skips_remaining_keys_after_unsupported_pair(
+    monkeypatch,
+    tmp_path,
+):
+    """One rejected pair must not trigger translation for every UI key."""
+    calls = 0
+
+    def unavailable_translate_text(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        raise LanguageNotSupportedError("en -> zh-cn is unavailable")
+
+    monkeypatch.setattr(
+        router,
+        "translate_text_with_metadata",
+        unavailable_translate_text,
+    )
+
+    engine = LocalizationEngine(
+        lang_code="zh-cn",
+        base_lang="en",
+        ui_folder=str(tmp_path / "locales"),
+        template_folder=str(tmp_path / "prompts"),
+        config={"m_translation_enabled": True},
+    )
+
+    assert engine.ui_text("guestbook", "Guestbook") == "Guestbook"
+    assert engine.ui_text("message", "Message") == "Message"
+    assert calls == 1
 
 
 def test_engine_ui_text_cache():

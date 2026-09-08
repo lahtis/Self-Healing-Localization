@@ -49,7 +49,11 @@ class DeepLAdapter(TranslationProvider):
     - security checks
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        registry: Optional[DeepLRegistry] = None,
+    ):
         self.api_key = api_key or get_env_value("DEEPL_API_KEY")
 
         if not self.api_key:
@@ -66,8 +70,10 @@ class DeepLAdapter(TranslationProvider):
         else:
             self.base_url = "https://api.deepl.com/v2"
 
-        # Runtime language pair registry
-        self.registry = DeepLRegistry()
+        # The router supplies its shared registry so a language pair rejected
+        # by one request is skipped by all later requests in this process.
+        # Direct adapter users retain an isolated registry by default.
+        self.registry = registry or DeepLRegistry()
 
         # Provider-independent error parser
         self.error_parser = ErrorParser(
@@ -146,6 +152,7 @@ class DeepLAdapter(TranslationProvider):
     def _raise_normalized_error(
         self,
         error,
+        request: Optional[TranslationRequest] = None,
     ) -> None:
         """
         Convert a normalized SHL error into the existing adapter
@@ -241,7 +248,7 @@ class DeepLAdapter(TranslationProvider):
                         raw_response,
                         http_status=response.status,
                     )
-                    self._raise_normalized_error(error)
+                    self._raise_normalized_error(error, request)
 
                 translations = response_data.get(
                     "translations",
@@ -258,7 +265,7 @@ class DeepLAdapter(TranslationProvider):
                         },
                         http_status=response.status,
                     )
-                    self._raise_normalized_error(error)
+                    self._raise_normalized_error(error, request)
 
                 translated = translations[0].get("text")
                 detected = translations[0].get(
@@ -276,7 +283,7 @@ class DeepLAdapter(TranslationProvider):
                         },
                         http_status=response.status,
                     )
-                    self._raise_normalized_error(error)
+                    self._raise_normalized_error(error, request)
 
                 if translated.strip() == payload["text"][0].strip():
                     error = self.error_parser.parse(
@@ -287,7 +294,7 @@ class DeepLAdapter(TranslationProvider):
                         },
                         http_status=response.status,
                     )
-                    self._raise_normalized_error(error)
+                    self._raise_normalized_error(error, request)
 
                 # 2. Unexpected detected source language
                 if request.source_lang:
@@ -306,7 +313,7 @@ class DeepLAdapter(TranslationProvider):
                             },
                             http_status=response.status,
                         )
-                        self._raise_normalized_error(error)
+                        self._raise_normalized_error(error, request)
 
                 # 3. Unexpected HTML markup
                 if not request.html_format:
@@ -320,7 +327,7 @@ class DeepLAdapter(TranslationProvider):
                             },
                             http_status=response.status,
                         )
-                        self._raise_normalized_error(error)
+                        self._raise_normalized_error(error, request)
 
                 # 4. Suspiciously short output
                 if len(translated) < 3 and len(
@@ -335,7 +342,7 @@ class DeepLAdapter(TranslationProvider):
                         },
                         http_status=response.status,
                     )
-                    self._raise_normalized_error(error)
+                    self._raise_normalized_error(error, request)
 
                 logger.debug("DeepL translation successful")
                 return translated
@@ -365,7 +372,7 @@ class DeepLAdapter(TranslationProvider):
                     http_status=e.code,
                 )
 
-            self._raise_normalized_error(error)
+            self._raise_normalized_error(error, request)
 
         except URLError as e:
             if isinstance(
@@ -386,14 +393,14 @@ class DeepLAdapter(TranslationProvider):
                     ),
                 )
 
-            self._raise_normalized_error(error)
+            self._raise_normalized_error(error, request)
 
         except (socket.timeout, TimeoutError) as e:
             error = self.error_parser.parse(
                 {},
                 exception=e,
             )
-            self._raise_normalized_error(error)
+            self._raise_normalized_error(error, request)
 
         except (
             RateLimitExceededError,
@@ -410,4 +417,4 @@ class DeepLAdapter(TranslationProvider):
                 {},
                 exception=e,
             )
-            self._raise_normalized_error(error)
+            self._raise_normalized_error(error, request)

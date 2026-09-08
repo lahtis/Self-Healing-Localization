@@ -137,6 +137,7 @@ class TranslationCache:
         now = time.time()
         if now - self._last_save >= min_interval:
             self.save_to_disk()
+        return False
 
     # ------------------------------------------------------------------
     # PUBLIC API (existing logic preserved)

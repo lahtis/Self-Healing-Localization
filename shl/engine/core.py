@@ -1,7 +1,7 @@
 """
 File: core.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.2.10
 License: MIT
 Description:
     Central localization engine for the Self-Healing Localization Layer.
@@ -22,11 +22,12 @@ Description:
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from shl.engine.localizer import Localizer
 from shl.engine.template_localizer import TemplateLocalizer
 from shl.engine.translation import translate_text
+from shl.engine.translation.exceptions import LanguageNotSupportedError
 
 from shl.language_validator import LanguageValidator
 from shl.utils.lang_utils import base_language, normalize_full_tag
@@ -74,6 +75,12 @@ class LocalizationEngine:
         self.m_translation_enabled = bool(
             self.config.get("m_translation_enabled", False)
         )
+
+        # A bootstrap may introduce dozens of missing UI strings at once.
+        # When the translation layer has conclusively rejected a language
+        # pair, remember it for this engine instance instead of routing every
+        # remaining key through the same unavailable providers.
+        self._unavailable_translation_pairs: Set[Tuple[str, str]] = set()
 
         self.validator = LanguageValidator(glfm_path)
 
@@ -377,12 +384,17 @@ class LocalizationEngine:
             self.m_translation_enabled
             and self.lang_code != self.base_lang
             and default_value
+            and (
+                self.base_lang,
+                self.lang_code,
+            ) not in self._unavailable_translation_pairs
         ):
             try:
                 translated = translate_text(
                     text=default_value,
                     target_lang=self.lang_code,
                     source_lang=self.base_lang,
+                    raise_on_language_not_supported=True,
                 )
 
                 if translated is not None:
@@ -391,6 +403,21 @@ class LocalizationEngine:
                         translated,
                     )
                     return translated
+
+            except LanguageNotSupportedError as error:
+                language_pair = (
+                    self.base_lang,
+                    self.lang_code,
+                )
+                self._unavailable_translation_pairs.add(language_pair)
+                logger.info(
+                    "Machine translation is unavailable for '%s' -> '%s'; "
+                    "remaining missing UI keys will use their default text "
+                    "for this engine instance: %s",
+                    self.base_lang,
+                    self.lang_code,
+                    error,
+                )
 
             except Exception as error:
                 logger.warning(
@@ -537,6 +564,9 @@ class LocalizationEngine:
             "glfm_fallback": self.glfm_fallback,
             "fallback_to_base": self.fallback_to_base,
             "m_translation_enabled": self.m_translation_enabled,
+            "unavailable_translation_pairs": len(
+                self._unavailable_translation_pairs
+            ),
             "ui_keys": len(self.ui_localizer.texts),
             "template_keys": len(self.template_localizer.templates),
             "config": dict(self.config),

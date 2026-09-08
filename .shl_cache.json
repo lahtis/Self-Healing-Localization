@@ -1,246 +1,54 @@
 {
-  "5b3f1e49770fc1b04600f87e52dee828": [
-    "Libro de visitas",
-    1788717480.297106
+  "a9ccbd2a5e514fab61806da501017f43": [
+    "留言板",
+    1788899197.4539073
   ],
-  "24b94e75589a75f44ccbc86591d92ef7": [
-    "Mensaje",
-    1788717480.791096
+  "379fccbd12bc75347991ab3f3332f9c1": [
+    "信息",
+    1788899197.918978
   ],
-  "e506608982a8df621ddd31aa22f02e67": [
-    "Listo",
-    1788717481.2955348
+  "ad5baed2af214cde58a977206ce8768a": [
+    "就绪",
+    1788899198.3776824
   ],
-  "01f7be8f7a9894c5a005e9a55c53385a": [
-    "Guardar",
-    1788717481.8267074
+  "c609e2ff42b812b81626cdf8376baf08": [
+    "保存",
+    1788899198.8735976
   ],
-  "9581302c1bd8b3c56fe6e01659bf622f": [
-    "Borrar la base de datos",
-    1788717482.4086382
+  "bd2610e460337e4ab4f3482d899e2fd0": [
+    "清除数据库",
+    1788899199.469362
   ],
-  "125b82ad270a362087a4b6a8db28bf7d": [
-    "Buscar mensajes ...",
-    1788717482.958175
+  "048d84b4aaf6405fb0fd679a737aee75": [
+    "搜索私信...",
+    1788899200.0264604
   ],
-  "7a7c839f3c7dfee2b0a68b56d3ae815d": [
-    "Cambiar idioma",
-    1788717483.7465515
+  "4fa5dc5376171399ce1a13cd815ebd3c": [
+    "更改语言",
+    1788899200.649099
   ],
-  "832e478d7fa62287f13c9c886bd6bc69": [
-    "Mensajes guardados",
-    1788717484.827536
+  "338ba4c631e005b2f13b00832faea412": [
+    "已保存的消息",
+    1788899201.2644649
   ],
-  "714eb20ccf541ccc676b360f6a7cfefd": [
-    "Contraseña",
-    1788717485.3980808
+  "8426c9ac1513ff4e699b00dbaa7bb6b5": [
+    "密码",
+    1788899201.766452
   ],
-  "762f2e49d9c5f49eca0dd3cd9e7c1798": [
-    "Contraseña de administrador requerida",
-    1788717485.9297361
+  "a2216e5d9688f2d100ade4a4cec6b51c": [
+    "需要管理员密码",
+    1788899202.3995311
   ],
-  "f612a1bfbb652fb4885304dbe2e471a7": [
-    "¡Contraseña incorrecta!",
-    1788717486.8722138
+  "85a655c6e36b07dcf9ddae184566c604": [
+    "密码错误!",
+    1788899202.91295
   ],
-  "0e4a016fa40c557924f20875ca7602e6": [
-    "Cancelar",
-    1788717487.3895075
+  "34a2dfda5965973282046a9ff8a99b04": [
+    "取消推荐",
+    1788899203.3920586
   ],
-  "47cbf1512db1b37deabf808e452d7661": [
-    "Confirmar eliminar",
-    1788717488.1241956
-  ],
-  "44b70a9477f616d31a2c853a1980193f": [
-    "El campo está vacío",
-    1788717488.6149786
-  ],
-  "c242a350b30817a6db91fc73ce2888f0": [
-    "Registro de la base de datos borrado.",
-    1788717489.1998618
-  ],
-  "7809d7ecd75ae051dd82936c1e681a30": [
-    "Gästebuch",
-    1788719212.2038789
-  ],
-  "6bb394f8b94f5c4630680fe738862d26": [
-    "Meldung",
-    1788719212.7330387
-  ],
-  "7813d4928fb186c12e1f3ddb079026ac": [
-    "Fertig",
-    1788719213.1724274
-  ],
-  "49e62fe7e6a430742315bd30991f0fdf": [
-    "Speichern",
-    1788719213.7064111
-  ],
-  "217a094825b86808568639828cac52b6": [
-    "So leeren Sie die Datenbank:",
-    1788719214.357726
-  ],
-  "be09773b8770d737119411d5bb93f073": [
-    "Suche in Nachrichten...",
-    1788719214.9379675
-  ],
-  "65f15eb71cf5357467a65b811f5840bb": [
-    "Sprache wechseln",
-    1788719215.472784
-  ],
-  "495e794a6ca7ea3b87813c7b7480e4a6": [
-    "Gespeicherte Nachrichten",
-    1788719215.9941578
-  ],
-  "8a09114c2fa8a8de95dafe9ffa86cca0": [
-    "Passwort",
-    1788719216.5684292
-  ],
-  "fa33501a69df523e8fd24daab05c7651": [
-    "Admin-Passwort erforderlich",
-    1788719217.2203453
-  ],
-  "627ece7d701107c8a05078c371338162": [
-    "Falsches Passwort!",
-    1788719217.7311234
-  ],
-  "76c3599895c175efa95085c4be1c7487": [
-    "Abbrechen",
-    1788719218.2168512
-  ],
-  "942503f99aa202584912bbd5b9c00889": [
-    "Löschen bestätigen",
-    1788719218.7567284
-  ],
-  "1132969995a90062cfede78c1871bb7f": [
-    "Das Feld ist leer!",
-    1788719219.3142655
-  ],
-  "60047d175a348e3a02a935829ae34b32": [
-    "Datenbank geleert.",
-    1788719220.5631487
-  ],
-  "b193437dd0ed7698942ad50a1cc68488": [
-    "Gespeichert: {}",
-    1788719221.0752206
-  ],
-  "efd39c8bfbf8773a6f413da4ed9d8ca9": [
-    "Gästbok",
-    1788719467.044763
-  ],
-  "322d617868f9cddf32d6ed370f97ff14": [
-    "Meddelande",
-    1788719467.9200108
-  ],
-  "e2533d88cff0aca1668162668f2dc6c3": [
-    "Klar",
-    1788719468.4746854
-  ],
-  "be0f94b579073e302586b2d823d563fa": [
-    "Spara",
-    1788719469.1330678
-  ],
-  "83586dc5f15903ae229a39be8efc5a77": [
-    "Rensa databasen",
-    1788719470.0192587
-  ],
-  "ff7d928606b5e37b0ca19f866a74faf1": [
-    "Sök meddelande",
-    1788719470.6673272
-  ],
-  "3b43bd940357ed23072c6d5d1e2fa675": [
-    "Byt språk",
-    1788719471.318311
-  ],
-  "61a71062b15ff1847b143523b4088f1c": [
-    "Sparade meddelanden",
-    1788719472.0311208
-  ],
-  "af0951b6b4199f5d97c09122aeb618c8": [
-    "Lösenord",
-    1788719472.588424
-  ],
-  "25ac92cfc46f463f4cae97eed15f306d": [
-    "Administratörslösenord krävs",
-    1788719473.2149734
-  ],
-  "db626e36f6c397a40f92aab695391696": [
-    "Fel lösenord",
-    1788719473.7756057
-  ],
-  "a9ae1cd2e6eaf14d0d8c9c7ce267c848": [
-    "Avbryt",
-    1788719474.3294914
-  ],
-  "978e813705488ff13c7722f4f0d6ce8d": [
-    "Bekräfta borttagning",
-    1788719474.895905
-  ],
-  "76df271ad689a7f1540a689bb41a80ff": [
-    "Fältet för stad är tomt!",
-    1788719475.513131
-  ],
-  "683f5c5e92feacee4a1fffe85324b6a7": [
-    "Databas rensad.",
-    1788719476.256628
-  ],
-  "7b5a60008bbe849e28bae2d62948c053": [
-    "Vieraskirja",
-    1788719577.2379436
-  ],
-  "9a2e0acb2cd650f6e3a2f848eff8e21c": [
-    "Viesti",
-    1788719577.8696978
-  ],
-  "224dae37f0dc59d78cc542ca3f32e953": [
-    "Valmis",
-    1788719578.4686472
-  ],
-  "e912c80e595dd0ef7c1305c90955b85d": [
-    "Tallenna",
-    1788719579.1260493
-  ],
-  "c46caaaed0eb5d0b59ce267698010ec4": [
-    "Tyhjennä tietokanta",
-    1788719579.870042
-  ],
-  "d661c40a03f5bfe28daaa71da775d3e3": [
-    "Hae viestejä",
-    1788719580.89714
-  ],
-  "806b269546004b088bdac168271765c7": [
-    "Vaihda kieltä",
-    1788719581.461018
-  ],
-  "7d5de7cfe1c60ffc7342490fc4942fe8": [
-    "Tallennetut viestit",
-    1788719582.1196792
-  ],
-  "12b18107c6d868521d93b55c69a765fe": [
-    "Salasana",
-    1788719582.656736
-  ],
-  "62e475b9b5f5ef53162f9a6f08d577d9": [
-    "Ylläpitäjän salasana vaaditaan",
-    1788719583.3186853
-  ],
-  "54c7d52bab54a034d4bc910fc50d600d": [
-    "Väärä salasana!",
-    1788719583.807178
-  ],
-  "bdce8c124bc786c4b6bf29e39fb131e5": [
-    "Peruuta",
-    1788719584.2813816
-  ],
-  "0d88eed38b391959eb0b27b82bb70bdb": [
-    "Vahvista poistaminen",
-    1788719585.150467
-  ],
-  "7d1c9931a8597ed12600f0f0c2256da7": [
-    "Nimikenttä on tyhjä!",
-    1788719585.82644
-  ],
-  "c29014e4145696b9fce7866f98f4f4fd": [
-    "Tietokanta tyhjennetty.",
-    1788719586.7459908
+  "0a1e272594b9ee903d8a1eae4373e199": [
+    "确认删除",
+    1788899203.8887694
   ]
 }

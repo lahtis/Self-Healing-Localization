@@ -11,7 +11,7 @@
         "priority": 1
     },
     "LibreTranslate": {
-        "enabled": true,
+        "enabled": false,
         "allow": [],
         "deny": ["html", "honorific"],
         "timeout": 8,
@@ -19,8 +19,8 @@
         "priority": 2
     },
     "DeepL": {
-        "enabled": false,
-        "allow": ["formality"],
+        "enabled": true,
+        "allow": ["formality", "html"],
         "deny": ["honorific"],
         "timeout": 5,
         "requires_env": [

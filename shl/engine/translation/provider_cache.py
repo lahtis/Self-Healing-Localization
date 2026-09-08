@@ -2,7 +2,7 @@
 File: provider_cache.py - Provider language support and cache.
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.6
+Version: 0.2.10
 
 Checks the language support of service providers and saves it to the cache.
 puuttuu google ja DeepL
@@ -10,19 +10,22 @@ puuttuu google ja DeepL
 
 import json
 import shutil
+import logging
 from pathlib import Path
 from urllib.request import urlopen, Request
 
 from shl.utils.env_loader import get_env_value
 from shl.config import get_config_value
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # PATHS
 # ---------------------------------------------------------------------------
 
 SHL_DIR = Path(__file__).resolve().parents[2]
-CACHE_FILE = SHL_DIR / "languages_cache.json"
+PROJECT_DIR = SHL_DIR.parent
+CACHE_FILE = PROJECT_DIR / ".languages_cache.json"
 PM_FILE = SHL_DIR / "data" / "papago_mymemory.json"
 
 
@@ -93,12 +96,18 @@ def generate_cache() -> dict:
 
     yandex = fetch_yandex_translator()
 
+    try:
+        deepl = fetch_deepl()
+    except OSError:
+        deepl = {}
+
     papago_mymemory = load_papago_mymemory()
 
     cache = {
         "providers": {
             "microsoft_translator": microsoft,
             "libretranslate": libretranslate,
+            "deepl": deepl,
             "yandex": yandex,
             "papago": sorted(
                 code.lower()
@@ -118,6 +127,58 @@ def generate_cache() -> dict:
 
     return cache
 
+def fetch_deepl() -> list:
+    """Fetch supported language codes from DeepL."""
+
+    api_key = get_env_value("DEEPL_API_KEY")
+
+    if not api_key:
+        logger.info("DeepL: API key not found")
+        return []
+
+    api_key = api_key.strip()
+
+    if api_key.endswith(":fx"):
+        base_url = "https://api-free.deepl.com"
+    else:
+        base_url = "https://api.deepl.com"
+
+    try:
+        request = Request(
+            f"{base_url}/v3/languages?resource=translate_text",
+            headers={
+                "Authorization": f"DeepL-Auth-Key {api_key}",
+                "User-Agent": "SHL-Client",
+                "Accept": "application/json",
+            },
+            method="GET",
+        )
+
+        with urlopen(request, timeout=10) as response:
+            data = json.loads(
+                response.read().decode("utf-8")
+            )
+
+        languages = sorted(
+            lang["lang"].lower()
+            for lang in data
+            if isinstance(lang, dict)
+            and lang.get("lang")
+        )
+
+        logger.info(
+            "DeepL: received %d languages",
+            len(languages),
+        )
+
+        return languages
+
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.error(
+            "DeepL language fetch failed: %s",
+            exc,
+        )
+        return []
 
 def fetch_microsoft_translator() -> dict:
     """Fetch supported languages from Microsoft Translator."""

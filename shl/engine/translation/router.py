@@ -68,12 +68,13 @@ _PROVIDER_CACHE = load_cache()
 logger = logging.getLogger(__name__)
 
 _translation_cache = TranslationCache()
-_mirror_manager = LibreTranslateMirrorManager()
-
+_mymemory_registry = MyMemoryRegistry()
 _libre_registry = LibreTranslateRegistry()
+_mirror_manager = LibreTranslateMirrorManager()
 _google_registry = GoogleRegistry()
 _papago_registry = PapagoRegistry()
 _yandex_registry = YandexRegistry()
+_deepl_registry = DeepLRegistry()
 _local_registry = LocalRegistry()
 
 _ms_registry = MicrosoftServiceRegistry(
@@ -473,14 +474,13 @@ def clear_unavailable_cache() -> None:
 
     _mirror_manager.clear_blacklist()
     _libre_registry.clear_blacklist()
+    _mymemory_registry.clear_blacklist()
+    _deepl_registry.clear_blacklist()
     _google_registry.clear_blacklist()
     _papago_registry.clear_blacklist()
     _yandex_registry.clear_blacklist()
-
-    _local_registry.clear("local")
-
     _ms_registry.clear()
-
+    _local_registry.clear("local")
 
 # ---------------------------------------------------------------------------
 # UNAVAILABLE CACHE STATS
@@ -495,8 +495,14 @@ def get_unavailable_cache_stats() -> Dict[str, Any]:
         "blacklisted_mirrors": len(
             _mirror_manager.blacklist
         ),
+        "blacklisted_mymemory_pairs": len(
+            _mymemory_registry._unsupported_pairs_cache
+        ),
         "blacklisted_google_pairs": len(
             _google_registry._unsupported_pairs_cache
+        ),
+        "blacklisted_deepl_pairs": len(
+            _deepl_registry._unsupported_pairs_cache
         ),
         "blacklisted_libre_pairs": len(
             _libre_registry._unsupported_pairs_cache
@@ -599,10 +605,12 @@ def translate_text_with_metadata(
         request=request,
     )
 
-    logger.debug(
+    logger.info(
         "Router provider order: %s",
         order,
     )
+
+    unsupported_services = set()
 
     ms_key = (
         microsoft_api_key
@@ -612,6 +620,23 @@ def translate_text_with_metadata(
     for service in order:
         if time.time() - start_time > total_timeout:
             break
+
+        # The policy path returns enabled providers without consulting their
+        # pair registries.  Check the shared DeepL registry before creating an
+        # adapter so a previously rejected pair does not trigger one API call
+        # (and one blacklist write) for every missing UI string.
+        if service == "deepl" and not _deepl_registry.is_pair_supported(
+            source_lang,
+            target_lang,
+        ):
+            logger.info(
+                "Skipping DeepL for unavailable or blacklisted language "
+                "pair '%s' -> '%s'.",
+                source_lang,
+                target_lang,
+            )
+            unsupported_services.add(service)
+            continue
 
         provider_timeout = get_provider_timeout(service)
 
@@ -639,9 +664,12 @@ def translate_text_with_metadata(
 
                 elif service == "deepl":
                     adapter = (
-                        DeepLAdapter(api_key=deepl_key)
+                        DeepLAdapter(
+                            api_key=deepl_key,
+                            registry=_deepl_registry,
+                        )
                         if deepl_key
-                        else DeepLAdapter()
+                        else DeepLAdapter(registry=_deepl_registry)
                     )
                     translated = _translate_with_processor(
                         request,
@@ -746,6 +774,7 @@ def translate_text_with_metadata(
                     )
 
             except LanguageNotSupportedError:
+                unsupported_services.add(service)
                 if service == "google":
                     _google_registry.mark_pair_unsupported(
                         source_lang,
@@ -757,6 +786,17 @@ def translate_text_with_metadata(
                         source_lang,
                         target_lang,
                     )
+
+                elif service == "mymemory":
+                    _mymemory_registry.mark_pair_unsupported(
+                        source_lang,
+                        target_lang,
+                    )
+
+                elif service == "deepl":
+                    # DeepLAdapter already recorded this on the shared
+                    # registry.  Do not write it again for the same error.
+                    pass
 
                 elif service == "papago":
                     _papago_registry.mark_pair_unsupported(
@@ -775,13 +815,28 @@ def translate_text_with_metadata(
             except RateLimitExceededError:
                 break
 
-            except TranslationError:
+            except TranslationError as error:
+                logger.warning(
+                    "Provider '%s' failed for '%s' -> '%s' "
+                    "(attempt %d/%d): %s: %s", service, source_lang, target_lang, attempt + 1, max_retries, type(error).__name__, error)
                 backoff = retry_delay * (attempt + 1)
 
                 if time.time() + backoff > service_deadline:
-                    break
+                   logger.warning(
+                       "Provider '%s' service deadline reached "
+                       "after attempt %d/%d.",
+                       service,
+                       attempt + 1,
+                       max_retries,
+                   )
+                   break
 
                 if attempt < max_retries - 1:
+                    logger.debug(
+                        "Retrying provider '%s' in %.1f seconds.",
+                        service,
+                        backoff,
+                    )
                     time.sleep(backoff)
 
                 continue
@@ -791,6 +846,12 @@ def translate_text_with_metadata(
                     _ms_registry.mark_unavailable()
 
                 break
+
+    if order and len(unsupported_services) == len(order):
+        raise LanguageNotSupportedError(
+            "No enabled translation provider supports language pair "
+            f"'{source_lang}' -> '{target_lang}'."
+        )
 
     raise ServiceUnavailableError(
         f"All translation services failed or timed out "
@@ -822,6 +883,7 @@ def translate_text(
     total_timeout: float = 30.0,
     placeholder_pattern: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
+    raise_on_language_not_supported: bool = False,
 ) -> str:
 
     try:
@@ -849,6 +911,19 @@ def translate_text(
 
         return result.translated_text
 
+    except LanguageNotSupportedError as error:
+        if raise_on_language_not_supported:
+            raise
+
+        logger.info(
+            "Translation unavailable for '%s...' (%s -> %s): %s",
+            text[:50],
+            source_lang,
+            target_lang,
+            error,
+        )
+        return None
+
     except ServiceUnavailableError as e:
         logger.warning(
             "Translation failed for '%s...' (%s -> %s): %s",
@@ -867,4 +942,3 @@ def translate_text(
             exc_info=True,
         )
         return None
-
