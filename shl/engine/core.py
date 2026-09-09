@@ -410,15 +410,22 @@ class LocalizationEngine:
                     self.lang_code,
                 )
                 self._unavailable_translation_pairs.add(language_pair)
-                logger.info(
+
+                logger.warning(
                     "Machine translation is unavailable for '%s' -> '%s'; "
-                    "remaining missing UI keys will use their default text "
-                    "for this engine instance: %s",
+                    "falling back to base language '%s': %s",
                     self.base_lang,
                     self.lang_code,
+                    self.base_lang,
                     error,
                 )
-
+                self.set_language(self.base_lang)
+                                
+                return self.ui_text(
+                    key=validated_key,
+                    default_value=default_value,
+                )
+    				
             except Exception as error:
                 logger.warning(
                     "Machine translation failed for key '%s': %s",

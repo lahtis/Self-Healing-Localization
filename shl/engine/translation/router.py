@@ -912,11 +912,18 @@ def translate_text(
         return result.translated_text
 
     except LanguageNotSupportedError as error:
+        logger.warning(
+            "DEBUG: LanguageNotSupportedError caught in router, "
+            "raise_on_language_not_supported=%s",
+            raise_on_language_not_supported,
+        )
+
         if raise_on_language_not_supported:
             raise
 
-        logger.info(
-            "Translation unavailable for '%s...' (%s -> %s): %s",
+    except ServiceUnavailableError as error:
+        logger.warning(
+            "Translation failed for '%s...' (%s -> %s): %s",
             text[:50],
             source_lang,
             target_lang,
@@ -924,21 +931,11 @@ def translate_text(
         )
         return None
 
-    except ServiceUnavailableError as e:
-        logger.warning(
-            "Translation failed for '%s...' (%s -> %s): %s",
-            text[:50],
-            source_lang,
-            target_lang,
-            e,
-        )
-        return None
-
-    except Exception as e:
+    except Exception as error:
         logger.error(
             "Unexpected translation error for '%s...': %s",
             text[:50],
-            e,
+            error,
             exc_info=True,
         )
         return None
