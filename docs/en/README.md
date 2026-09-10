@@ -83,12 +83,12 @@ SHL uses multiple translation providers to ensure the best quality:
 | + | **Google Translate v2** | + | – (v2) / + (v3) | + | + | – | + | + | – | + | Widest language support (100+ languages). Free 500k characters/month. |
 | + | **LibreTranslate** | + (*) | – | – (***) | – | – | + | + | – | + | Only free and self-hostable option. Quality lower than commercial options. |
 | + | **myMemory** | – | – | – | – | – | + (limited) | + | – | + | Free but limited to 5000 characters/day. Leverages huge translation memory. |
-| - | **Microsoft Azure Translator** | + | + | + | – | – | + | + | – | + | Most affordable of the major cloud providers (~$10 / million chars). |
+| + | **Microsoft Azure Translator** | + | + | + | – | – | + | + | – | + | Most affordable of the major cloud providers (~$10 / million chars). |
+| + | **Yandex Translate** | ? | + | ? | ? | ? | ? | ? | ? | ? | Wide language support and enterprise-grade support. |
 | - | **Amazon Translate** | ? | + | – | – | – | + | + | – | + | S3 batch translations and deep AWS integration. |
 | - | **ModernMT** | ? | + (Adaptive) | ? | + | ? | ? | + (DOCX) | ? | + | Learns in real-time from translation memory, 200+ languages. |
 | - | **SYSTRAN** | ? | + | ? | ? | ? | ? | ? | ? | ? | Strong in specialized domains (e.g., legal, technical). |
 | - | **IBM Watson** | ? | + | ? | ? | ? | ? | ? | ? | ? | Customizable for your own data and industry. |
-| - | **Yandex Translate** | ? | + | ? | ? | ? | ? | ? | ? | ? | Wide language support and enterprise-grade support. |
 | - | **OpenAI (GPT-4o etc.)** | + (via prompt) | + (via prompt) | + (via prompt) | + | + (via prompt) | + | – | – | + | Excellent for tone, style and context management, but expensive and slower compared to NMT APIs. |
 
 #### Legend
@@ -126,12 +126,12 @@ SHL uses multiple translation providers to ensure the best quality:
 | + | **Google Translate v2** | Yes | Google Translation API v2 uses POST requests. Text is sent as JSON in the request body (`q` parameter) and the API key is provided either as a URL query parameter or in the header. |
 | + | **LibreTranslate** | Yes | LibreTranslate's REST API uses POST requests to the `/translate` endpoint. The request body contains the text (`q`), source and target language codes in JSON format. An API key can be included if required. |
 | + | **myMemory** | Yes | myMemory's translation API (`/api/v1/translate`) accepts POST requests. Parameters (`q` and `langpair`) are sent URL-encoded in the request body. |
-| - | **Microsoft Azure Translator** | Yes | Azure Translator Text API uses POST requests. Text is sent as JSON in the request body. |
+| + | **Microsoft Azure Translator** | Yes | Azure Translator Text API uses POST requests. Text is sent as JSON in the request body. |
+| + | **Yandex Translate** | Yes | Yandex Translate API uses POST requests. |
 | - | **Amazon Translate** | Yes | Amazon Translate API uses POST requests. Text is sent as JSON in the request body. |
 | - | **ModernMT** | Yes | ModernMT's API uses POST requests. |
 | - | **SYSTRAN** | Yes | SYSTRAN's API uses POST requests. |
 | - | **IBM Watson** | Yes | IBM Watson Language Translator uses POST requests. |
-| - | **Yandex Translate** | Yes | Yandex Translate API uses POST requests. |
 | - | **OpenAI (GPT-4o etc.)** | Yes | OpenAI's API uses POST requests for chat completions. |
 
 ## How to Choose the Right API?

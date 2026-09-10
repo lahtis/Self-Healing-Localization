@@ -2,56 +2,81 @@
     "MyMemory": {
         "enabled": true,
         "allow": [],
-        "deny": ["html", "honorific"],
+        "deny": [
+            "html",
+            "honorific"
+        ],
         "timeout": 10,
         "requires_env": [
-            "MYMEMORY_EMAIL", 
+            "MYMEMORY_EMAIL",
             "MYMEMORY_API_KEY"
         ],
-        "priority": 3
+        "priority": 1
     },
     "LibreTranslate": {
         "enabled": false,
         "allow": [],
-        "deny": ["html", "honorific"],
+        "deny": [
+            "html",
+            "honorific"
+        ],
         "timeout": 8,
-        "requires_env": [],
-        "priority": 2
+        "requires_env": [
+            "LIBRETRANSLATE_API_KEY"
+        ],
+        "priority": 7
     },
     "DeepL": {
         "enabled": true,
-        "allow": ["formality", "html"],
-        "deny": ["honorific"],
+        "allow": [
+            "formality",
+            "html"
+        ],
+        "deny": [
+            "honorific"
+        ],
         "timeout": 5,
         "requires_env": [
             "DEEPL_API_KEY"
         ],
-        "priority": 1
+        "priority": 2
     },
     "Google": {
         "enabled": false,
-        "allow": ["formality", "html"],
-        "deny": ["honorific"],
+        "allow": [
+            "formality",
+            "html"
+        ],
+        "deny": [
+            "honorific"
+        ],
         "timeout": 5,
         "requires_env": [
             "GOOGLE_API_KEY"
         ],
-        "priority": 4
+        "priority": 3
     },
     "MicrosoftTranslator": {
         "enabled": false,
         "allow": [],
-        "deny": ["honorific"],
+        "deny": [
+            "honorific"
+        ],
         "timeout": 5,
         "requires_env": [
             "MICROSOFT_TRANSLATOR_KEY"
         ],
-        "priority": 5
+        "priority": 4
     },
     "Papago": {
         "enabled": false,
-        "allow": ["honorific", "formality"],
-        "deny": ["html"],
+        "allow": [
+            "honorific",
+            "formality"
+        ],
+        "deny": [
+            "html"
+        ],
         "timeout": 5,
         "requires_env": [
             "NAVER_CLIENT_ID",
@@ -61,13 +86,31 @@
     },
     "Local": {
         "enabled": false,
-        "allow": ["formality"],
-        "deny": ["html","honorific"],
+        "allow": [
+            "formality"
+        ],
+        "deny": [
+            "html",
+            "honorific"
+        ],
         "timeout": 5,
         "requires_env": [
             "LOCAL_API_KEY"
         ],
-        "priority": 7
+        "priority": 8
+    },
+    "Yandex": {
+        "enabled": false,
+        "allow": [
+            "formality"
+        ],
+        "deny": [
+            "html"
+        ],
+        "timeout": 5,
+        "requires_env": [
+            "YANDEX_API_KEY"
+        ],
+        "priority": 5
     }
-
 }
