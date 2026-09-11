@@ -19,8 +19,8 @@ Timeout defines the maximum amount of time SHL allows a provider request to run 
 ### Provider Restrictions
 Provider restrictions can be used to control which features a provider is allowed to process.
 
-** Allow Tags**  defines which HTML or markup features the provider is allowed to receive.
-** Deny Tags ** defines which tags must not be processed by the provider. SHL handles denied HTML tags and <code>{}</code> placeholders internally, protecting them during translation and restoring them afterwards.
+- Allow Tags defines which HTML or markup features the provider is allowed to receive.
+- Deny Tags defines which tags must not be processed by the provider. SHL handles denied HTML tags and <code>{}</code> placeholders internally, protecting them during translation and restoring them afterwards.
 
 
 ### Policy Changes
