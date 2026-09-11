@@ -190,7 +190,29 @@ def _translate_with_processor(
     passed to TranslationProcessor unchanged.
     """
     if html_policy is True:
-        return translator(request)
+        if request.html_format:
+            return translator(request)
+
+        html_request = TranslationRequest(
+            text=request.text,
+            source_lang=request.source_lang,
+            target_lang=request.target_lang,
+            context_type=request.context_type,
+            domain=request.domain,
+            formality=request.formality,
+            honorific=request.honorific,
+            glossary=request.glossary,
+            glossary_id=request.glossary_id,
+            html_format=True,
+            placeholder_pattern=request.placeholder_pattern,
+            key=request.key,
+            screen=request.screen,
+            component=request.component,
+            source_id=request.source_id,
+            metadata=request.metadata,
+        )
+
+        return translator(html_request)
 
     if html_policy is False:
         if request.html_format:
@@ -841,7 +863,13 @@ def translate_text_with_metadata(
 
                 continue
 
-            except Exception:
+            except Exception as error:
+                logger.exception(
+                    "ROUTER DEBUG: unexpected exception from provider '%s': %s",
+                    service,
+                    error,
+                )
+
                 if service == "microsoft_translator":
                     _ms_registry.mark_unavailable()
 

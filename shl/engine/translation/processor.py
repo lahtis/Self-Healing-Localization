@@ -22,6 +22,7 @@ Description:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Callable, Pattern
 
@@ -72,6 +73,10 @@ class TranslationProcessor:
     provider is being used.
     """
 
+    _PROTECTED_TOKEN_RE = re.compile(
+        r"^\s*(?:\{[0-9]+_[0-9]+_[0-9]+\}\s*)+$"
+    )
+
     def __init__(
         self,
         translator: Callable[[TranslationRequest], str],
@@ -83,7 +88,7 @@ class TranslationProcessor:
     ) -> None:
         if not callable(translator):
             raise TypeError(
-                "translator must be callable."
+                "text_processor must be callable."
             )
 
         if (
@@ -125,7 +130,7 @@ class TranslationProcessor:
         The request itself is never modified.
 
         HTML handling can be controlled explicitly through process_html.
-        When process_html is None, request.html_format is used.
+        When process_html is None, HTML is detected automatically.
 
         Placeholder protection is applied before translation and restored
         afterwards.
@@ -146,7 +151,7 @@ class TranslationProcessor:
         had_html = HTMLDetector.contains_html(text)
 
         if process_html is None:
-            process_html = request.html_format
+            process_html = request.html_format or had_html
 
         if process_html and had_html:
             translated, placeholder_count = self._process_html(
@@ -247,15 +252,25 @@ class TranslationProcessor:
                 protector,
             )
 
-            translated = self._translate(
-                prepared_request
-            )
+            if (
+                protector is not None
+                and protector.protected_count() > 0
+                and self._contains_only_protected_tokens(
+                    prepared_request.text
+                )
+            ):
+                translated = prepared_request.text
+            else:
+                translated = self._translate(
+                    prepared_request
+                )
 
             if protector is not None:
                 protector.validate(translated)
                 translated = protector.restore(
                     translated
                 )
+
                 placeholder_count += (
                     protector.protected_count()
                 )
@@ -276,6 +291,25 @@ class TranslationProcessor:
         )
 
         return translated_html, placeholder_count
+
+    @classmethod
+    def _contains_only_protected_tokens(
+        cls,
+        text: str,
+    ) -> bool:
+        """
+        Return True when text contains only SHL-generated protected tokens.
+
+        Protected tokens are technical placeholders created by
+        PlaceholderProtector. They must never be sent to a translation
+        provider as standalone text.
+        """
+        if not isinstance(text, str) or not text:
+            return False
+
+        return bool(
+            cls._PROTECTED_TOKEN_RE.fullmatch(text)
+        )
 
     def _prepare_request(
         self,
@@ -415,4 +449,3 @@ __all__ = [
     "TranslationProcessor",
     "process_translation",
 ]
-

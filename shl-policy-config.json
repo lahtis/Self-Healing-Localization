@@ -28,10 +28,7 @@
     },
     "DeepL": {
         "enabled": true,
-        "allow": [
-            "formality",
-            "html"
-        ],
+        "allow": [],
         "deny": [
             "honorific"
         ],
@@ -58,7 +55,9 @@
     },
     "MicrosoftTranslator": {
         "enabled": false,
-        "allow": [],
+        "allow": [
+            "html"
+        ],
         "deny": [
             "honorific"
         ],

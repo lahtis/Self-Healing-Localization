@@ -1,62 +1,126 @@
 {
-  "a9ccbd2a5e514fab61806da501017f43": [
-    "留言板",
-    1788980210.8577392
+  "0d88eed38b391959eb0b27b82bb70bdb": [
+    "Vahvista poistaminen",
+    1789156994.643408
   ],
-  "379fccbd12bc75347991ab3f3332f9c1": [
-    "信息",
-    1788980211.321599
+  "7d1c9931a8597ed12600f0f0c2256da7": [
+    "Nimikenttä on tyhjä!",
+    1789157197.0036402
   ],
-  "ad5baed2af214cde58a977206ce8768a": [
-    "就绪",
-    1788980211.7841654
+  "c29014e4145696b9fce7866f98f4f4fd": [
+    "Tietokanta tyhjennetty.",
+    1789157197.8596058
   ],
-  "c609e2ff42b812b81626cdf8376baf08": [
-    "保存",
-    1788980212.2257566
+  "cde18b2e84b97e64ea605407195e4889": [
+    "Tallennettu: {}",
+    1789157198.4515786
   ],
-  "bd2610e460337e4ab4f3482d899e2fd0": [
-    "清除数据库",
-    1788980212.7896771
+  "ed713c2d89a35a369dd931f5366dd51c": [
+    "방명록",
+    1789157336.0763345
   ],
-  "048d84b4aaf6405fb0fd679a737aee75": [
-    "搜索私信...",
-    1788980213.3078678
+  "5e972d85136dfd6600374bff6940a298": [
+    "메시지",
+    1789157336.6891751
   ],
-  "4fa5dc5376171399ce1a13cd815ebd3c": [
-    "更改语言",
-    1788980213.8870842
+  "be3f593acca559d209a0ade699438861": [
+    "준비",
+    1789157337.4066257
   ],
-  "338ba4c631e005b2f13b00832faea412": [
-    "已保存的消息",
-    1788980214.5828972
+  "567ebdf62019868ec5b3189a94e2b29c": [
+    "저장",
+    1789157337.9657912
   ],
-  "8426c9ac1513ff4e699b00dbaa7bb6b5": [
-    "密码",
-    1788980215.0786755
+  "43cb5cb5bd582351d985e3f68dbf0a39": [
+    "데이터베이스 지우기",
+    1789157338.7262332
   ],
-  "a2216e5d9688f2d100ade4a4cec6b51c": [
-    "需要管理员密码",
-    1788980215.752276
+  "539587bc5d45d009b8ebe0e47bf17888": [
+    "메시지 검색…",
+    1789157339.298222
   ],
-  "85a655c6e36b07dcf9ddae184566c604": [
-    "密码错误!",
-    1788980216.2838874
+  "9ab248e216eaac0695cbe3422bd2e265": [
+    "언어 변경",
+    1789157339.9472065
   ],
-  "34a2dfda5965973282046a9ff8a99b04": [
-    "取消",
-    1788980216.7622826
+  "2a6251612e8d003f3be1e66f3ea391d8": [
+    "자주 쓰는 메시지",
+    1789157340.562436
   ],
-  "0a1e272594b9ee903d8a1eae4373e199": [
-    "确认删除",
-    1788980217.2622662
+  "37d9c861c231511f299d1df460ab5862": [
+    "비밀번호",
+    1789157341.0900996
   ],
-  "f715c639a39f707ebea1689b28863ae0": [
-    "请填写电子邮箱",
-    1788980217.739835
+  "4df3986a09ba9845033c3eb68bb927f1": [
+    "관리자 비밀번호 필요",
+    1789157341.746042
   ],
-  "fe3fc55b71f5f11cb19fcc5aaabc953c": [
-    "数据库已清除。",
-    1788980218.3525705
+  "2eeda1bd97683a52c91c725f775d8b17": [
+    "비밀번호가 틀렸습니다!",
+    1789157342.2458138
+  ],
+  "0382750b1611282e5a61e544fe9c527f": [
+    "취소",
+    1789157342.7655103
+  ],
+  "be1e300d8eaea01f6845a86bb5e052c7": [
+    "삭제 확인",
+    1789157343.2636333
+  ],
+  "83fdb9a43c5eb8fa0e91784054d12032": [
+    "SHL-käytäntöeditori",
+    1789157465.4576187
+  ],
+  "d6861bbb0634b5563a271d9af7711423": [
+    "Tiedosto",
+    1789157466.1598961
+  ],
+  "1e54302216843f7f8727fadaba900ed1": [
+    "Kieli",
+    1789157466.7494082
+  ],
+  "aecafe53cecd931785e721a905f2cf3c": [
+    "Apua",
+    1789157467.1809258
+  ],
+  "fecee3b0955f2124801d7abf474731cc": [
+    "Palveluntarjoaja",
+    1789157467.6783733
+  ],
+  "17dd08f1cd1085cc04bcc0d7b0b48e88": [
+    "Käytössä",
+    1789157468.141626
+  ],
+  "a85468e6af8edf8279d14075deaf7e14": [
+    "Prioriteetti",
+    1789157468.5281296
+  ],
+  "f50971d92412b85fed78e108ed03879b": [
+    "Aika",
+    1789157468.8688936
+  ],
+  "3fffd1ad82a9e10ec0f4054635aaa04d": [
+    "Palveluntarjoajan muokkain",
+    1789157469.3155425
+  ],
+  "35315cc810c036a7eb1e965f7117fa6d": [
+    "Prioriteetti:",
+    1789157469.6649046
+  ],
+  "f6bce69bf4b989d1a62bd9a2aef800a8": [
+    "Salli lisää tunnisteita",
+    1789157470.294114
+  ],
+  "d6ff7cdf87fb3271e25b906164850aa7": [
+    "\n<h1>SHL-käytäntöeditori</h1>\n<p>SHL-käytäntöeditorin avulla voit tarkastella ja konfiguroida käännöstä\nitsekorjautuvan lokalisointikerroksen käyttämää palveluntarjoajan käytäntöä.</p>\n<h2>Palveluntarjoajat</h2>\n<p>Jokainen palveluntarjoaja edustaa käännöspalvelua, jota SHL voi käyttää, kun\nkääntää tekstiä.</p>\n<h3>Käytössä</h3>\n<p>Käytössä-asetus määrittää, onko palveluntarjoajalla oikeus\nosallistua kääntämiseen.</p>\n<h3>Prioriteetti</h3>\n<p>Prioriteetti määrittää järjestyksen, jossa palveluntarjoajia yritetään.\nPalveluntarjoajaa, jolla on korkeampi prioriteetti, yritetään ennen palveluntarjoajia, joilla on\nvähemmän tärkeänä.</p>\n<h3>Aika</h3>\n<p>Aikakatkaisu määrittää enimmäisajan, jonka SHL sallii palveluntarjoajan pyynnön\nsuorittaa ennen kuin pyyntö katsotaan epäonnistuneeksi.</p>\n<h2>Palveluntarjoajan rajoitukset</h2>\n<p>Palveluntarjoajan rajoituksia voidaan käyttää hallitsemaan, mitkä ominaisuudet palveluntarjoajalla on\nsaa käsitellä.</p>\n<ul>\n<li>\n<strong>Salli lisää tunnisteita</strong>määrittää, millä HTML-koodilla tai merkinnöillä on\npalveluntarjoajalla on oikeus vastaanottaa.</li>\n<li>\n<strong>Kiellä tunnisteet</strong>määrittää, mitä tunnisteita palveluntarjoaja ei saa käsitellä.\nSHL käsittelee kielletyt HTML-tunnisteet ja<code>{}</code>sisäiset paikkamerkit,\nniiden suojaamiseksi käännöksen aikana ja niiden palauttamiseksi jälkikäteen.</ul>\n<h2>Käytännön muutokset</h2>\n<p>Editorissa tehdyt muutokset tallennetaan SHL: n käytäntökokoonpanoon.\nSHL valvoo vakuutuksen konfiguraatiota ja voi ladata automaattisesti uudelleen\nmuuttuu kuumalatausmekanisminsa kautta.</p>\n<h2>Kieli</h2>\n<p>Käyttöliittymän kieltä voi vaihtaa Kieli-valikosta.\nKäännökset toimitetaan SHL: n lokalisointijärjestelmän kautta.</p>\n<h2>Muutosten tallentaminen</h2>\n<p>Tallenna nykyinen palveluntarjoajakäytäntö Tallenna-komennolla.</p>\n<hr>\n<p>Tätä ohjesivua käytetään myös HTML-tietoisen lokalisoinnin testaamiseen SHL: ssä.\nHTML-rakenteen tulee pysyä ennallaan, kun tekstisisältö on\nkäännetty.</p>\n",
+    1789159057.9522028
+  ],
+  "80ca6e256c688cb6d69bacb753ccc0f1": [
+    "\n<h1>SHL-käytäntöeditori</h1>\n<p>SHL-käytäntöeditorin avulla voit tarkastella ja konfiguroida käännöstä\nitsekorjautuvan lokalisointikerroksen käyttämää palveluntarjoajan käytäntöä.</p>\n<h2>Palveluntarjoajat</h2>\n<p>Jokainen palveluntarjoaja edustaa käännöspalvelua, jota SHL voi käyttää, kun\nkääntää tekstiä.</p>\n<h3>Käytössä</h3>\n<p>Käytössä-asetus määrittää, onko palveluntarjoajalla oikeus\nosallistua kääntämiseen.</p>\n<h3>Prioriteetti</h3>\n<p>Prioriteetti määrittää järjestyksen, jossa palveluntarjoajia yritetään.\nPalveluntarjoajaa, jolla on korkeampi prioriteetti, yritetään ennen palveluntarjoajia, joilla on\nvähemmän tärkeänä.</p>\n<h3>Aika</h3>\n<p>Aikakatkaisu määrittää enimmäisajan, jonka SHL sallii palveluntarjoajan pyynnön\nsuorittaa ennen kuin pyyntö katsotaan epäonnistuneeksi.</p>\n<h2>Palveluntarjoajan rajoitukset</h2>\n<p>Palveluntarjoajan rajoituksia voidaan käyttää hallitsemaan, mitkä ominaisuudet palveluntarjoajalla on\nsaa käsitellä.</p>\n<ul>\n<li><strong>Salli lisää tunnisteita</strong>määrittää, mitä HTML- tai merkintäominaisuuksia palveluntarjoaja saa vastaanottaa.</li>\n<li><strong>Kiellä tunnisteet</strong>määrittää, mitä tunnisteita palveluntarjoaja ei saa käsitellä. SHL käsittelee kielletyt HTML-tunnisteet ja<code>{}</code>sisäiset paikkamerkit, suojaamalla ne käännöksen aikana ja palauttamalla ne jälkikäteen.</li>\n</ul>\n<h2>Käytännön muutokset</h2>\n<p>Editorissa tehdyt muutokset tallennetaan SHL: n käytäntökokoonpanoon.\nSHL valvoo vakuutuksen konfiguraatiota ja voi ladata automaattisesti uudelleen\nmuuttuu kuumalatausmekanisminsa kautta.</p>\n<h2>Kieli</h2>\n<p>Käyttöliittymän kieltä voi vaihtaa Kieli-valikosta.\nKäännökset toimitetaan SHL: n lokalisointijärjestelmän kautta.</p>\n<h2>Muutosten tallentaminen</h2>\n<p>Tallenna nykyinen palveluntarjoajakäytäntö Tallenna-komennolla.</p>\n<hr>\n<p>Tätä ohjesivua käytetään myös HTML-tietoisen lokalisoinnin testaamiseen SHL: ssä.\nHTML-rakenteen tulee pysyä ennallaan, kun tekstisisältö on\nkäännetty.</p>\n",
+    1789160463.1923592
+  ],
+  "f427162ec3ef48c3904a74549fbccdb9": [
+    "\n<h1>SHL-käytäntöeditori</h1>\n<p>SHL-käytäntöeditorin avulla voit tarkastella ja konfiguroida käännöstä\nitsekorjautuvan lokalisointikerroksen käyttämää palveluntarjoajan käytäntöä.</p>\n<h2>Palveluntarjoajat</h2>\n<p>Jokainen palveluntarjoaja edustaa käännöspalvelua, jota SHL voi käyttää, kun\nkääntää tekstiä.</p>\n<h3>Käytössä</h3>\n<p>Käytössä-asetus määrittää, onko palveluntarjoajalla oikeus\nosallistua kääntämiseen.</p>\n<h3>Prioriteetti</h3>\n<p>Prioriteetti määrittää järjestyksen, jossa palveluntarjoajia yritetään.\nPalveluntarjoajaa, jolla on korkeampi prioriteetti, yritetään ennen palveluntarjoajia, joilla on\nvähemmän tärkeänä.</p>\n<h3>Aika</h3>\n<p>Aikakatkaisu määrittää enimmäisajan, jonka SHL sallii palveluntarjoajan pyynnön\nsuorittaa ennen kuin pyyntö katsotaan epäonnistuneeksi.</p>\n<h2>Palveluntarjoajan rajoitukset</h2>\n<p>Palveluntarjoajan rajoituksia voidaan käyttää hallitsemaan, mitkä ominaisuudet palveluntarjoajalla on\nsaa käsitellä.</p>\n<ul>\n<li><strong>Salli lisää tunnisteita</strong>määrittää, mitä HTML- tai merkintäominaisuuksia palveluntarjoaja saa vastaanottaa.</li>\n<li><strong>Kiellä tunnisteet</strong>määrittää, mitä tunnisteita palveluntarjoaja ei saa käsitellä. SHL käsittelee kielletyt HTML-tunnisteet ja<code>{}</code>sisäiset paikkamerkit, suojaamalla ne käännöksen aikana ja palauttamalla ne jälkikäteen.</li>\n</ul>\n<h2>Käytännön muutokset</h2>\n<p>Editorissa tehdyt muutokset tallennetaan SHL: n käytäntökokoonpanoon.\nSHL valvoo vakuutuksen konfiguraatiota ja voi ladata automaattisesti uudelleen\nmuuttuu kuumalatausmekanisminsa kautta.</p>\n<h2>Kieli</h2>\n<p>Käyttöliittymän kieltä voi vaihtaa Kieli-valikosta.\nKäännökset toimitetaan SHL: n lokalisointijärjestelmän kautta.</p>\n<h2>Muutosten tallentaminen</h2>\n<p>Tallenna nykyinen palveluntarjoajakäytäntö Tallenna-komennolla.</p>\n<hr>\n<p>Tätä ohjesivua käytetään myös HTML-tietoisen lokalisoinnin testaamiseen SHL: ssä.\nHTML-rakenteen tulee pysyä ennallaan, kun tekstisisältö on\nkäännetty.</p>\n",
+    1789160610.8764403
   ]
 }

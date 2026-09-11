@@ -227,6 +227,11 @@ class MyMemoryAdapter(TranslationProvider):
                 method="GET",
             )
 
+            logger.warning(
+                "MYMEMORY DEBUG: calling API langpair=%s",
+                payload["langpair"],
+            )
+
             with urlopen(
                 request,
                 timeout=MYMEMORY_TIMEOUT,
@@ -234,6 +239,11 @@ class MyMemoryAdapter(TranslationProvider):
                 response_data = json.loads(
                     response.read().decode("utf-8")
                 )
+
+            logger.warning(
+                "MYMEMORY DEBUG response: %r",
+                response_data,
+            )
 
             if not isinstance(response_data, dict):
                 raise TranslationError(
@@ -244,10 +254,19 @@ class MyMemoryAdapter(TranslationProvider):
                 "responseStatus"
             )
 
+            logger.debug("MyMemory raw responseStatus=%r type=%s", response_status, type(response_status).__name__,)
+
             response_details = response_data.get(
                 "responseData",
                 {},
             )
+
+            logger.debug(
+                "MyMemory responseData keys=%s",
+                list(response_details.keys())
+                if isinstance(response_details, dict)
+                else type(response_details).__name__,
+                )
 
             if not isinstance(response_details, dict):
                 raise TranslationError(
@@ -356,6 +375,10 @@ class MyMemoryAdapter(TranslationProvider):
             return translated
 
         except HTTPError as error:
+            logger.warning(
+                "MYMEMORY DEBUG: HTTP ERROR: %s",
+                error.code,
+            )
             response_body = None
 
             try:
@@ -381,6 +404,11 @@ class MyMemoryAdapter(TranslationProvider):
             ) from error
 
         except URLError as error:
+            logger.warning(
+                "MYMEMORY DEBUG: URLError: %r",
+                error,
+            )
+
             normalized = self.error_parser.parse(
                 exception=error,
             )
@@ -393,6 +421,11 @@ class MyMemoryAdapter(TranslationProvider):
             socket.timeout,
             TimeoutError,
         ) as error:
+            logger.warning(
+                "MYMEMORY DEBUG: TIMEOUT: %r",
+                 error,
+            )
+
             normalized = self.error_parser.parse(
                 exception=error,
             )

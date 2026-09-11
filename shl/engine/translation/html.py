@@ -244,8 +244,13 @@ class _HTMLReplacementParser(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         """
-        Send only normal textual content to the supplied processor.
+        Send only meaningful textual content to the supplied processor.
+        Preserve whitespace-only nodes without translation.
         """
+        if not data.strip():
+            self._parts.append(data)
+            return
+
         self._parts.append(
             self._processor(data)
         )
