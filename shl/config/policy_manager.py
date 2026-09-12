@@ -150,7 +150,7 @@ class ConfigManager:
                 },
                 "DeepL": {
                     "enabled": True,
-                    "allow": [],
+                    "allow": ["html"],
                     "deny": ["honorific"],
                     "timeout": 5,
                     "requires_env": ["DEEPL_API_KEY"],
