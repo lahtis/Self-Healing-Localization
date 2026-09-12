@@ -131,69 +131,88 @@ class ConfigManager:
 
     def _create_default_config(self) -> None:
         default_config = {
-            "MyMemory": {
-                "enabled": True,
-                "allow": [],
-                "deny": ["html", "honorific"],
-                "timeout": 10,
-                "requires_env": ["MYMEMORY_EMAIL"],
-                "priority": 1
+            "providers": {
+                "MyMemory": {
+                    "enabled": True,
+                    "allow": [],
+                    "deny": ["html", "honorific"],
+                    "timeout": 10,
+                    "requires_env": ["MYMEMORY_EMAIL"],
+                    "priority": 1
+                },
+                "LibreTranslate": {
+                    "enabled": True,
+                    "allow": ["text"],
+                    "deny": ["html", "honorific"],
+                    "timeout": 8,
+                    "requires_env": [],
+                    "priority": 2
+                },
+                "DeepL": {
+                    "enabled": True,
+                    "allow": [],
+                    "deny": ["honorific"],
+                    "timeout": 5,
+                    "requires_env": ["DEEPL_API_KEY"],
+                    "priority": 3
+                },
+                "Google": {
+                    "enabled": True,
+                    "allow": ["text", "html"],
+                    "deny": ["honorific"],
+                    "timeout": 5,
+                    "requires_env": ["GOOGLE_API_KEY"],
+                    "priority": 4
+                },
+                "MicrosoftTranslator": {
+                    "enabled": True,
+                    "allow": ["text", "formality", "html"],
+                    "deny": ["honorific"],
+                    "timeout": 5,
+                    "requires_env": ["MICROSOFT_TRANSLATOR_KEY"],
+                    "priority": 5
+                },
+                "Papago": {
+                    "enabled": True,
+                    "allow": ["honorific"],
+                    "deny": ["html"],
+                    "timeout": 5,
+                    "requires_env": [
+                        "NAVER_CLIENT_ID",
+                        "NAVER_CLIENT_SECRET"
+                    ],
+                    "priority": 6
+                },
+                "Yandex": {
+                    "enabled": True,
+                    "allow": [],
+                    "deny": ["honorific"],
+                    "timeout": 5,
+                    "requires_env": ["YANDEX_API_KEY"],
+                    "priority": 7
+                },
+                "Local": {
+                    "enabled": True,
+                    "allow": [],
+                    "deny": ["honorific"],
+                    "timeout": 5,
+                    "requires_env": ["LOCAL_API_KEY"],
+                    "priority": 8
+                }
             },
-            "LibreTranslate": {
-                "enabled": True,
-                "allow": ["text"],
-                "deny": ["html", "honorific"],
-                "timeout": 8,
-                "requires_env": [],
-                "priority": 2
-            },
-            "DeepL": {
-                "enabled": True,
-                "allow": [],
-                "deny": ["honorific"],
-                "timeout": 5,
-                "requires_env": ["DEEPL_API_KEY"],
-                "priority": 3
-            },
-            "Google": {
-                "enabled": True,
-                "allow": ["text", "html"],
-                "deny": ["honorific"],
-                "timeout": 5,
-                "requires_env": ["GOOGLE_API_KEY"],
-                "priority": 4
-            },
-            "MicrosoftTranslator": {
-                "enabled": True,
-                "allow": ["text", "formality",  "html"],
-                "deny": ["honorific"],
-                "timeout": 5,
-                "requires_env": ["MICROSOFT_TRANSLATOR_KEY"],
-                "priority": 5
-            },
-            "Papago": {
-                "enabled": True,
-                "allow": ["honorific"],
-                "deny": ["html"],
-                "timeout": 5,
-                "requires_env": ["NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET"],
-                "priority": 6
-            },
-            "Yandex": {
-                "enabled": True,
-                "allow": [],
-                "deny": ["honorific"],
-                "timeout": 5,
-                "requires_env": ["YANDEX_API_KEY"],
-                "priority": 7
-            },
-            "Local": {
-                "enabled": True,
-                "allow": [],
-                "deny": ["honorific"],
-                "timeout": 5,
-                "requires_env": ["LOCAL_API_KEY"],
-                "priority": 8
+
+            "memory": {
+                "private_mymemory": {
+                    "enabled": True,
+                    "requires_env": "MYMEMORY_API_KEY",
+                    "space_name": "SHL Private Memory",
+                    "space_uuid": "T5x1ovmY6m"
+                },
+                "public_mymemory": {
+                    "enabled": False,
+                    "space_name": "SHL Public Memory",
+                    "space_uuid": ""
+                }
             }
         }
 

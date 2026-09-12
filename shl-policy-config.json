@@ -111,5 +111,18 @@
             "YANDEX_API_KEY"
         ],
         "priority": 5
+    },
+    "memory": {
+        "private_mymemory": {
+            "enabled": true,
+            "requires_env": "MYMEMORY_API_KEY",
+            "space_name": "SHL Private Memory",
+            "space_uuid": "T5x1ovmY6m"
+        },
+        "public_mymemory": {
+            "enabled": false,
+            "space_name": "SHL Public Memory",
+            "space_uuid": ""
+        }
     }
 }

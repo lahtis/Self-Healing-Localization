@@ -380,9 +380,14 @@ tree.pack(
     expand=True,
 )
 
+providers = {
+    name: cfg
+    for name, cfg in policy.items()
+    if isinstance(cfg, dict) and "priority" in cfg
+}
 
 providers_sorted = sorted(
-    policy.items(),
+    providers.items(),
     key=lambda x: x[1]["priority"],
 )
 
