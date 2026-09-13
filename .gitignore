@@ -28,6 +28,7 @@ error.log
 
 # Type checker cache
 .mypy_cache/
+.shl_cache.json
 
 # Coverage
 .coverage
