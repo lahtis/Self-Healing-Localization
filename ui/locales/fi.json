@@ -1,0 +1,22 @@
+{
+    "SHL Policy Editor": "SHL:n politiikkatoimittaja",
+    "Save": "Tallenna",
+    "Exit": "Poistu",
+    "Help": "Ohje",
+    "About": "Tietoja",
+    "Provider": "Palveluntarjoaja",
+    "Enabled": "Käytössä",
+    "Priority": "Prioriteetti",
+    "Timeout": "Aikaraja",
+    "Retry": "Yritä uudelleen",
+    "Provider Editor": "Palveluntarjoajan muokkausohjelma",
+    "Priority:": "Prioriteetti:",
+    "Provider Capabilities": "Palveluntarjoajan valmiudet",
+    "Capability": "Toimintakyky",
+    "Allow": "Salli",
+    "Deny": "Kieltäytyä",
+    "Yes": "Kyllä",
+    "No": "Ei",
+    "File": "Tiedosto",
+    "Language": "Kieli"
+}

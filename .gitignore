@@ -21,8 +21,8 @@ dist/
 .pytest_cache/
 
 # Test program
-locales/
-prompts/
+/locales/
+/prompts/
 main.py
 error.log
 

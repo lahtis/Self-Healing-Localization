@@ -1,0 +1,22 @@
+{
+    "SHL Policy Editor": "Redaktör för SHL:s riktlinjer",
+    "File": "Fil",
+    "Language": "Språk",
+    "Help": "Hjälp",
+    "Provider": "Leverantör",
+    "Enabled": "Aktiverad",
+    "Priority": "Prioritet",
+    "Timeout": "Tidsgräns",
+    "Retry": "Försök igen",
+    "Provider Editor": "Leverantörsredigerare",
+    "Priority:": "Prioritet:",
+    "Provider Capabilities": "Leverantörens kapacitet",
+    "Save": "Spara",
+    "Exit": "Avsluta",
+    "About": "Om",
+    "Capability": "Kapacitet",
+    "Allow": "Tillåt",
+    "Deny": "Förneka",
+    "Yes": "Ja",
+    "No": "Nej"
+}
