@@ -19,6 +19,7 @@ from .exceptions import (
     RateLimitExceededError,
 )
 from .processor import TranslationProcessor
+from .memory.memory_manager import MemoryManager
 
 from .providers.mymemory import MyMemoryAdapter
 from .providers.mymemory_registry import MyMemoryRegistry
@@ -68,6 +69,8 @@ _PROVIDER_CACHE = load_cache()
 logger = logging.getLogger(__name__)
 
 _translation_cache = TranslationCache()
+_memory_manager = MemoryManager()
+
 _mymemory_registry = MyMemoryRegistry()
 _libre_registry = LibreTranslateRegistry()
 _mirror_manager = LibreTranslateMirrorManager()
@@ -788,6 +791,13 @@ def translate_text_with_metadata(
                             formality,
                             context_type,
                         )
+
+                    _memory_manager.store_translation(
+                        source_text=text,
+                        translated_text=translated,
+                        source_lang=source_lang,
+                        target_lang=target_lang,
+                    )
 
                     return TranslationResult(
                         translated_text=translated,

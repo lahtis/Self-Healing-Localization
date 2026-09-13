@@ -206,12 +206,14 @@ class ConfigManager:
                     "enabled": True,
                     "requires_env": "MYMEMORY_API_KEY",
                     "space_name": "SHL Private Memory",
-                    "space_uuid": "T5x1ovmY6m"
+                    "space_uuid": "T5x1ovmY6m",
+                    "timeout": "30"
                 },
                 "public_mymemory": {
                     "enabled": False,
                     "space_name": "SHL Public Memory",
-                    "space_uuid": ""
+                    "space_uuid": "",
+                    "timeout": "30"
                 }
             }
         }
@@ -338,4 +340,18 @@ class ConfigManager:
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         self.close()
+
+    def get_memory_settings(
+        self,
+        backend: str,
+    ) -> Dict[str, Any]:
+        """Return configuration settings for a memory backend."""
+        memory_config = self._config.get("memory", {})
+
+        settings = memory_config.get(backend, {})
+
+        if not isinstance(settings, dict):
+            return {}
+ 
+        return settings.copy()
 

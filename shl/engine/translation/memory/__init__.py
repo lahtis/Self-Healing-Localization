@@ -11,20 +11,20 @@ Description:
     to external translation memory services.
 """
 
-from .mymemory import (
+from .private_mymemory import (
     MyMemoryAuthError,
-    MyMemoryBackend,
     MyMemoryError,
     MyMemoryHTTPError,
     MyMemoryNotFoundError,
     MyMemoryValidationError,
+    PrivateMyMemoryBackend,
 )
 
 __all__ = [
     "MyMemoryAuthError",
-    "MyMemoryBackend",
     "MyMemoryError",
     "MyMemoryHTTPError",
     "MyMemoryNotFoundError",
     "MyMemoryValidationError",
+    "PrivateMyMemoryBackend",
 ]

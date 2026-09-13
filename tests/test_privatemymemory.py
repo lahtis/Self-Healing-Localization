@@ -1,15 +1,20 @@
-from shl.engine.translation.memory.private_mymemory import PrivateMyMemory
+from shl.engine.translation.memory.private_mymemory import (
+    PrivateMyMemoryBackend,
+)
 
 
-memory = PrivateMyMemory()
+memory = PrivateMyMemoryBackend(
+    space_uuid="T5x1ovmY6m",
+)
 
-result = memory.store(
-    source_text="SHL private memory test",
-    translated_text="SHL:n yksityisen muistin testi",
-    source_lang="en",
-    target_lang="fi",
-    private=True,
-    public=False,
+result = memory.add_memory(
+    content=(
+        "Source language: en\n"
+        "Target language: fi\n"
+        "Source: SHL private memory test\n"
+        "Translation: SHL:n yksityisen muistin testi"
+    ),
+    memory_type="note",
 )
 
 print(result)

@@ -1,5 +1,5 @@
 """
-File: shl/engine/translation/memory/mymemory.py
+File: shl/engine/translation/memory/private_mymemory.py
 Author: Tuomas Lähteenmäki
 Version: 0.2.10
 License: MIT
@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from shl import SHL_VERSION
+from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value
 
 
@@ -41,7 +41,7 @@ class MyMemoryHTTPError(MyMemoryError):
     """Raised for unexpected MyMemory.dev HTTP errors."""
 
 
-class PrivateMyMemoryBacken:
+class PrivateMyMemoryBackend:
     """Memory backend for the MyMemory.dev API."""
 
     BASE_URL = "https://api.mymemory.dev/v1"
@@ -49,16 +49,17 @@ class PrivateMyMemoryBacken:
     def __init__(
         self,
         api_key: Optional[str] = None,
+        api_key_env: str = "MYMEMORY_API_KEY",
         space_uuid: Optional[str] = None,
         timeout: int = 30,
     ) -> None:
-        self.api_key = api_key or get_env_value("MYMEMORY_API_KEY")
+        self.api_key = api_key or get_env_value(api_key_env)
         self.space_uuid = space_uuid
         self.timeout = timeout
 
         if not self.api_key:
             raise MyMemoryAuthError(
-                "MYMEMORY_API_KEY is not configured."
+                f"{api_key_env} is not configured."
             )
 
     @property
