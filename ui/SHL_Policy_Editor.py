@@ -4,11 +4,19 @@ import tkinter as tk
 import logging
 from tkinter import ttk
 
+from shl.config import get_config_value
 from shl import LanguageValidator, setup_logging, get_logger, translate_text
 from shl.engine.translation.cache import TranslationCache
 from shl.engine.translation.exceptions import (
     TranslationError,
     LanguageNotSupportedError,
+)
+
+from shl.config.provider_capabilities import (
+    PROVIDER_CAPABILITIES,
+    SHL_WHITELIST,
+    PROVIDER_ALLOW,
+    PROVIDER_DENY,
 )
 
 from ui.help_content import HELP_CONTENT
@@ -22,9 +30,41 @@ POLICY_FILE = "shl-policy-config.json"
 CONFIG_FILE = "ui/config.conf"
 LOCALES_DIR = "ui/locales"
 
+DEFAULT_RETRY = 2
+
+
+# ------------------------------------------------
+# Capability catalog
+# ------------------------------------------------
+#
+# These are display names only.
+#
+# Capability information itself belongs to the main
+# provider settings.
+#
+# The Policy Editor only displays this information.
+# The user cannot modify provider capabilities,
+# SHL whitelist rules, provider allow rules,
+# or provider deny rules.
+#
+
+POLICY_TAGS = (
+    "html",
+    "glossary",
+    "formality",
+    "contextual_suggestions",
+    "honorific",
+    "language_detection",
+    "document_translation",
+    "website_translation",
+    "batch_translation",
+)
+
+
 # Initialize logging
 setup_logging(console_level="INFO")
 logger = get_logger(__name__)
+
 
 # ------------------------------------------------
 # Policy handling
@@ -59,13 +99,33 @@ class UILocalization:
         self.locales_dir = locales_dir
         self.fallback_language = fallback_language
 
-        self.cache = TranslationCache(ttl=cache_ttl)
+        self.cache = TranslationCache(
+            ttl=cache_ttl,
+            max_size=get_config_value("cache.max_size"),
+            persist=get_config_value("cache.cache_persist"),
+            persist_path=get_config_value("cache.cache_persist_path"),
+        )
+
         self.validator = LanguageValidator(
             base_language=source_language,
             use_lite=True,
         )
 
         self.translations = {}
+
+        # Failed translations are tracked per language.
+        #
+        # Example:
+        # {
+        #     "fi": {"Provider", "Enabled"},
+        #     "sv": {"Provider"}
+        # }
+        #
+        # This prevents the same failed translation from
+        # being requested repeatedly while still allowing
+        # another target language to try independently.
+        self.failed_translations = {}
+
         self._ensure_locales_dir()
         self._load_translations()
 
@@ -88,6 +148,7 @@ class UILocalization:
         try:
             with open(locale_file, "r", encoding="utf-8") as f:
                 self.translations = json.load(f)
+
         except (FileNotFoundError, json.JSONDecodeError):
             self.translations = {}
 
@@ -128,7 +189,7 @@ class UILocalization:
                 text,
                 translated,
                 self.source_language,
-                self.target_language,                
+                self.target_language,
             )
 
             return translated
@@ -136,8 +197,10 @@ class UILocalization:
         except LanguageNotSupportedError:
             raise
 
-        except TranslationError:
-            logger.error(f"Translation failed: {error}")
+        except TranslationError as error:
+            logger.error(
+                f"Translation failed: {error}"
+            )
             return text
 
     def L(self, text):
@@ -149,17 +212,40 @@ class UILocalization:
         if existing:
             return existing
 
+        # Get the failed-translation set for the current
+        # target language.
+        failed = self.failed_translations.setdefault(
+            self.target_language,
+            set(),
+        )
+
+        # Do not retry the same failed translation
+        # repeatedly during this application session.
+        if text in failed:
+            return text
+
         try:
             translated = self._translate_with_shl(text)
 
         except LanguageNotSupportedError:
-            self.target_language = self.fallback_language
-            self._load_translations()
+            failed.add(text)
             return text
 
-        if translated != text:
-            self.translations[text] = translated
-            self._save_translations()
+        except TranslationError as error:
+            failed.add(text)
+            logger.error(
+                f"Translation failed: {error}"
+            )
+            return text
+
+        # SHL may return the original text when no
+        # translation was produced.
+        if not translated or translated == text:
+            failed.add(text)
+            return text
+
+        self.translations[text] = translated
+        self._save_translations()
 
         return translated
 
@@ -172,7 +258,10 @@ def load_language():
     config = configparser.ConfigParser()
 
     try:
-        config.read(CONFIG_FILE, encoding="utf-8")
+        config.read(
+            CONFIG_FILE,
+            encoding="utf-8",
+        )
 
         language = config.get(
             "SETTINGS",
@@ -193,14 +282,26 @@ def load_language():
 
 def save_language(language):
     config = configparser.ConfigParser()
-    config.read(CONFIG_FILE, encoding="utf-8")
+
+    config.read(
+        CONFIG_FILE,
+        encoding="utf-8",
+    )
 
     if not config.has_section("SETTINGS"):
         config.add_section("SETTINGS")
 
-    config.set("SETTINGS", "language", language)
+    config.set(
+        "SETTINGS",
+        "language",
+        language,
+    )
 
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+    with open(
+        CONFIG_FILE,
+        "w",
+        encoding="utf-8",
+    ) as f:
         config.write(f)
 
 
@@ -230,8 +331,14 @@ def L(text):
 # ------------------------------------------------
 
 root = tk.Tk()
-root.title(L("SHL Policy Editor"))
-root.geometry("1200x700")
+
+root.title(
+    L("SHL Policy Editor")
+)
+
+root.geometry(
+    "1200x700"
+)
 
 
 # ------------------------------------------------
@@ -279,7 +386,10 @@ menu_bar.add_cascade(
     menu=help_menu,
 )
 
-root.config(menu=menu_bar)
+
+root.config(
+    menu=menu_bar
+)
 
 
 # ------------------------------------------------
@@ -296,7 +406,10 @@ main_frame.pack(
     expand=True,
 )
 
-left_frame = tk.Frame(main_frame)
+
+left_frame = tk.Frame(
+    main_frame
+)
 
 right_frame = tk.Frame(
     main_frame,
@@ -326,6 +439,7 @@ tree = ttk.Treeview(
         "enabled",
         "priority",
         "timeout",
+        "retry",
     ),
     show="headings",
     selectmode="browse",
@@ -349,6 +463,11 @@ tree.heading(
 tree.heading(
     "timeout",
     text=L("Timeout"),
+)
+
+tree.heading(
+    "retry",
+    text=L("Retry"),
 )
 
 tree.column(
@@ -375,21 +494,28 @@ tree.column(
     width=100,
 )
 
+tree.column(
+    "retry",
+    anchor="center",
+    width=100,
+)
+
 tree.pack(
     fill="both",
     expand=True,
 )
 
-providers = {
-    name: cfg
-    for name, cfg in policy.items()
-    if isinstance(cfg, dict) and "priority" in cfg
-}
+
+providers = policy.get(
+    "providers",
+    {}
+)
 
 providers_sorted = sorted(
     providers.items(),
     key=lambda x: x[1]["priority"],
 )
+
 
 for name, cfg in providers_sorted:
     tree.insert(
@@ -401,6 +527,10 @@ for name, cfg in providers_sorted:
             cfg["enabled"],
             cfg["priority"],
             cfg["timeout"],
+            cfg.get(
+                "retry",
+                DEFAULT_RETRY,
+            ),
         ),
     )
 
@@ -410,52 +540,93 @@ for name, cfg in providers_sorted:
 # ------------------------------------------------
 
 dragging_item = None
+dragging_target = None
 
 
 def on_button_press(event):
     global dragging_item
+    global dragging_target
 
-    dragging_item = tree.identify_row(event.y)
+    dragging_item = tree.identify_row(
+        event.y
+    )
+
+    dragging_target = None
 
 
 def on_motion(event):
-    global dragging_item
+    global dragging_target
 
-    if dragging_item:
-        target = tree.identify_row(event.y)
+    if not dragging_item:
+        return
 
-        if target and target != dragging_item:
-            items = list(tree.get_children())
+    target = tree.identify_row(
+        event.y
+    )
 
-            tree.move(
-                dragging_item,
-                "",
-                items.index(target),
-            )
+    if not target or target == dragging_item:
+        return
+
+    items = list(
+        tree.get_children()
+    )
+
+    try:
+        target_index = items.index(
+            target
+        )
+
+    except ValueError:
+        return
+
+    current_index = items.index(
+        dragging_item
+    )
+
+    if target_index == current_index:
+        return
+
+    tree.move(
+        dragging_item,
+        "",
+        target_index,
+    )
+
+    dragging_target = target
 
 
 def on_button_release(event):
     global dragging_item
+    global dragging_target
 
-    if dragging_item:
-        items = list(tree.get_children())
+    if not dragging_item:
+        return
 
-        for idx, iid in enumerate(items):
-            policy[iid]["priority"] = idx + 1
+    items = list(
+        tree.get_children()
+    )
 
-            tree.item(
+    for idx, iid in enumerate(items):
+        providers[iid]["priority"] = idx + 1
+
+        tree.item(
+            iid,
+            values=(
                 iid,
-                values=(
-                    iid,
-                    policy[iid]["enabled"],
-                    policy[iid]["priority"],
-                    policy[iid]["timeout"],
+                providers[iid]["enabled"],
+                providers[iid]["priority"],
+                providers[iid]["timeout"],
+                providers[iid].get(
+                    "retry",
+                    DEFAULT_RETRY,
                 ),
-            )
+            ),
+        )
 
-        save_policy(policy)
+    save_policy(policy)
 
     dragging_item = None
+    dragging_target = None
 
 
 tree.bind(
@@ -518,7 +689,9 @@ enabled_label.pack(
 )
 
 
+# Define the variable before the Checkbutton uses it.
 enabled_var = tk.BooleanVar()
+
 
 tk.Checkbutton(
     enabled_priority_frame,
@@ -582,61 +755,232 @@ tk.Entry(
 
 
 # ------------------------------------------------
-# Allow tags
+# Retry
 # ------------------------------------------------
 
-allow_label = tk.Label(
+retry_label = tk.Label(
     right_frame,
-    text=L("Allow Tags"),
+    text=L("Retry"),
     font=("Arial", 12),
 )
 
-allow_label.pack(
+retry_label.pack(
     anchor="nw",
 )
 
 
-allow_box = tk.Listbox(
-    right_frame,
-    selectmode="multiple",
-    height=8,
-    width=40,
-    font=("Arial", 12),
+retry_var = tk.IntVar(
+    value=DEFAULT_RETRY,
 )
 
-allow_box.pack(
+tk.Spinbox(
+    right_frame,
+    from_=1,
+    to=10,
+    textvariable=retry_var,
+    width=23,
+    font=("Arial", 12),
+).pack(
     anchor="nw",
     pady=(0, 20),
 )
 
 
 # ------------------------------------------------
-# Deny tags
+# Provider information — READ ONLY
+# ------------------------------------------------
+#
+# Provider information comes from the main SHL
+# provider settings.
+#
+# The Policy Editor only displays this information.
+#
+# The user cannot modify:
+#
+#   PROVIDER_CAPABILITIES
+#   SHL_WHITELIST
+#   PROVIDER_ALLOW
+#   PROVIDER_DENY
+#
+# These are SHL configuration information, not
+# user-editable policy settings.
 # ------------------------------------------------
 
-deny_label = tk.Label(
+capabilities_label = tk.Label(
     right_frame,
-    text=L("Deny Tags"),
+    text=L("Provider Capabilities"),
     font=("Arial", 12),
 )
 
-deny_label.pack(
+capabilities_label.pack(
     anchor="nw",
 )
 
 
-deny_box = tk.Listbox(
+capabilities_frame = tk.Frame(
     right_frame,
-    selectmode="multiple",
-    height=8,
-    width=40,
-    font=("Arial", 12),
 )
 
-deny_box.pack(
+capabilities_frame.pack(
     anchor="nw",
     pady=(0, 20),
 )
+
+
+capability_widgets = []
+
+
+def clear_capabilities():
+    """Remove the current read-only provider information."""
+
+    for widget in capability_widgets:
+        widget.destroy()
+
+    capability_widgets.clear()
+
+
+def capability_value(value):
+    """
+    Convert a capability value into a display string.
+
+    True  = supported / enabled
+    False = not supported / disabled
+    None  = unknown / not yet defined
+    """
+
+    if value is True:
+        return L("Yes")
+
+    if value is False:
+        return L("No")
+
+    return L("Unknown")
+
+
+def show_capabilities(provider):
+    """
+    Display provider capability and SHL handling information.
+
+    All displayed values are read-only.
+
+    The information is read from the main provider
+    settings, not from shl-policy-config.json.
+    """
+
+    clear_capabilities()
+
+    provider_capabilities = PROVIDER_CAPABILITIES.get(
+        provider,
+        {},
+    )
+
+    shl_whitelist = SHL_WHITELIST.get(
+        provider,
+        {},
+    )
+
+    provider_allow = PROVIDER_ALLOW.get(
+        provider,
+        {},
+    )
+
+    provider_deny = PROVIDER_DENY.get(
+        provider,
+        {},
+    )
+
+    headers = (
+        L("Capability"),
+        L("Provider"),
+        L("SHL"),
+        L("Allow"),
+        L("Deny"),
+    )
+
+    for column, text in enumerate(headers):
+        label = tk.Label(
+            capabilities_frame,
+            text=text,
+            font=("Arial", 10, "bold"),
+            anchor="w",
+        )
+
+        label.grid(
+            row=0,
+            column=column,
+            sticky="w",
+            padx=(0, 20),
+            pady=(0, 5),
+        )
+
+        capability_widgets.append(
+            label
+        )
+
+    for row, tag in enumerate(
+        POLICY_TAGS,
+        start=1,
+    ):
+        provider_value = provider_capabilities.get(
+            tag,
+            None,
+        )
+
+        shl_value = shl_whitelist.get(
+            tag,
+            False,
+        )
+
+        allow_value = provider_allow.get(
+            tag,
+            False,
+        )
+
+        deny_value = provider_deny.get(
+            tag,
+            False,
+        )
+
+        values = (
+            tag.replace(
+                "_",
+                " ",
+            ).title(),
+            capability_value(
+                provider_value
+            ),
+            capability_value(
+                shl_value
+            ),
+            capability_value(
+                allow_value
+            ),
+            capability_value(
+                deny_value
+            ),
+        )
+
+        for column, value in enumerate(
+            values
+        ):
+            label = tk.Label(
+                capabilities_frame,
+                text=value,
+                font=("Arial", 10),
+                anchor="w",
+            )
+
+            label.grid(
+                row=row,
+                column=column,
+                sticky="w",
+                padx=(0, 20),
+                pady=2,
+            )
+
+            capability_widgets.append(
+                label
+            )
 
 
 # ------------------------------------------------
@@ -655,7 +999,7 @@ def on_select(event):
 
     current_provider = item
 
-    cfg = policy[item]
+    cfg = providers[item]
 
     enabled_var.set(
         cfg["enabled"]
@@ -669,35 +1013,16 @@ def on_select(event):
         cfg["timeout"]
     )
 
-    allow_box.delete(
-        0,
-        "end",
+    retry_var.set(
+        cfg.get(
+            "retry",
+            DEFAULT_RETRY,
+        )
     )
 
-    for tag in cfg.get("allow", []):
-        allow_box.insert(
-            "end",
-            tag,
-        )
-
-        allow_box.selection_set(
-            "end",
-        )
-
-    deny_box.delete(
-        0,
-        "end",
-    )
-
-    for tag in cfg.get("deny", []):
-        deny_box.insert(
-            "end",
-            tag,
-        )
-
-        deny_box.selection_set(
-            "end",
-        )
+    # Provider capabilities and SHL handling rules
+    # are read-only information from the main provider settings.
+    show_capabilities(item)
 
 
 tree.bind(
@@ -714,21 +1039,19 @@ def save_changes():
     if not current_provider:
         return
 
-    cfg = policy[current_provider]
+    cfg = providers[current_provider]
 
     cfg["enabled"] = enabled_var.get()
 
     cfg["timeout"] = timeout_var.get()
 
-    cfg["allow"] = [
-        allow_box.get(i)
-        for i in allow_box.curselection()
-    ]
+    cfg["retry"] = retry_var.get()
 
-    cfg["deny"] = [
-        deny_box.get(i)
-        for i in deny_box.curselection()
-    ]
+    # Priority is controlled by the Treeview order.
+    #
+    # Provider capabilities, SHL whitelist rules,
+    # provider allow rules, and provider deny rules
+    # are never modified here.
 
     save_policy(policy)
 
@@ -739,6 +1062,7 @@ def save_changes():
             cfg["enabled"],
             cfg["priority"],
             cfg["timeout"],
+            cfg["retry"],
         ),
     )
 
@@ -747,9 +1071,9 @@ def save_changes():
 # Help window
 # ------------------------------------------------
 
-
 def localize_help_content():
     """Localize the complete HTML help content through UILocalization."""
+
     if (
         localizer.target_language == "en"
         or localizer.target_language.startswith("en")
@@ -757,7 +1081,9 @@ def localize_help_content():
         return HELP_CONTENT
 
     try:
-        return localizer.L(HELP_CONTENT)
+        return localizer.L(
+            HELP_CONTENT
+        )
 
     except LanguageNotSupportedError:
         logger.error(
@@ -776,8 +1102,14 @@ def localize_help_content():
 
 def show_help():
     help_window = tk.Toplevel(root)
-    help_window.title(L("Help"))
-    help_window.geometry("800x600")
+
+    help_window.title(
+        L("Help")
+    )
+
+    help_window.geometry(
+        "800x600"
+    )
 
     help_text = tk.Text(
         help_window,
@@ -791,12 +1123,15 @@ def show_help():
         expand=True,
     )
 
-    configure_help_text(help_text)
+    configure_help_text(
+        help_text
+    )
 
     render_html_help(
         help_text,
         localize_help_content(),
     )
+
 
 # ------------------------------------------------
 # About window
@@ -804,9 +1139,19 @@ def show_help():
 
 def show_about():
     about_window = tk.Toplevel(root)
-    about_window.title(L("About"))
-    about_window.geometry("500x300")
-    about_window.resizable(False, False)
+
+    about_window.title(
+        L("About")
+    )
+
+    about_window.geometry(
+        "500x300"
+    )
+
+    about_window.resizable(
+        False,
+        False,
+    )
 
     ttk.Label(
         about_window,
@@ -846,7 +1191,9 @@ def show_about():
 # ------------------------------------------------
 
 def update_ui_language():
-    root.title(L("SHL Policy Editor"))
+    root.title(
+        L("SHL Policy Editor")
+    )
 
     file_menu.entryconfigure(
         0,
@@ -888,36 +1235,49 @@ def update_ui_language():
         text=L("Timeout"),
     )
 
+    tree.heading(
+        "retry",
+        text=L("Retry"),
+    )
+
     provider_editor_label.config(
-        text=L("Provider Editor"),
+        text=L("Provider Editor")
     )
 
     enabled_label.config(
-        text=L("Enabled"),
+        text=L("Enabled")
     )
 
     priority_label.config(
-        text=L("Priority:"),
+        text=L("Priority:")
     )
 
     timeout_label.config(
-        text=L("Timeout"),
+        text=L("Timeout")
     )
 
-    allow_label.config(
-        text=L("Allow Tags"),
+    retry_label.config(
+        text=L("Retry")
     )
 
-    deny_label.config(
-        text=L("Deny Tags"),
+    capabilities_label.config(
+        text=L("Provider Capabilities")
     )
+
+    if current_provider:
+        show_capabilities(
+            current_provider
+        )
 
     save_button.config(
-        text=L("Save"),
+        text=L("Save")
     )
 
     # Rebuild the main menu so cascade labels are localized.
-    menu_bar.delete(0, "end")
+    menu_bar.delete(
+        0,
+        "end",
+    )
 
     menu_bar.add_cascade(
         label=L("File"),
@@ -934,11 +1294,15 @@ def update_ui_language():
         menu=help_menu,
     )
 
+
 def set_ui_language(language):
     if language == localizer.target_language:
         return
 
     localizer.target_language = language
+
+    # Do not clear failed translations here.
+    # They are stored per target language.
     localizer._load_translations()
 
     save_language(language)
@@ -973,6 +1337,10 @@ language_menu.add_command(
     command=lambda: set_ui_language("fi"),
 )
 
+language_menu.add_command(
+    label="Swedish",
+    command=lambda: set_ui_language("sv"),
+)
 
 help_menu.add_command(
     label=L("Help"),
@@ -1008,3 +1376,5 @@ save_button.pack(
 # ------------------------------------------------
 
 root.mainloop()
+
+

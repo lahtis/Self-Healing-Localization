@@ -1,123 +1,125 @@
 {
-    "MyMemory": {
-        "enabled": true,
-        "allow": [],
-        "deny": [
-            "html",
-            "honorific"
-        ],
-        "timeout": 10,
-        "requires_env": [
-            "MYMEMORY_EMAIL",
-            "MYMEMORY_API_KEY"
-        ],
-        "priority": 1
-    },
-    "LibreTranslate": {
-        "enabled": false,
-        "allow": [],
-        "deny": [
-            "html",
-            "honorific"
-        ],
-        "timeout": 8,
-        "requires_env": [
-            "LIBRETRANSLATE_API_KEY"
-        ],
-        "priority": 7
-    },
-    "DeepL": {
-        "enabled": true,
-        "allow": [],
-        "deny": [
-            "honorific"
-        ],
-        "timeout": 5,
-        "requires_env": [
-            "DEEPL_API_KEY"
-        ],
-        "priority": 2
-    },
-    "Google": {
-        "enabled": false,
-        "allow": [
-            "formality",
-            "html"
-        ],
-        "deny": [
-            "honorific"
-        ],
-        "timeout": 5,
-        "requires_env": [
-            "GOOGLE_API_KEY"
-        ],
-        "priority": 3
-    },
-    "MicrosoftTranslator": {
-        "enabled": false,
-        "allow": [
-            "html"
-        ],
-        "deny": [
-            "honorific"
-        ],
-        "timeout": 5,
-        "requires_env": [
-            "MICROSOFT_TRANSLATOR_KEY"
-        ],
-        "priority": 4
-    },
-    "Papago": {
-        "enabled": false,
-        "allow": [
-            "honorific",
-            "formality"
-        ],
-        "deny": [
-            "html"
-        ],
-        "timeout": 5,
-        "requires_env": [
-            "NAVER_CLIENT_ID",
-            "NAVER_CLIENT_SECRET"
-        ],
-        "priority": 6
-    },
-    "Local": {
-        "enabled": false,
-        "allow": [
-            "formality"
-        ],
-        "deny": [
-            "html",
-            "honorific"
-        ],
-        "timeout": 5,
-        "requires_env": [
-            "LOCAL_API_KEY"
-        ],
-        "priority": 8
-    },
-    "Yandex": {
-        "enabled": false,
-        "allow": [
-            "formality"
-        ],
-        "deny": [
-            "html"
-        ],
-        "timeout": 5,
-        "requires_env": [
-            "YANDEX_API_KEY"
-        ],
-        "priority": 5
+    "providers": {
+        "MyMemory": {
+            "enabled": true,
+            "timeout": 10,
+            "requires_env": [
+                "MYMEMORY_EMAIL"
+            ],
+            "priority": 2,
+            "retry": 2,
+            "allow": [],
+            "deny": [
+                "html",
+                "honorific"
+            ]
+        },
+        "LibreTranslate": {
+            "enabled": false,
+            "timeout": 8,
+            "requires_env": [],
+            "priority": 3,
+            "retry": 2,
+            "allow": [
+                "html"
+            ],
+            "deny": [
+                "honorific"
+            ]
+        },
+        "DeepL": {
+            "enabled": true,
+            "timeout": 5,
+            "requires_env": [
+                "DEEPL_API_KEY"
+            ],
+            "priority": 1,
+            "retry": 2,
+            "allow": [
+                "html"
+            ],
+            "deny": [
+                "honorific"
+            ]
+        },
+        "Google": {
+            "enabled": false,
+            "timeout": 5,
+            "requires_env": [
+                "GOOGLE_API_KEY"
+            ],
+            "priority": 4,
+            "retry": 2,
+            "allow": [
+                "html"
+            ],
+            "deny": [
+                "honorific"
+            ]
+        },
+        "MicrosoftTranslator": {
+            "enabled": false,
+            "timeout": 5,
+            "requires_env": [
+                "MICROSOFT_TRANSLATOR_KEY"
+            ],
+            "priority": 5,
+            "retry": 2,
+            "allow": [
+                "html"
+            ],
+            "deny": [
+                "honorific"
+            ]
+        },
+        "Papago": {
+            "enabled": false,
+            "timeout": 5,
+            "requires_env": [
+                "NAVER_CLIENT_ID",
+                "NAVER_CLIENT_SECRET"
+            ],
+            "priority": 6,
+            "retry": 2,
+            "allow": [],
+            "deny": [
+                "html"
+            ]
+        },
+        "Yandex": {
+            "enabled": false,
+            "timeout": 5,
+            "requires_env": [
+                "YANDEX_API_KEY"
+            ],
+            "priority": 7,
+            "retry": 2,
+            "allow": [],
+            "deny": [
+                "html",
+                "honorific"
+            ]
+        },
+        "Local": {
+            "enabled": false,
+            "timeout": 5,
+            "requires_env": [
+                "LOCAL_API_KEY"
+            ],
+            "priority": 8,
+            "retry": 2,
+            "allow": [],
+            "deny": [
+                "honorific"
+            ]
+        }
     },
     "memory": {
         "private_mymemory": {
             "enabled": true,
             "requires_env": "MYMEMORY_API_KEY",
             "space_name": "SHL Private Memory",
-            "space_uuid": "T5x1ovmY6m",
+            "space_uuid": "",
             "timeout": "30"
         },
         "public_mymemory": {

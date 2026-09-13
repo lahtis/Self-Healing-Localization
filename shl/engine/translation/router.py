@@ -68,7 +68,18 @@ _PROVIDER_CACHE = load_cache()
 
 logger = logging.getLogger(__name__)
 
-_translation_cache = TranslationCache()
+print(
+    "[Router] cache_persist =",
+    get_config_value("cache.cache_persist"),
+    type(get_config_value("cache.cache_persist")),
+)
+
+_translation_cache = TranslationCache(
+    ttl=get_config_value("cache.ttl"),
+    max_size=get_config_value("cache.max_size"),
+    persist=get_config_value("cache.cache_persist"),
+    persist_path=get_config_value("cache.cache_persist_path"),
+)
 _memory_manager = MemoryManager()
 
 _mymemory_registry = MyMemoryRegistry()

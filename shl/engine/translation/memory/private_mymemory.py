@@ -59,7 +59,7 @@ class PrivateMyMemoryBackend:
 
         if not self.api_key:
             raise MyMemoryAuthError(
-                f"{api_key_env} is not configured."
+                f"MyMemory.dev {api_key_env} is not configured."
             )
 
     @property
@@ -175,6 +175,41 @@ class PrivateMyMemoryBackend:
     # ------------------------------------------------------------
     # HTTP helpers
     # ------------------------------------------------------------
+
+    def ensure_space(
+        self,
+        name: str,
+        is_public: bool = False,
+    ) -> str:
+        """Return an existing space UUID or create the space."""
+        if self.space_uuid:
+            return self.space_uuid
+
+        spaces = self.list_spaces()
+
+        for space in spaces:
+            if space.get("name") == name:
+                uuid = space.get("uuid")
+
+                if uuid:
+                    self.space_uuid = uuid
+                    return uuid
+
+        data = self.create_space(
+            name=name,
+            is_public=is_public,
+        )
+
+        space = data.get("space", {})
+        uuid = space.get("uuid")
+
+        if not uuid:
+            raise MyMemoryValidationError(
+                "MyMemory.dev did not return a space UUID."
+            )
+
+        self.space_uuid = uuid
+        return uuid
 
     def _get(self, endpoint: str) -> Dict[str, Any]:
         """Perform an authenticated GET request."""

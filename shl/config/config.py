@@ -46,7 +46,7 @@ def _create_default_config() -> dict:
             "yandex": 86400
         },
         "cache": {
-            "cache_persist": False,
+            "cache_persist": True,
             "cache_persist_path": ".shl_cache.json",
             "ttl": 3600,
             "max_size": 10000

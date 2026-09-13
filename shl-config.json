@@ -10,7 +10,7 @@
         "yandex": 86400
     },
     "cache": {
-        "cache_persist": false,
+        "cache_persist": true,
         "cache_persist_path": ".shl_cache.json",
         "ttl": 3600,
         "max_size": 10000
@@ -24,7 +24,7 @@
             "url": "http://localhost:8000"
         },
         "libretranslate": {
-            "url": "http://127.0.0.1:5001"
+            "url": "http://localhost:5002"
         },
         "yandex": {
             "folder_id": null

@@ -36,10 +36,15 @@ class MemoryManager:
             PrivateMyMemoryBackend
         ] = None
 
+        self._private_mymemory_disabled = False
+
     def _get_private_mymemory(
         self,
     ) -> Optional[PrivateMyMemoryBackend]:
         """Return the configured private MyMemory backend."""
+        if self._private_mymemory_disabled:
+            return None
+
         settings = self.config_manager.get_memory_settings(
             "private_mymemory"
         )
@@ -55,11 +60,30 @@ class MemoryManager:
                 "MYMEMORY_API_KEY",
             )
 
+            space_uuid = settings.get("space_uuid")
+            space_name = settings.get(
+                "space_name",
+                "SHL Private Memory",
+            )
+
             self._private_mymemory = PrivateMyMemoryBackend(
                 api_key_env=api_key_env,
-                space_uuid=settings.get("space_uuid"),
+                space_uuid=space_uuid,
                 timeout=timeout,
             )
+
+            if not self._private_mymemory.space_uuid:
+                space_uuid = (
+                    self._private_mymemory.ensure_space(
+                        name=space_name,
+                    )
+                )
+
+                self.config_manager.set_memory_setting(
+                    "private_mymemory",
+                    "space_uuid",
+                    space_uuid,
+                )
 
         return self._private_mymemory
 
@@ -77,6 +101,26 @@ class MemoryManager:
             if backend is None:
                 return None
 
+            if not backend.space_uuid:
+                settings = self.config_manager.get_memory_settings(
+                    "private_mymemory"
+                )
+
+                space_name = settings.get(
+                    "space_name",
+                    "SHL Private Memory",
+                )
+
+                space_uuid = backend.ensure_space(
+                    name=space_name,
+                )
+
+                self.config_manager.set_memory_setting(
+                    "private_mymemory",
+                    "space_uuid",
+                    space_uuid,
+                )
+
             content = (
                 f"Source language: {source_lang}\n"
                 f"Target language: {target_lang}\n"
@@ -90,9 +134,22 @@ class MemoryManager:
             )
 
         except MyMemoryError as error:
+            error_text = str(error)
+
+            if "Space limit reached" in error_text:
+                self._private_mymemory_disabled = True
+
+                logger.warning(
+                    "MyMemory.dev memory disabled for this session: "
+                    "space limit reached."
+                )
+
+                return None
+
             logger.warning(
-                "Translation memory storage failed: %s",
+                "MyMemory.dev Translation memory storage failed: %s",
                 error,
             )
+
             return None
 
