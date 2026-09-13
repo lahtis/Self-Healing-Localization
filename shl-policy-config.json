@@ -119,7 +119,7 @@
             "enabled": true,
             "requires_env": "MYMEMORY_API_KEY",
             "space_name": "SHL Private Memory",
-            "space_uuid": "",
+            "space_uuid": "8BCMkJ6qZe",
             "timeout": "30"
         },
         "public_mymemory": {

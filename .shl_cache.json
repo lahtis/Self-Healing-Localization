@@ -1,162 +1,62 @@
 {
-  "ab5532fd127bb315bab63d83a09d3eab": [
-    "Redaktör för SHL:s riktlinjer",
-    1789330456.3600783
+  "7b5a60008bbe849e28bae2d62948c053": [
+    "Vieraskirja",
+    1789332932.0561912
   ],
-  "d0945b78ad3b0251a0151d4cb275028c": [
-    "Fil",
-    1789330460.901028
+  "9a2e0acb2cd650f6e3a2f848eff8e21c": [
+    "Viesti",
+    1789332934.5706043
   ],
-  "3ca6e8a9d91f6b051c7ea34248816f6f": [
-    "Språk",
-    1789330465.6951926
-  ],
-  "69b391367369abbf46ed88b9e3666881": [
-    "Hjälp",
-    1789330470.2090178
-  ],
-  "589c4209b918c455773fff0ba68ddcf9": [
-    "Leverantör",
-    1789330474.840645
-  ],
-  "f5b3d9f7fe5a5923408495d8a8fb6970": [
-    "Aktiverad",
-    1789330480.3842578
-  ],
-  "f8fb7cff2e486d99d6893d9e27df40e9": [
-    "Prioritet",
-    1789330485.1214871
-  ],
-  "07f190e2130560f7c4846d7e364d6ea2": [
-    "Tidsgräns",
-    1789330489.6220772
-  ],
-  "d471473d534c52ae13f85d20e079541e": [
-    "Försök igen",
-    1789330494.4678738
-  ],
-  "ee3de92a84b91463de9815d32c1286f8": [
-    "Leverantörsredigerare",
-    1789330498.8869925
-  ],
-  "3458b0ad37883b3b3094faa798f1d328": [
-    "Prioritet:",
-    1789330503.5093277
-  ],
-  "aa3767e86c2a91145303e5ca68168dac": [
-    "Leverantörens kapacitet",
-    1789330508.280514
-  ],
-  "be0f94b579073e302586b2d823d563fa": [
-    "Spara",
-    1789330512.950199
-  ],
-  "cf02cf5c9857c2b40328a63bbcf4a083": [
-    "Avsluta",
-    1789330517.7990704
-  ],
-  "2713fb1257e283e459b7863496ea7ead": [
-    "Om",
-    1789330522.4517431
-  ],
-  "83fdb9a43c5eb8fa0e91784054d12032": [
-    "SHL:n politiikkatoimittaja",
-    1789330714.1333985
+  "224dae37f0dc59d78cc542ca3f32e953": [
+    "Valmis",
+    1789332936.5876234
   ],
   "e912c80e595dd0ef7c1305c90955b85d": [
     "Tallenna",
-    1789330715.6690843
+    1789332938.920903
   ],
-  "e31e12265a6c6617454efad129f24a4b": [
-    "Poistu",
-    1789330717.276119
+  "c46caaaed0eb5d0b59ce267698010ec4": [
+    "Tyhjennä tietokanta",
+    1789332940.9156337
   ],
-  "aecafe53cecd931785e721a905f2cf3c": [
-    "Ohje",
-    1789330719.491293
+  "d661c40a03f5bfe28daaa71da775d3e3": [
+    "Hae viestejä...",
+    1789332942.9144943
   ],
-  "ba59e82dfb41c127028986047fb116c9": [
-    "Tietoja",
-    1789330721.0191848
+  "806b269546004b088bdac168271765c7": [
+    "Vaihda kieltä",
+    1789332944.8911033
   ],
-  "fecee3b0955f2124801d7abf474731cc": [
-    "Palveluntarjoaja",
-    1789330722.5758197
+  "7d5de7cfe1c60ffc7342490fc4942fe8": [
+    "Tallennetut viestit",
+    1789332946.648046
   ],
-  "17dd08f1cd1085cc04bcc0d7b0b48e88": [
-    "Käytössä",
-    1789330724.1823869
+  "12b18107c6d868521d93b55c69a765fe": [
+    "Salasana",
+    1789332948.3371131
   ],
-  "a85468e6af8edf8279d14075deaf7e14": [
-    "Prioriteetti",
-    1789330725.8808753
+  "62e475b9b5f5ef53162f9a6f08d577d9": [
+    "Vaaditaan järjestelmänvalvojan salasana",
+    1789332950.1860073
   ],
-  "f50971d92412b85fed78e108ed03879b": [
-    "Aikaraja",
-    1789330727.4599898
+  "54c7d52bab54a034d4bc910fc50d600d": [
+    "Väärä salasana!",
+    1789332952.2442882
   ],
-  "9445d634d6aa06a88ebd9ebd5b5aa1e7": [
-    "Yritä uudelleen",
-    1789330729.0875943
+  "bdce8c124bc786c4b6bf29e39fb131e5": [
+    "Peruuta",
+    1789332953.949083
   ],
-  "3fffd1ad82a9e10ec0f4054635aaa04d": [
-    "Palveluntarjoajan muokkausohjelma",
-    1789330730.7854137
+  "0d88eed38b391959eb0b27b82bb70bdb": [
+    "Vahvista poisto",
+    1789332955.614687
   ],
-  "35315cc810c036a7eb1e965f7117fa6d": [
-    "Prioriteetti:",
-    1789330732.341919
+  "7d1c9931a8597ed12600f0f0c2256da7": [
+    "Kenttä on tyhjä!",
+    1789332957.3281934
   ],
-  "2be072192a5bdde334723efc3c6c9d79": [
-    "Palveluntarjoajan valmiudet",
-    1789330733.9149418
-  ],
-  "5ff3b8d4f0f5e952460c813a28109318": [
-    "Toimintakyky",
-    1789330735.5630972
-  ],
-  "f07af6b6f2802216f6c68a6219e04832": [
-    "Salli",
-    1789330741.114264
-  ],
-  "dad5f5eb2998dc49e1f5afe86e904d10": [
-    "Kieltäytyä",
-    1789330745.880664
-  ],
-  "2a3542d4d129dee8ebb767789ead6873": [
-    "Kyllä",
-    1789330747.434279
-  ],
-  "0d918b3642b325c146f5c2e346cfa5c8": [
-    "Ei",
-    1789330749.0257726
-  ],
-  "d6861bbb0634b5563a271d9af7711423": [
-    "Tiedosto",
-    1789330750.5917535
-  ],
-  "1e54302216843f7f8727fadaba900ed1": [
-    "Kieli",
-    1789330752.1982179
-  ],
-  "daca848d71d0771785c75deea243f217": [
-    "Kapacitet",
-    1789331170.657686
-  ],
-  "04daadfcb15fff0ca6849bd256642cd1": [
-    "Tillåt",
-    1789331179.448333
-  ],
-  "51cc0320a29dbf85fe5b254a4726315b": [
-    "Förneka",
-    1789331184.8688045
-  ],
-  "267118b7570d4bb43fede74e9e08d790": [
-    "Ja",
-    1789331189.4909203
-  ],
-  "2a4c9294c67976283086c101e22d09e1": [
-    "Nej",
-    1789331193.9433932
+  "c29014e4145696b9fce7866f98f4f4fd": [
+    "Tietokanta tyhjennetty.",
+    1789332959.085809
   ]
 }
