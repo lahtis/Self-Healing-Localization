@@ -110,12 +110,12 @@ PROVIDER_CAPABILITIES = {
     },
 
     "Yandex": {
-        "html": None,
+        "html": True,
         "glossary": True,
         "formality": None,
         "contextual_suggestions": None,
         "honorific": None,
-        "language_detection": None,
+        "language_detection": True,
         "document_translation": None,
         "website_translation": None,
         "batch_translation": None,
@@ -213,7 +213,7 @@ SHL_WHITELIST = {
     },
 
     "Yandex": {
-        "html": True,
+        "html": False,
         "glossary": False,
         "formality": False,
         "contextual_suggestions": False,
@@ -312,7 +312,7 @@ PROVIDER_ALLOW = {
     },
 
     "Yandex": {
-        "html": False,
+        "html": True,
         "glossary": False,
         "formality": False,
         "contextual_suggestions": False,
@@ -412,7 +412,7 @@ PROVIDER_DENY = {
     },
 
     "Yandex": {
-        "html": True,
+        "html": False,
         "glossary": False,
         "formality": False,
         "contextual_suggestions": False,
