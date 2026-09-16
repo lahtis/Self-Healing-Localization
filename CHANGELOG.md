@@ -6,7 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
-
+## [0.2.11] - 2026-09-16 Language Detect
+- Added Language detect profider to prevented failed translations. (en -> message -> fr message = Null)
+- Added Language detect language cache
+- Added Language detect router
 
 ## [0.2.10] - 2026-09-06 HTML Handling & Placeholder Protection
 
