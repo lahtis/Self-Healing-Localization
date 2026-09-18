@@ -128,11 +128,11 @@
             "requires_env": [
                 "DETECTLANGUAGE_API_KEY"
             ],
+            "priority": 9,
             "detection_priority": 7,
             "retry": 2,
             "allow": [],
-            "deny": [],
-            "priority": 9
+            "deny": []
         }
     },
     "memory": {

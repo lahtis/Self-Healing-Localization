@@ -77,6 +77,12 @@ NAVER_CLIENT_ID=your-api-key
 NAVER_CLIENT_SECRET=your-api-key
 YANDEX_API_KEY=your-api-key
 LOCAL_TRANSLATOR_API_KEY=your-api-key
+DETECTLANGUAGE_API_KEY=your-api-key
+OPENROUTER_API_KEY=your-api-key
+GEMINI_API_KEY=your-api-key
+GROQ_API_KEY=your-api-key
+CLAUDE_API_KEY=your-api-key
+CHATGPT_API_KEY=your-api-key
 ```
 
 > Environment variables are optional, but required for providers that use API keys.
