@@ -25,13 +25,13 @@ def test_router_accepts_placeholder_pattern() -> None:
         text="Saved: {}",
         source_lang="en",
         target_lang="ru",
+        placeholder_pattern=r"\{\}",
     )
 
     result = router._translate_with_processor(
         request,
         translator,
         False,
-        placeholder_pattern=r"\{\}",
     )
 
     print("Input:       ", request.text)

@@ -68,7 +68,7 @@ def get_provider_priority(
     """
 
     if _USE_POLICY and _policy is not None:
-        available = _policy.get_available_providers()
+        available = _policy.get_available_detection_providers()
 
         if available:
             return [
@@ -151,7 +151,6 @@ def _create_provider(
         f"Unsupported language detection provider: "
         f"{provider_name}"
     )
-
 
 # ---------------------------------------------------------------------------
 # LANGUAGE DETECTION

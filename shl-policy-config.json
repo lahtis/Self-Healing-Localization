@@ -7,6 +7,7 @@
                 "MYMEMORY_EMAIL"
             ],
             "priority": 2,
+            "detection_priority": 1,
             "retry": 2,
             "allow": [],
             "deny": [
@@ -19,6 +20,7 @@
             "timeout": 8,
             "requires_env": [],
             "priority": 3,
+            "detection_priority": 2,
             "retry": 2,
             "allow": [
                 "html"
@@ -34,6 +36,7 @@
                 "DEEPL_API_KEY"
             ],
             "priority": 1,
+            "detection_priority": null,
             "retry": 2,
             "allow": [
                 "html"
@@ -49,6 +52,7 @@
                 "GOOGLE_API_KEY"
             ],
             "priority": 4,
+            "detection_priority": 3,
             "retry": 2,
             "allow": [
                 "html"
@@ -64,6 +68,7 @@
                 "MICROSOFT_TRANSLATOR_KEY"
             ],
             "priority": 5,
+            "detection_priority": 4,
             "retry": 2,
             "allow": [
                 "html"
@@ -80,6 +85,7 @@
                 "NAVER_CLIENT_SECRET"
             ],
             "priority": 6,
+            "detection_priority": 5,
             "retry": 2,
             "allow": [],
             "deny": [
@@ -93,10 +99,12 @@
                 "YANDEX_API_KEY"
             ],
             "priority": 7,
+            "detection_priority": 6,
             "retry": 2,
-            "allow": [],
+            "allow": [
+                "html"
+            ],
             "deny": [
-                "html",
                 "honorific"
             ]
         },
@@ -107,11 +115,24 @@
                 "LOCAL_API_KEY"
             ],
             "priority": 8,
+            "detection_priority": null,
             "retry": 2,
             "allow": [],
             "deny": [
                 "honorific"
             ]
+        },
+        "DetectLanguage": {
+            "enabled": true,
+            "timeout": 10,
+            "requires_env": [
+                "DETECTLANGUAGE_API_KEY"
+            ],
+            "detection_priority": 7,
+            "retry": 2,
+            "allow": [],
+            "deny": [],
+            "priority": 9
         }
     },
     "memory": {
@@ -119,7 +140,7 @@
             "enabled": true,
             "requires_env": "MYMEMORY_API_KEY",
             "space_name": "SHL Private Memory",
-            "space_uuid": "8BCMkJ6qZe",
+            "space_uuid": "",
             "timeout": "30"
         },
         "public_mymemory": {

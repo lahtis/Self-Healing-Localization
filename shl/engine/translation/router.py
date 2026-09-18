@@ -7,6 +7,7 @@ License: MIT
 
 import time
 import logging
+from dataclasses import replace
 from typing import Optional, List, Dict, Any, Callable
 
 from .provider_cache import load_cache
@@ -49,6 +50,7 @@ from .providers.local_translator_registry import LocalRegistry
 from shl.config import get_config_value
 from shl.config.policy_manager import ConfigManager
 from shl.utils.env_loader import get_env_value
+from shl.language_parser import LanguageParser
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +97,7 @@ _ms_registry = MicrosoftServiceRegistry(
     ttl_seconds=get_config_value("microsoft_translator.ttl")
 )
 
+language_parser = LanguageParser()
 
 # ---------------------------------------------------------------------------
 # HTML POLICY
@@ -180,6 +183,7 @@ def get_provider_html_policy(
 
     return None
 
+
 def _translate_with_processor(
     request: TranslationRequest,
     translator: Callable[[TranslationRequest], str],
@@ -207,23 +211,9 @@ def _translate_with_processor(
         if request.html_format:
             return translator(request)
 
-        html_request = TranslationRequest(
-            text=request.text,
-            source_lang=request.source_lang,
-            target_lang=request.target_lang,
-            context_type=request.context_type,
-            domain=request.domain,
-            formality=request.formality,
-            honorific=request.honorific,
-            glossary=request.glossary,
-            glossary_id=request.glossary_id,
+        html_request = replace(
+            request,
             html_format=True,
-            placeholder_pattern=request.placeholder_pattern,
-            key=request.key,
-            screen=request.screen,
-            component=request.component,
-            source_id=request.source_id,
-            metadata=request.metadata,
         )
 
         return translator(html_request)
@@ -235,23 +225,9 @@ def _translate_with_processor(
                 placeholder_pattern=request.placeholder_pattern,
             ).process(request).text
 
-        forced_request = TranslationRequest(
-            text=request.text,
-            source_lang=request.source_lang,
-            target_lang=request.target_lang,
-            context_type=request.context_type,
-            domain=request.domain,
-            formality=request.formality,
-            honorific=request.honorific,
-            glossary=request.glossary,
-            glossary_id=request.glossary_id,
+        forced_request = replace(
+            request,
             html_format=True,
-            placeholder_pattern=request.placeholder_pattern,
-            key=request.key,
-            screen=request.screen,
-            component=request.component,
-            source_id=request.source_id,
-            metadata=request.metadata,
         )
 
         return TranslationProcessor(
@@ -518,6 +494,7 @@ def clear_unavailable_cache() -> None:
     _ms_registry.clear()
     _local_registry.clear("local")
 
+
 # ---------------------------------------------------------------------------
 # UNAVAILABLE CACHE STATS
 # ---------------------------------------------------------------------------
@@ -657,22 +634,28 @@ def translate_text_with_metadata(
         if time.time() - start_time > total_timeout:
             break
 
-        # The policy path returns enabled providers without consulting their
-        # pair registries.  Check the shared DeepL registry before creating an
-        # adapter so a previously rejected pair does not trigger one API call
-        # (and one blacklist write) for every missing UI string.
-        if service == "deepl" and not _deepl_registry.is_pair_supported(
-            source_lang,
-            target_lang,
-        ):
-            logger.info(
-                "Skipping DeepL for unavailable or blacklisted language "
-                "pair '%s' -> '%s'.",
-                source_lang,
-                target_lang,
+        if service == "deepl":
+            deepl_source_lang = language_parser.get_provider_code(
+                request.source_lang,
+                "deepl",
             )
-            unsupported_services.add(service)
-            continue
+            deepl_target_lang = language_parser.get_provider_code(
+                request.target_lang,
+                "deepl",
+            )
+
+            if not _deepl_registry.is_pair_supported(
+                deepl_source_lang,
+                deepl_target_lang,
+            ):
+                logger.info(
+                    "Skipping DeepL for unavailable or blacklisted language "
+                    "pair '%s' -> '%s'.",
+                    deepl_source_lang,
+                    deepl_target_lang,
+                )
+                unsupported_services.add(service)
+                continue
 
         provider_timeout = get_provider_timeout(service)
 
@@ -698,17 +681,56 @@ def translate_text_with_metadata(
                         get_provider_html_policy(service),
                     )
 
-                elif service == "deepl":
-                    adapter = (
-                        DeepLAdapter(
-                            api_key=deepl_key,
-                            registry=_deepl_registry,
-                        )
-                        if deepl_key
-                        else DeepLAdapter(registry=_deepl_registry)
+                elif service == "mymemory":
+                    adapter = MyMemoryAdapter(
+                        email=mymemory_email,
+                        api_key=mymemory_api_key,
                     )
-                    translated = _translate_with_processor(
+
+                    source_provider_lang = language_parser.get_provider_code(
+                        request.source_lang,
+                        "mymemory_iso_639_1",
+                    )
+                    target_provider_lang = language_parser.get_provider_code(
+                        request.target_lang,
+                        "mymemory_iso_639_1",
+                    )
+
+                    provider_request = replace(
                         request,
+                        source_lang=source_provider_lang,
+                        target_lang=target_provider_lang,
+                    )
+
+                    translated = _translate_with_processor(
+                        provider_request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
+
+                elif service == "deepl":
+                    adapter = DeepLAdapter(
+                        api_key=deepl_key,
+                        registry=_deepl_registry,
+                    )
+
+                    source_provider_lang = language_parser.get_provider_code(
+                        request.source_lang,
+                        service,
+                    )
+                    target_provider_lang = language_parser.get_provider_code(
+                        request.target_lang,
+                        service,
+                    )
+
+                    provider_request = replace(
+                        request,
+                        source_lang=source_provider_lang,
+                        target_lang=target_provider_lang,
+                    )
+
+                    translated = _translate_with_processor(
+                        provider_request,
                         adapter.translate,
                         get_provider_html_policy(service),
                     )
@@ -740,8 +762,24 @@ def translate_text_with_metadata(
                         )
                         else PapagoAdapter()
                     )
-                    translated = _translate_with_processor(
+
+                    source_provider_lang = language_parser.get_provider_code(
+                        request.source_lang,
+                        service,
+                    )
+                    target_provider_lang = language_parser.get_provider_code(
+                        request.target_lang,
+                        service,
+                    )
+
+                    provider_request = replace(
                         request,
+                        source_lang=source_provider_lang,
+                        target_lang=target_provider_lang,
+                    )
+
+                    translated = _translate_with_processor(
+                        provider_request,
                         adapter.translate,
                         get_provider_html_policy(service),
                     )
@@ -763,17 +801,6 @@ def translate_text_with_metadata(
                 elif service == "libretranslate":
                     adapter = LibreTranslateAdapter(
                         mirror_manager=_mirror_manager,
-                    )
-                    translated = _translate_with_processor(
-                        request,
-                        adapter.translate,
-                        get_provider_html_policy(service),
-                    )
-
-                elif service == "mymemory":
-                    adapter = MyMemoryAdapter(
-                        email=mymemory_email,
-                        api_key=mymemory_api_key,
                     )
                     translated = _translate_with_processor(
                         request,
@@ -818,6 +845,7 @@ def translate_text_with_metadata(
 
             except LanguageNotSupportedError:
                 unsupported_services.add(service)
+
                 if service == "google":
                     _google_registry.mark_pair_unsupported(
                         source_lang,
@@ -837,8 +865,6 @@ def translate_text_with_metadata(
                     )
 
                 elif service == "deepl":
-                    # DeepLAdapter already recorded this on the shared
-                    # registry.  Do not write it again for the same error.
                     pass
 
                 elif service == "papago":
@@ -861,18 +887,27 @@ def translate_text_with_metadata(
             except TranslationError as error:
                 logger.warning(
                     "Provider '%s' failed for '%s' -> '%s' "
-                    "(attempt %d/%d): %s: %s", service, source_lang, target_lang, attempt + 1, max_retries, type(error).__name__, error)
+                    "(attempt %d/%d): %s: %s",
+                    service,
+                    source_lang,
+                    target_lang,
+                    attempt + 1,
+                    max_retries,
+                    type(error).__name__,
+                    error,
+                )
+
                 backoff = retry_delay * (attempt + 1)
 
                 if time.time() + backoff > service_deadline:
-                   logger.warning(
-                       "Provider '%s' service deadline reached "
-                       "after attempt %d/%d.",
-                       service,
-                       attempt + 1,
-                       max_retries,
-                   )
-                   break
+                    logger.warning(
+                        "Provider '%s' service deadline reached "
+                        "after attempt %d/%d.",
+                        service,
+                        attempt + 1,
+                        max_retries,
+                    )
+                    break
 
                 if attempt < max_retries - 1:
                     logger.debug(
@@ -960,7 +995,7 @@ def translate_text(
 
         return result.translated_text
 
-    except LanguageNotSupportedError as error:
+    except LanguageNotSupportedError:
         logger.warning(
             "DEBUG: LanguageNotSupportedError caught in router, "
             "raise_on_language_not_supported=%s",

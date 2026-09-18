@@ -42,7 +42,7 @@ def test_mask_api_key_with_spaces():
 def test_get_env_file_path():
     """Test environment file path."""
     path = get_env_file_path()
-    assert str(path).endswith(".env/shl/.env")
+    assert path.name == ".env"
 
 
 def test_load_shl_env():

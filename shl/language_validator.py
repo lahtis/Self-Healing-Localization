@@ -1,7 +1,7 @@
 """
 File: language_validator.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.4
+Version: 0.2.11
 License: MIT
 Description:
     Optional language validation using GLFM (Global Language Family Mapper).
@@ -56,13 +56,13 @@ class LanguageValidator:
         self._use_lite = use_lite
         self._glfm_path = glfm_path
         
-        # Lite: 20 lähintä, Full: kaikki (None = kaikki)
+        # Lite: 20 nearest, Full: all (None = all)
         self._max_nearest = 20 if use_lite else None
         
-        # O(1)-hakuindeksi ISO 639-1 -> language ID
+        # O(1) lookup index ISO 639-1 -> language ID
         self._iso1_index: Dict[str, str] = {}
         
-        # Yritä ladata GLFM
+        # Load GLFM
         self._load_glfm()
 
     def _load_glfm(self) -> None:
@@ -84,7 +84,7 @@ class LanguageValidator:
             self.languages = load_language_data(db_path)
             self._loaded = True
             
-            # Rakenna O(1)-hakuindeksi
+            # Build O(1) lookup index
             self._build_iso1_index()
             
             mode = 'Lite' if self._use_lite else 'Full'
@@ -110,14 +110,61 @@ class LanguageValidator:
             self.languages = {}
             self._loaded = False
 
+
     def _build_iso1_index(self) -> None:
-        """Build ISO 639-1 index for O(1) lookups."""
+        """Build ISO 639-1 index for O(1) lookups.
+
+        When multiple GLFM records share the same ISO 639-1 code,
+        prefer the record whose BCP-47 language subtag matches the
+        ISO 639-1 code. This selects the canonical language record
+        instead of an individual language variant.
+        """
         self._iso1_index = {}
+
         for lang_id, info in self.languages.items():
-            iso1 = info.get('iso639_1', '').lower()
-            if iso1 and iso1 not in self._iso1_index:
+            if not isinstance(info, dict):
+                continue
+
+            iso1 = info.get("iso639_1", "")
+            if not isinstance(iso1, str):
+                continue
+
+            iso1 = iso1.strip().lower()
+
+            if not iso1:
+                continue
+
+            current_id = self._iso1_index.get(iso1)
+
+            if current_id is None:
                 self._iso1_index[iso1] = lang_id
-        logger.debug(f"Built ISO 639-1 index: {len(self._iso1_index)} entries")
+                continue
+
+            current_info = self.languages.get(current_id, {})
+            current_bcp47 = current_info.get("bcp47", "")
+
+            if not isinstance(current_bcp47, str):
+                current_bcp47 = ""
+
+            current_base = current_bcp47.split("-", 1)[0].lower()
+
+            bcp47 = info.get("bcp47", "")
+            if not isinstance(bcp47, str):
+                bcp47 = ""
+
+            candidate_base = bcp47.split("-", 1)[0].lower()
+
+            # Prefer the record whose BCP-47 language subtag is the
+            # same as the ISO 639-1 identifier.
+            if candidate_base == iso1 and current_base != iso1:
+                self._iso1_index[iso1] = lang_id
+
+        logger.debug(
+            "Built ISO 639-1 index: %d entries",
+            len(self._iso1_index),
+        )
+
+
 
     @property
     def is_loaded(self) -> bool:
@@ -136,34 +183,130 @@ class LanguageValidator:
 
     def _find_language(self, lang_code: str) -> Optional[Dict[str, Any]]:
         """
-        Find a language in GLFM by ISO 639-1, ISO 639-3, or BCP-47 tag.
-        
-        Uses O(1) lookup via ISO 639-1 index when possible.
+        Find a language in GLFM by language ID, ISO 639 codes, BCP-47 tag,
+        or language name.
+
+        The GLFM database is the authoritative source for language
+        identification. No language-specific synonym tables are used.
         """
         if not self.is_loaded or not lang_code or not isinstance(lang_code, str):
             return None
 
-        # Get base language (strip script/region)
-        base = extract_base_language(lang_code)
+        value = lang_code.strip()
 
-        # 1. O(1) lookup by ISO 639-1
-        if base in self._iso1_index:
-            lang_id = self._iso1_index[base]
+        if not value:
+            return None
+
+        # Normalize separators and case for identifier comparison.
+        normalized = value.replace("_", "-").lower()
+
+        # Do not interpret ISO 639-1 or ISO 639-3 identifiers
+        # as language names. GLFM may contain short language
+        # names such as "En", which can collide with "en".
+        is_language_identifier = (
+            normalized in self._iso1_index
+            or any(
+                isinstance(info, dict)
+                and isinstance(info.get("iso639_3"), str)
+                and info.get("iso639_3", "").lower() == normalized
+                for info in self.languages.values()
+            )
+        )
+
+        # ------------------------------------------------------------------
+        # 1. Language name lookup
+        #
+        # Check names before parsing the value as a language code.
+        # This prevents language names such as "Finnish" from being
+        # interpreted as language identifiers by extract_base_language().
+        # ------------------------------------------------------------------
+        if not is_language_identifier:
+            name_lower = value.casefold()
+
+            for info in self.languages.values():
+                if not isinstance(info, dict):
+                    continue
+
+                name = info.get("name", "")
+                official_name = info.get("official_name", "")
+
+                if isinstance(name, str) and name.casefold() == name_lower:
+                    return info
+
+                if (
+                    isinstance(official_name, str)
+                    and official_name.casefold() == name_lower
+                ):
+                    return info
+
+        # ------------------------------------------------------------------
+        # 2. Direct GLFM language ID lookup
+        # ------------------------------------------------------------------
+        for lang_id, info in self.languages.items():
+            if not isinstance(info, dict):
+                continue
+
+            if str(lang_id).lower() == normalized:
+                return info
+
+
+        # ------------------------------------------------------------------
+        # 3. ISO 639-1 lookup
+        # ------------------------------------------------------------------
+        if "-" not in normalized and normalized in self._iso1_index:
+            lang_id = self._iso1_index[normalized]
             return self.languages.get(lang_id)
 
-        # 2. Direct lookup by ID
-        if base in self.languages:
-            return self.languages[base]
+        base = extract_base_language(value)
+        base_lower = base.lower()
 
-        # 3. Try full tag
-        full_tag = normalize_full_tag(lang_code)
-        if full_tag in self.languages:
-            return self.languages[full_tag]
+        if base_lower in self._iso1_index:
+            lang_id = self._iso1_index[base_lower]
+            return self.languages.get(lang_id)
 
-        # 4. Fallback: linear search (rare, but safe)
-        for lang_id, info in self.languages.items():
-            if info.get('iso639_3', '').lower() == base:
+
+        # ------------------------------------------------------------------
+        # 4. ISO 639-3 lookup
+        # ------------------------------------------------------------------
+        for info in self.languages.values():
+            if not isinstance(info, dict):
+                continue
+
+            iso639_3 = info.get("iso639_3", "")
+
+            if (
+                isinstance(iso639_3, str)
+                and iso639_3.lower() == base_lower
+            ):
                 return info
+
+        # ------------------------------------------------------------------
+        # 5. Full BCP-47 lookup
+        # ------------------------------------------------------------------
+        full_tag = normalize_full_tag(value)
+
+        if full_tag:
+            full_tag_lower = full_tag.lower()
+
+            for lang_id, info in self.languages.items():
+                if not isinstance(info, dict):
+                    continue
+
+                bcp47 = info.get("bcp47", "")
+
+                if (
+                    isinstance(bcp47, str)
+                    and bcp47.lower() == full_tag_lower
+                ):
+                    return info
+
+                # Also allow the GLFM language ID itself to contain
+                # a BCP-47-style tag.
+                if (
+                    isinstance(lang_id, str)
+                    and lang_id.lower() == full_tag_lower
+                ):
+                    return info
 
         return None
 
@@ -184,7 +327,7 @@ class LanguageValidator:
             return False
         
         if not self.is_loaded:
-            return not strict  # False if strict=True, True if strict=False
+            return not strict
         
         return self._find_language(lang_code) is not None
 

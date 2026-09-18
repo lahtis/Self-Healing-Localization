@@ -453,7 +453,7 @@ class LocalizationEngine:
 
         validated_key = self._validate_key(key)
 
-        value = self.template_localizer.get_text(validated_key)
+        value = self.template_localizer.get_template(validated_key)
 
         if value is not None:
             return value
@@ -475,9 +475,7 @@ class LocalizationEngine:
 
         validated_key = self._validate_key(key)
 
-        value = self.template_localizer.get_text(
-            validated_key
-        )
+        value = self.template_localizer.get_template(validated_key)
 
         if value is None:
             value = default

@@ -154,11 +154,13 @@ def test_html_is_preserved_when_processing_is_disabled() -> None:
         html_format=False,
     )
 
-    result = processor.process(request)
+    result = processor.process(
+        request,
+        process_html=False,
+    )
 
     assert result.text == "<P>HELLO WORLD</P>"
     assert received == ["<p>Hello world</p>"]
-
 
 def test_html_text_is_processed_when_enabled() -> None:
     """Only textual HTML content should be translated."""

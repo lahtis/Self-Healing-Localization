@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 from shl.config.provider_capabilities import (
+    PROVIDER_CAPABILITIES,
     PROVIDER_ALLOW,
     PROVIDER_DENY,
 )
@@ -171,6 +172,7 @@ class ConfigManager:
                 "timeout": 10,
                 "requires_env": ["MYMEMORY_EMAIL"],
                 "priority": 1,
+                "detection_priority": 1,
                 "retry": 2,
             },
             "LibreTranslate": {
@@ -178,6 +180,7 @@ class ConfigManager:
                 "timeout": 8,
                 "requires_env": [],
                 "priority": 2,
+                "detection_priority": 2,
                 "retry": 2,
             },
             "DeepL": {
@@ -185,6 +188,7 @@ class ConfigManager:
                 "timeout": 5,
                 "requires_env": ["DEEPL_API_KEY"],
                 "priority": 3,
+                "detection_priority": None,
                 "retry": 2,
             },
             "Google": {
@@ -192,6 +196,7 @@ class ConfigManager:
                 "timeout": 5,
                 "requires_env": ["GOOGLE_API_KEY"],
                 "priority": 4,
+                "detection_priority": 3,
                 "retry": 2,
             },
             "MicrosoftTranslator": {
@@ -199,6 +204,7 @@ class ConfigManager:
                 "timeout": 5,
                 "requires_env": ["MICROSOFT_TRANSLATOR_KEY"],
                 "priority": 5,
+                "detection_priority": 4,
                 "retry": 2,
             },
             "Papago": {
@@ -209,6 +215,7 @@ class ConfigManager:
                     "NAVER_CLIENT_SECRET",
                 ],
                 "priority": 6,
+                "detection_priority": 5,
                 "retry": 2,
             },
             "Yandex": {
@@ -216,6 +223,7 @@ class ConfigManager:
                 "timeout": 5,
                 "requires_env": ["YANDEX_API_KEY"],
                 "priority": 7,
+                "detection_priority": 6,
                 "retry": 2,
             },
             "Local": {
@@ -223,6 +231,14 @@ class ConfigManager:
                 "timeout": 5,
                 "requires_env": ["LOCAL_API_KEY"],
                 "priority": 8,
+                "detection_priority": None,
+                "retry": 2,
+            },
+            "DetectLanguage": {
+                "enabled": True,
+                "timeout": 10,
+                "requires_env": ["DETECTLANGUAGE_API_KEY"],
+                "detection_priority": 7,
                 "retry": 2,
             },
         }
@@ -258,7 +274,7 @@ class ConfigManager:
                     "enabled": True,
                     "requires_env": "MYMEMORY_API_KEY",
                     "space_name": "SHL Private Memory",
-                    "space_uuid": "T5x1ovmY6m",
+                    "space_uuid": "",
                     "timeout": "30",
                 },
                 "public_mymemory": {
@@ -483,6 +499,45 @@ class ConfigManager:
         traceback: Any,
     ) -> None:
         self.close()
+
+    def get_available_detection_providers(self) -> List[str]:
+        with self._lock:
+            providers_config = self._config.get("providers", {})
+            providers = []
+
+            for name, config in providers_config.items():
+                if not isinstance(config, dict):
+                    continue
+
+                if not config.get("enabled", False):
+                    continue
+
+                capabilities = PROVIDER_CAPABILITIES.get(name, {})
+
+                if not capabilities.get("language_detection", False):
+                    continue
+
+                requires = config.get("requires_env", [])
+
+                if isinstance(requires, list) and requires:
+                    if not all(self.get_env(key) for key in requires):
+                        continue
+
+                detection_priority = config.get(
+                    "detection_priority",
+                    999,
+                )
+
+                if detection_priority is None:
+                    continue
+
+                providers.append(
+                    (detection_priority, name)
+                )
+
+            providers.sort(key=lambda item: item[0])
+
+            return [name for _, name in providers]
 
     def get_memory_settings(
         self,

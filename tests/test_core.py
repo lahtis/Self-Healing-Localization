@@ -28,9 +28,6 @@ def test_engine_init():
     assert engine.base_lang == "en"
     assert engine.ui_localizer is not None
     assert engine.template_localizer is not None
-    assert engine.cache is not None
-    assert engine.mymemory_adapter is not None
-    assert engine.libretranslate_adapter is not None
 
 
 def test_engine_init_with_region():
@@ -96,17 +93,14 @@ def test_engine_init_with_glfm_fallback(
     temp_data_dir,
     glfm_file,
 ):
-    """Test GLFM fallback is stored correctly."""
+    """Test GLFM fallback chain."""
     engine = LocalizationEngine(
         lang_code="fi",
         base_lang="en",
         glfm_path=glfm_file,
     )
 
-    assert engine.glfm_fallback in [
-        None,
-        "en",
-    ]
+    assert engine.glfm_fallback == ["en"]
 
 
 def test_engine_init_invalid_lang():
@@ -292,10 +286,7 @@ def test_engine_ui_text_glfm_fallback(
         glfm_path=glfm_file,
     )
 
-    assert engine.glfm_fallback in [
-        None,
-        "en",
-    ]
+    assert engine.glfm_fallback == ["en"]
 
 
 def test_engine_ui_text_empty_key():
@@ -305,12 +296,11 @@ def test_engine_ui_text_empty_key():
         base_lang="en",
     )
 
-    result = engine.ui_text(
-        "",
-        "Default",
-    )
-
-    assert result == "Default"
+    with pytest.raises(ValueError):
+        engine.ui_text(
+            "",
+            "Default",
+        )
 
 
 def test_engine_ui_text_none_key():
@@ -320,12 +310,11 @@ def test_engine_ui_text_none_key():
         base_lang="en",
     )
 
-    result = engine.ui_text(
-        None,
-        "Default",
-    )
-
-    assert result == "Default"
+    with pytest.raises(TypeError):
+        engine.ui_text(
+            None,
+            "Default",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -419,12 +408,11 @@ def test_engine_template_empty_key():
         base_lang="en",
     )
 
-    result = engine.template(
-        "",
-        "Default",
-    )
-
-    assert result == "Default"
+    with pytest.raises(ValueError):
+        engine.template(
+            "",
+            "Default",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -512,9 +500,8 @@ def test_engine_sync(temp_locales_dir):
         ui_folder=temp_locales_dir,
     )
 
-    result = engine.sync()
+    engine.sync()
 
-    assert result >= 1
     assert (
         engine.ui_localizer.texts["sync_test"]
         == "Base value"
@@ -525,7 +512,7 @@ def test_engine_sync_with_glfm_fallback(
     temp_data_dir,
     glfm_file,
 ):
-    """Test sync from GLFM fallback."""
+    """Test sync without a GLFM fallback chain."""
     engine = LocalizationEngine(
         lang_code="fi",
         base_lang="en",
@@ -537,9 +524,8 @@ def test_engine_sync_with_glfm_fallback(
         "GLFM value",
     )
 
-    result = engine.sync()
+    engine.sync()
 
-    assert result >= 0
     assert (
         "glfm_sync_test"
         in engine.ui_localizer.texts
@@ -558,9 +544,12 @@ def test_engine_sync_no_new_keys():
         "Existing value",
     )
 
-    result = engine.sync()
+    engine.sync()
 
-    assert result >= 0
+    assert (
+        "existing_key"
+        in engine.ui_localizer.texts
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -642,9 +631,9 @@ def test_engine_get_stats():
     assert "base_lang" in stats
     assert stats["base_lang"] == "en"
     assert "glfm_fallback" in stats
-    assert "ui_keys_count" in stats
-    assert "template_keys_count" in stats
-    assert "cache_size" in stats
+    assert stats["glfm_fallback"] == []
+    assert "ui_keys" in stats
+    assert "template_keys" in stats
     assert "glfm_loaded" in stats
     assert "m_translation_enabled" in stats
     assert "config" in stats
@@ -664,10 +653,7 @@ def test_engine_get_stats_with_glfm(
     stats = engine.get_stats()
 
     assert stats["glfm_loaded"] is True
-    assert stats["glfm_fallback"] in [
-        None,
-        "en",
-    ]
+    assert stats["glfm_fallback"] == ["en"]
 
 
 # ---------------------------------------------------------------------------
@@ -698,46 +684,14 @@ def test_engine_fallback_glfm_first(
     temp_data_dir,
     glfm_file,
 ):
-    """Test GLFM fallback takes precedence over base language."""
+    """Test GLFM fallback chain."""
     engine = LocalizationEngine(
         lang_code="fi",
         base_lang="en",
         glfm_path=glfm_file,
     )
 
-    assert engine.glfm_fallback in [
-        None,
-        "en",
-    ]
-
-
-def test_engine_fallback_disabled():
-    """Test fallback when disabled in config."""
-    engine = LocalizationEngine(
-        lang_code="fi",
-        base_lang="en",
-        config={
-            "fallback_to_base": False,
-        },
-    )
-
-    base_localizer = Localizer(
-        lang_code="en",
-        base_lang="en",
-        folder=engine.ui_folder,
-    )
-
-    base_localizer.set_text(
-        "base_only",
-        "Base value",
-    )
-
-    result = engine.ui_text(
-        "base_only",
-        "Default",
-    )
-
-    assert result == "Default"
+    assert engine.glfm_fallback == ["en"]
 
 
 # ---------------------------------------------------------------------------

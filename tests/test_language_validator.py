@@ -326,6 +326,100 @@ def test_validator_normalizes_base_language(temp_data_dir, glfm_file):
     assert validator.is_valid("zh-Hant-TW") is True
     assert validator.get_name("zh-Hant-TW") == "Chinese"
 
+# ---------------------------------------------------------------------------
+# GLFM language identifier tests
+# ---------------------------------------------------------------------------
+
+def test_validator_find_language_by_iso639_3():
+    """Test finding a language by ISO 639-3 code using real GLFM data."""
+    validator = LanguageValidator()
+
+    info = validator.get_language_info("fin")
+
+    assert info is not None
+    assert info["iso639_3"] == "fin"
+    assert info["iso639_1"] == "fi"
+
+
+def test_validator_find_language_by_name():
+    """Test finding a language by its GLFM name using real GLFM data."""
+    validator = LanguageValidator()
+
+    info = validator.get_language_info("Finnish")
+
+    assert info is not None
+    assert info["iso639_3"] == "fin"
+    assert info["name"] == "Finnish"
+
+
+def test_validator_find_language_by_name_case_insensitive():
+    """Test finding a language by name regardless of case."""
+    validator = LanguageValidator()
+
+    info = validator.get_language_info("FINNISH")
+
+    assert info is not None
+    assert info["iso639_3"] == "fin"
+
+
+def test_validator_find_language_by_official_name():
+    """Test finding a language by GLFM official name."""
+    validator = LanguageValidator()
+
+    info = validator.get_language_info("Finnish")
+
+    assert info is not None
+    assert info["iso639_3"] == "fin"
+
+
+def test_validator_find_language_by_glfm_id():
+    """Test finding a language directly by GLFM language ID."""
+    validator = LanguageValidator()
+
+    info = validator.get_language_info("fin")
+
+    assert info is not None
+    assert info["iso639_3"] == "fin"
+
+
+def test_validator_language_identifiers_resolve_to_same_language():
+    """Test that different Finnish identifiers resolve to the same GLFM entry."""
+    validator = LanguageValidator()
+
+    iso1 = validator.get_language_info("fi")
+    iso3 = validator.get_language_info("fin")
+    name = validator.get_language_info("Finnish")
+
+    assert iso1 is not None
+    assert iso3 is not None
+    assert name is not None
+
+    assert iso1["iso639_3"] == "fin"
+    assert iso3["iso639_3"] == "fin"
+    assert name["iso639_3"] == "fin"
+
+
+def test_validator_language_identifier_bcp47():
+    """Test resolving a language from its GLFM BCP-47 tag."""
+    validator = LanguageValidator()
+
+    info = validator.get_language_info("fi-Latn-FI")
+
+    assert info is not None
+    assert info["iso639_3"] == "fin"
+    assert info["bcp47"] == "fi-Latn-FI"
+
+
+def test_validator_language_identifier_case_and_format():
+    """Test case and separator variations of language identifiers."""
+    validator = LanguageValidator()
+
+    assert validator.get_language_info("FI") is not None
+    assert validator.get_language_info("Fin") is not None
+    assert validator.get_language_info("FIN") is not None
+    assert validator.get_language_info("fi-Latn-FI") is not None
+    assert validator.get_language_info("fi_Latn_FI") is not None
+
 
 # ---------------------------------------------------------------------------
 # Integration tests

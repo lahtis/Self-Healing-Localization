@@ -1,5 +1,5 @@
 """
-File: /ui/provider_settings.py
+File: /shl/config/provider_settings.py
 Author: Tuomas Lähteenmäki
 License: MIT
 Description:
@@ -119,6 +119,18 @@ PROVIDER_CAPABILITIES = {
         "document_translation": None,
         "website_translation": None,
         "batch_translation": None,
+    },
+
+    "DetectLanguage": {
+        "html": False,
+        "glossary": False,
+        "formality": False,
+        "contextual_suggestions": False,
+        "honorific": False,
+        "language_detection": True,
+        "document_translation": False,
+        "website_translation": False,
+        "batch_translation": False,
     },
 
     "Local": {},
