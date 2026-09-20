@@ -46,3 +46,4 @@ _version.py
 Digital Guestbook.py
 data.db
 config.conf
+.aider*
