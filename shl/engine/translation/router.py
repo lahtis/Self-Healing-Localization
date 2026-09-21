@@ -53,6 +53,9 @@ from shl.utils.env_loader import get_env_value
 from shl.language_parser import LanguageParser
 
 
+logger = logging.getLogger(__name__)
+
+
 # ---------------------------------------------------------------------------
 # POLICY MANAGER INITIALIZATION
 # ---------------------------------------------------------------------------
@@ -60,20 +63,18 @@ from shl.language_parser import LanguageParser
 try:
     _policy = ConfigManager()
     _USE_POLICY = True
-    print(f"[Router] PolicyManager loaded from {_policy.path}")
+    logger.debug("PolicyManager loaded from %s", _policy.path)
 except Exception as e:
     _USE_POLICY = False
     _policy = None
-    print(f"[Router] PolicyManager failed to load: {e}")
+    logger.warning("PolicyManager failed to load: %s", e)
 
 _PROVIDER_CACHE = load_cache()
 
-logger = logging.getLogger(__name__)
-
-print(
-    "[Router] cache_persist =",
+logger.debug(
+    "cache_persist = %s (%s)",
     get_config_value("cache.cache_persist"),
-    type(get_config_value("cache.cache_persist")),
+    type(get_config_value("cache.cache_persist")).__name__,
 )
 
 _translation_cache = TranslationCache(
@@ -283,8 +284,14 @@ def get_provider_priority(
     # --- Policy-manager mode ---
     if _USE_POLICY and _policy is not None:
         available = _policy.get_available_providers()
-        if available:
-            return [name.lower() for name in available]
+        # Jos policy on käytössä, ÄLÄ IKINÄ pudota zero-budget-polkuun.
+        # Palautetaan se mitä policy sanoo – vaikka tyhjä lista.
+        if not available:
+            logger.warning(
+                "Policy is enabled but no providers are available. "
+                "Check enabled flags and requires_env in policy config."
+            )
+        return [name.lower() for name in (available or [])]
 
     # --- Zero-budget fast path ---
     if not _has_any_paid_key():
@@ -618,10 +625,7 @@ def translate_text_with_metadata(
         request=request,
     )
 
-    logger.info(
-        "Router provider order: %s",
-        order,
-    )
+    logger.debug("Router provider order: %s", order)
 
     unsupported_services = set()
 
@@ -648,7 +652,7 @@ def translate_text_with_metadata(
                 deepl_source_lang,
                 deepl_target_lang,
             ):
-                logger.info(
+                logger.debug(
                     "Skipping DeepL for unavailable or blacklisted language "
                     "pair '%s' -> '%s'.",
                     deepl_source_lang,
@@ -885,7 +889,7 @@ def translate_text_with_metadata(
                 break
 
             except TranslationError as error:
-                logger.warning(
+                logger.debug(
                     "Provider '%s' failed for '%s' -> '%s' "
                     "(attempt %d/%d): %s: %s",
                     service,
@@ -900,7 +904,7 @@ def translate_text_with_metadata(
                 backoff = retry_delay * (attempt + 1)
 
                 if time.time() + backoff > service_deadline:
-                    logger.warning(
+                    logger.debug(
                         "Provider '%s' service deadline reached "
                         "after attempt %d/%d.",
                         service,
@@ -921,7 +925,7 @@ def translate_text_with_metadata(
 
             except Exception as error:
                 logger.exception(
-                    "ROUTER DEBUG: unexpected exception from provider '%s': %s",
+                    "Unexpected exception from provider '%s': %s",
                     service,
                     error,
                 )
@@ -996,8 +1000,8 @@ def translate_text(
         return result.translated_text
 
     except LanguageNotSupportedError:
-        logger.warning(
-            "DEBUG: LanguageNotSupportedError caught in router, "
+        logger.debug(
+            "LanguageNotSupportedError caught in router, "
             "raise_on_language_not_supported=%s",
             raise_on_language_not_supported,
         )
@@ -1006,7 +1010,7 @@ def translate_text(
             raise
 
     except ServiceUnavailableError as error:
-        logger.warning(
+        logger.debug(
             "Translation failed for '%s...' (%s -> %s): %s",
             text[:50],
             source_lang,

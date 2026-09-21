@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/memory/private_mymemory.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.12
 License: MIT
 Description:
     MyMemory.dev memory backend for SHL.
@@ -39,6 +39,10 @@ class MyMemoryValidationError(MyMemoryError):
 
 class MyMemoryHTTPError(MyMemoryError):
     """Raised for unexpected MyMemory.dev HTTP errors."""
+
+
+class MyMemoryAlreadyExistsError(MyMemoryError):
+    """Raised when a memory already exists in MyMemory.dev."""
 
 
 class PrivateMyMemoryBackend:
@@ -289,6 +293,21 @@ class PrivateMyMemoryBackend:
 
             raise MyMemoryValidationError(
                 f"MyMemory.dev rejected the request: {data}"
+            )
+
+        if response.status_code == 409:
+            try:
+                data = response.json()
+            except ValueError:
+                data = {}
+
+            error_message = data.get(
+                "error",
+                "Memory already exists.",
+            )
+
+            raise MyMemoryAlreadyExistsError(
+                f"MyMemory.dev memory already exists: {error_message}"
             )
 
         try:

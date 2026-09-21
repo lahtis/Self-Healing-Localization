@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/memory/memory_manager.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.12
 License: MIT
 Description:
     Provider-independent translation memory management for SHL.
@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 
 from shl.config.policy_manager import ConfigManager
 from .private_mymemory import (
+    MyMemoryAlreadyExistsError,
     MyMemoryError,
     PrivateMyMemoryBackend,
 )
@@ -133,6 +134,16 @@ class MemoryManager:
                 memory_type="note",
             )
 
+        except MyMemoryAlreadyExistsError:
+            # Käännös on jo tallennettu aiemmin – ei varoitusta.
+            # Tämä on normaali tilanne, kun sama teksti käännetään
+            # uudelleen (esim. cachen tyhjennyksen jälkeen).
+            logger.debug(
+                "Translation already exists in MyMemory.dev, skipping"
+            )
+
+            return None
+
         except MyMemoryError as error:
             error_text = str(error)
 
@@ -152,4 +163,3 @@ class MemoryManager:
             )
 
             return None
-

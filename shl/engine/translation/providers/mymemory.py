@@ -1,7 +1,7 @@
 """
 File: mymemory.py — module for MyMemory translation adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.12
 License: MIT
 Description: Robust translation provider adapter for the MyMemory API.
 Handles optional email-based quota enhancement, optional private
@@ -227,7 +227,7 @@ class MyMemoryAdapter(TranslationProvider):
                 method="GET",
             )
 
-            logger.warning(
+            logger.debug(
                 "MYMEMORY DEBUG: calling API langpair=%s",
                 payload["langpair"],
             )
@@ -240,7 +240,7 @@ class MyMemoryAdapter(TranslationProvider):
                     response.read().decode("utf-8")
                 )
 
-            logger.warning(
+            logger.debug(
                 "MYMEMORY DEBUG response: %r",
                 response_data,
             )
@@ -375,7 +375,7 @@ class MyMemoryAdapter(TranslationProvider):
             return translated
 
         except HTTPError as error:
-            logger.warning(
+            logger.debug(
                 "MYMEMORY DEBUG: HTTP ERROR: %s",
                 error.code,
             )
@@ -404,7 +404,7 @@ class MyMemoryAdapter(TranslationProvider):
             ) from error
 
         except URLError as error:
-            logger.warning(
+            logger.debug(
                 "MYMEMORY DEBUG: URLError: %r",
                 error,
             )
@@ -421,9 +421,9 @@ class MyMemoryAdapter(TranslationProvider):
             socket.timeout,
             TimeoutError,
         ) as error:
-            logger.warning(
+            logger.debug(
                 "MYMEMORY DEBUG: TIMEOUT: %r",
-                 error,
+                error,
             )
 
             normalized = self.error_parser.parse(

@@ -2,11 +2,12 @@
 file: /shl/config/policy_manager.py - SHL policy manager
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.10
+Version: 0.2.12
 Description: Policy-konfiguraatio projektin juuresta (CWD).
 """
 
 import json
+import logging
 import os
 import threading
 from copy import deepcopy
@@ -22,6 +23,8 @@ from shl.config.provider_capabilities import (
 __all__ = ["ConfigManager"]
 
 DEFAULT_POLICY_PATH = Path.cwd() / "shl-policy-config.json"
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigManager:
@@ -51,9 +54,9 @@ class ConfigManager:
         self._callbacks: List[Callable[[Dict[str, Any]], None]] = []
 
         # Debug: show where the policy is loaded from.
-        print(f"[PolicyManager] Config path: {self.path}")
-        print(f"[PolicyManager] CWD: {Path.cwd()}")
-        print(f"[PolicyManager] File exists: {self.path.exists()}")
+        logger.debug("Config path: %s", self.path)
+        logger.debug("CWD: %s", Path.cwd())
+        logger.debug("File exists: %s", self.path.exists())
 
         if self.env_path:
             self._load_env()
@@ -94,11 +97,11 @@ class ConfigManager:
                     os.environ[key] = value
 
             self._last_env_mtime = self.env_path.stat().st_mtime
-            print(f"[Config] Loaded .env from {self.env_path}")
+            logger.debug("Loaded .env from %s", self.env_path)
             return True
 
         except Exception as exc:
-            print(f"[Config] Failed to load .env: {exc}")
+            logger.warning("Failed to load .env: %s", exc)
             return False
 
     def _check_env_reload(self) -> bool:
@@ -114,7 +117,7 @@ class ConfigManager:
             return self._load_env()
 
         except OSError as exc:
-            print(f"[Config] .env check failed: {exc}")
+            logger.warning(".env check failed: %s", exc)
             return False
 
     def get_env(
@@ -153,15 +156,15 @@ class ConfigManager:
                 try:
                     callback(callback_config)
                 except Exception as exc:
-                    print(f"[Config] Callback error: {exc}")
+                    logger.warning("Callback error: %s", exc)
 
-            print(f"[Config] Reloaded from {self.path}")
+            logger.debug("Reloaded from %s", self.path)
             return True
 
         except Exception as exc:
-            print(
-                "[Config] Reload failed → keeping previous config. "
-                f"Error: {exc}"
+            logger.warning(
+                "Reload failed -> keeping previous config. Error: %s",
+                exc,
             )
             return False
 
@@ -296,7 +299,7 @@ class ConfigManager:
                 ensure_ascii=False,
             )
 
-        print(f"[Config] Created default config at {self.path}")
+        logger.debug("Created default config at %s", self.path)
 
     def get(self) -> Dict[str, Any]:
         with self._lock:
@@ -456,9 +459,9 @@ class ConfigManager:
             )
             self._watcher.start()
 
-        print(
-            f"[Config] Watcher started "
-            f"(interval: {self.check_interval}s)"
+        logger.debug(
+            "Watcher started (interval: %ss)",
+            self.check_interval,
         )
 
     def _watch(self) -> None:
@@ -467,7 +470,7 @@ class ConfigManager:
                 self._check_env_reload()
                 self.reload()
             except Exception as exc:
-                print(f"[Config] Watcher error: {exc}")
+                logger.warning("Watcher error: %s", exc)
 
             self._stop_event.wait(timeout=self.check_interval)
 
@@ -480,9 +483,9 @@ class ConfigManager:
             watcher.join(timeout=2.0)
 
             if watcher.is_alive():
-                print("[Config] Watcher thread did not stop in time.")
+                logger.warning("Watcher thread did not stop in time.")
             else:
-                print("[Config] Watcher stopped.")
+                logger.debug("Watcher stopped.")
 
         self._watcher = None
 
@@ -595,7 +598,7 @@ class ConfigManager:
                         ensure_ascii=False,
                     )
                     f.write("\n")
-    
+
                 temp_path.replace(self.path)
 
                 self._config = config
@@ -604,8 +607,8 @@ class ConfigManager:
                 return True
 
             except Exception as exc:
-                print(
-                    f"[Config] Failed to save configuration: {exc}"
+                logger.warning(
+                    "Failed to save configuration: %s", exc
                 )
 
                 try:
