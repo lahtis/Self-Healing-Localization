@@ -5,7 +5,7 @@
 * **License:** MIT  
 * **Version:** 0.2.12
 * **Type:**    Library
-* **Status:**  Dev
+* **Status:**  stable, test, dev
 
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
@@ -61,7 +61,7 @@ pip install self-healing-localization
 
 ### Latest Development (TestPyPI)
 ```bash
-pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.9
+pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.12
 ```
 
 ## Environment Variables (.env)
