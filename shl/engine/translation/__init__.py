@@ -1,7 +1,7 @@
 """
 File: __init__.py — translation module initialization for SHL.
 Author: Tuomas Lähteenmäki
-Version: 0.2.8
+Version: 0.2.13
 License: MIT
 Description: Central export manifest for the SHL translation subsystem.
              Exposes routing interfaces, provider adapters, caching mechanics,
@@ -16,7 +16,6 @@ from .router import (
     translate_text_with_metadata,
     get_best_provider,
     get_provider_priority,
-    get_libretranslate_mirror_stats,
     clear_unavailable_cache,
     get_unavailable_cache_stats,
 )
@@ -39,7 +38,10 @@ from .exceptions import (
 
 # Provider Adapters and Language Utilities
 from .providers.mymemory import MyMemoryAdapter
-from .providers.libretranslate import (LibreTranslateAdapter, get_supported_languages)
+from .providers.libretranslate import (
+    LibreTranslateAdapter,
+    get_supported_languages,
+)
 from .providers.deepl import DeepLAdapter
 from .providers.googlev2 import GoogleV2Adapter
 from .providers.papago import PapagoAdapter
@@ -49,24 +51,23 @@ from .providers.local_translator import LocalTranslatorAdapter
 
 __all__ = [
     "__version__",
-    
+
     # Core Routing Functions
     "translate_text",
     "translate_text_with_metadata",
     "get_best_provider",
     "get_provider_priority",
     "get_supported_languages",
-    "get_libretranslate_mirror_stats",
     "clear_unavailable_cache",
     "get_unavailable_cache_stats",
-    
+
     # Cache Management
     "TranslationCache",
-    
+
     # Metadata and Data Structures
     "TranslationRequest",
     "TranslationResult",
-    
+
     # Provider Adapters
     "MyMemoryAdapter",
     "LibreTranslateAdapter",
@@ -76,7 +77,7 @@ __all__ = [
     "MicrosoftTranslatorAdapter",
     "YandexAdapter",
     "LocalTranslatorAdapter",
-        
+
     # Exception Taxonomy
     "TranslationError",
     "ServiceUnavailableError",

@@ -1,13 +1,13 @@
 {
     "providers": {
         "MyMemory": {
-            "enabled": true,
+            "enabled": false,
             "timeout": 10,
             "requires_env": [
                 "MYMEMORY_EMAIL"
             ],
-            "priority": 2,
-            "detection_priority": 1,
+            "priority": 3,
+            "detection_priority": 3,
             "retry": 2,
             "allow": [],
             "deny": [
@@ -19,8 +19,8 @@
             "enabled": false,
             "timeout": 8,
             "requires_env": [],
-            "priority": 3,
-            "detection_priority": 2,
+            "priority": 4,
+            "detection_priority": 4,
             "retry": 2,
             "allow": [
                 "html"
@@ -29,13 +29,23 @@
                 "honorific"
             ]
         },
-        "DeepL": {
+        "LibreTranslateCommunity": {
             "enabled": true,
+            "timeout": 15,
+            "requires_env": [],
+            "priority": 1,
+            "detection_priority": 2,
+            "retry": 2,
+            "allow": [],
+            "deny": []
+        },
+        "DeepL": {
+            "enabled": false,
             "timeout": 5,
             "requires_env": [
                 "DEEPL_API_KEY"
             ],
-            "priority": 1,
+            "priority": 2,
             "detection_priority": null,
             "retry": 2,
             "allow": [
@@ -51,8 +61,8 @@
             "requires_env": [
                 "GOOGLE_API_KEY"
             ],
-            "priority": 4,
-            "detection_priority": 3,
+            "priority": 5,
+            "detection_priority": 5,
             "retry": 2,
             "allow": [
                 "html"
@@ -67,8 +77,8 @@
             "requires_env": [
                 "MICROSOFT_TRANSLATOR_KEY"
             ],
-            "priority": 5,
-            "detection_priority": 4,
+            "priority": 6,
+            "detection_priority": 6,
             "retry": 2,
             "allow": [
                 "html"
@@ -84,8 +94,8 @@
                 "NAVER_CLIENT_ID",
                 "NAVER_CLIENT_SECRET"
             ],
-            "priority": 6,
-            "detection_priority": 5,
+            "priority": 7,
+            "detection_priority": 7,
             "retry": 2,
             "allow": [],
             "deny": [
@@ -98,8 +108,8 @@
             "requires_env": [
                 "YANDEX_API_KEY"
             ],
-            "priority": 7,
-            "detection_priority": 6,
+            "priority": 8,
+            "detection_priority": 8,
             "retry": 2,
             "allow": [
                 "html"
@@ -114,7 +124,7 @@
             "requires_env": [
                 "LOCAL_API_KEY"
             ],
-            "priority": 8,
+            "priority": 9,
             "detection_priority": null,
             "retry": 2,
             "allow": [],
@@ -128,11 +138,11 @@
             "requires_env": [
                 "DETECTLANGUAGE_API_KEY"
             ],
-            "priority": 9,
-            "detection_priority": 7,
+            "detection_priority": 1,
             "retry": 2,
             "allow": [],
-            "deny": []
+            "deny": [],
+            "priority": null
         }
     },
     "memory": {
@@ -140,7 +150,7 @@
             "enabled": true,
             "requires_env": "MYMEMORY_API_KEY",
             "space_name": "SHL Private Memory",
-            "space_uuid": "",
+            "space_uuid": "8BCMkJ6qZe",
             "timeout": "30"
         },
         "public_mymemory": {

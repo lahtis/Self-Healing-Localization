@@ -1,12 +1,12 @@
 """
 File: libretranslater.py — LibreTranslate translation adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.13
 License: MIT
 Description: Robust translation provider adapter for the LibreTranslate API.
              Handles translation requests, supported-language discovery,
              language-pair registry validation, configurable API endpoints,
-             mirror support, API authentication, error classification,
+             API authentication, error classification,
              and security checks for suspicious translation results.
 """
 
@@ -31,6 +31,7 @@ from ..exceptions import (
     TranslationError,
 )
 from ..metadata import TranslationRequest
+from ...errors import codes
 from ...errors.parser import ErrorParser
 from ...errors.providers import LIBRETRANSLATE
 from ..providers.base import TranslationProvider
@@ -41,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 LIBRETRANSLATE_TIMEOUT = 15
 LIBRETRANSLATE_LANGUAGES_TIMEOUT = 10
-LIBRETRANSLATE_DEFAULT_URL = "https://libretranslate.com"
+LIBRETRANSLATE_DEFAULT_URL = "http://192.168.1.103:5000/"
 LIBRETRANSLATE_DEFAULT_API_KEY = ""
 
 
@@ -55,37 +56,37 @@ def _raise_normalized_error(error) -> None:
         f"LibreTranslate request failed: {error.code}"
     )
 
-    if error.code == "RATE_LIMIT_EXCEEDED":
+    if error.code == codes.RATE_LIMIT_EXCEEDED:
         raise RateLimitExceededError(message)
 
-    if error.code == "QUOTA_EXCEEDED":
+    if error.code == codes.QUOTA_EXCEEDED:
         raise RateLimitExceededError(message)
 
     if error.code in {
-        "TIMEOUT",
-        "SERVICE_UNAVAILABLE",
+        codes.TIMEOUT,
+        codes.SERVICE_UNAVAILABLE,
     }:
         raise ServiceUnavailableError(message)
 
     if error.code in {
-        "AUTH_FAILED",
-        "AUTH_EXPIRED",
-        "AUTH_BLOCKED",
-        "ACCESS_DENIED",
+        codes.AUTH_FAILED,
+        codes.AUTH_EXPIRED,
+        codes.AUTH_BLOCKED,
+        codes.ACCESS_DENIED,
     }:
         raise ProviderAccessError(message)
 
     if error.code in {
-        "LANG_UNSUPPORTED",
-        "LANG_PAIR_UNSUPPORTED",
+        codes.LANG_UNSUPPORTED,
+        codes.LANG_PAIR_UNSUPPORTED,
     }:
         raise LanguageNotSupportedError(message)
 
     if error.code in {
-        "INVALID_REQUEST",
-        "TEXT_TOO_LONG",
-        "REQUEST_TOO_LONG",
-        "METHOD_NOT_ALLOWED",
+        codes.INVALID_REQUEST,
+        codes.TEXT_TOO_LONG,
+        codes.REQUEST_TOO_LONG,
+        codes.METHOD_NOT_ALLOWED,
     }:
         raise InvalidRequestError(message)
 
@@ -231,8 +232,6 @@ class LibreTranslateAdapter(TranslationProvider):
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         cache_ttl: float = 86400.0,
-        mirror_manager: Optional[Any] = None,
-        mirrors: Optional[List[Dict[str, Any]]] = None,
     ):
         self.base_url = (
             base_url
@@ -251,17 +250,6 @@ class LibreTranslateAdapter(TranslationProvider):
         self.registry = LibreTranslateRegistry(
             cache_ttl=cache_ttl
         )
-
-        self.mirror_manager = mirror_manager
-
-        if self.mirror_manager is None and mirrors is not None:
-            from .libretranslate_mirrors import (
-                LibreTranslateMirrorManager,
-            )
-
-            self.mirror_manager = LibreTranslateMirrorManager(
-                mirrors=mirrors
-            )
 
         self.error_parser = ErrorParser(
             provider=self.name,
@@ -340,26 +328,6 @@ class LibreTranslateAdapter(TranslationProvider):
 
         return payload
 
-    def _get_translation_base_url(self) -> str:
-        """
-        Resolve the URL used for translation.
-
-        If a mirror manager is available, use its best mirror.
-        Otherwise use the configured base URL.
-        """
-
-        if self.mirror_manager is not None:
-            mirror = self.mirror_manager.get_best_mirror()
-
-            if mirror is not None and getattr(
-                mirror,
-                "url",
-                None,
-            ):
-                return mirror.url.rstrip("/")
-
-        return self.base_url
-
     def _call_api(
         self,
         payload: Dict[str, Any],
@@ -368,7 +336,7 @@ class LibreTranslateAdapter(TranslationProvider):
 
         source = payload.get("source", "")
         target = payload.get("target", "")
-        base_url = self._get_translation_base_url()
+        base_url = self.base_url
 
         try:
             url = f"{base_url}/translate"

@@ -31,7 +31,6 @@ from shl.engine.translation import (
     translate_text,
     get_best_provider,
     get_supported_languages,
-    get_libretranslate_mirror_stats,
     # Välimuisti
     TranslationCache,
     # Metadata
@@ -80,7 +79,6 @@ __all__ = [
     # Translation - pääfunktiot
     "translate_text",
     "get_best_provider",
-    "get_libretranslate_mirror_stats",
     # Translation - cache
     "TranslationCache",
     # Translation - metadata

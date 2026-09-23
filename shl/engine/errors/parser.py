@@ -2,7 +2,7 @@
 """
 File: shl/engine/errors/parser.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.13
 License: MIT
 Description:
 Provider-independent error parser for SHL translation services.
@@ -556,9 +556,19 @@ class ErrorParser:
         http_status: Optional[int],
     ) -> NormalizedError:
         """Normalize an exception into an SHL error."""
+
         code = self._exception_to_code(
             exception,
         )
+
+        if (
+            http_status is not None
+            and http_status >= 400
+            and code == UNKNOWN_ERROR
+        ):
+            code = self._from_http_status_code(
+                http_status,
+            )
 
         return NormalizedError(
             code=code,

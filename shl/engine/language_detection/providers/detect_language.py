@@ -1,7 +1,7 @@
 """
 File: detect_language.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.13
 License: MIT
 Description:
     Detect Language API adapter for SHL language detection.
@@ -11,18 +11,10 @@ import json
 import logging
 from typing import Any, Dict, List
 
-from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value
-
-from shl.engine.translation.exceptions import (
-    ServiceUnavailableError,
-    RateLimitExceededError,
-    ProviderAccessError,
-    InvalidRequestError,
-)
 
 from .base import (
     LanguageDetectionProvider,
@@ -90,20 +82,9 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
 
         Returns:
             List of LanguageDetectionResult objects.
-
-        Raises:
-            InvalidRequestError:
-                If the supplied text is invalid.
-            ServiceUnavailableError:
-                If the provider cannot be reached or returns
-                an invalid response.
-            RateLimitExceededError:
-                If the provider rate limit is exceeded.
-            ProviderAccessError:
-                If the API key is rejected.
         """
         if not isinstance(text, str) or not text.strip():
-            raise InvalidRequestError(
+            raise ValueError(
                 "Text must be a non-empty string."
             )
 
@@ -142,71 +123,39 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
         Returns:
             Raw decoded provider response.
         """
-        try:
-            request_data = json.dumps(payload).encode("utf-8")
+        request_data = json.dumps(payload).encode("utf-8")
 
-            logger.debug(
-                "Detect Language request to %s",
-                DETECTLANGUAGE_URL,
+        logger.debug(
+            "Detect Language request to %s",
+            DETECTLANGUAGE_URL,
+        )
+
+        request = Request(
+            DETECTLANGUAGE_URL,
+            data=request_data,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": f"SHL-Client/{SHL_VERSION}",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+
+        with urlopen(
+            request,
+            timeout=DETECTLANGUAGE_TIMEOUT,
+        ) as response:
+            raw_response = response.read().decode("utf-8")
+
+        parsed_response = json.loads(raw_response)
+
+        if not isinstance(parsed_response, list):
+            raise ValueError(
+                "Detect Language API returned an invalid response."
             )
 
-            request = Request(
-                DETECTLANGUAGE_URL,
-                data=request_data,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "User-Agent": f"SHL-Client/{SHL_VERSION}",
-                    "Accept": "application/json",
-                },
-                method="POST",
-            )
-
-            with urlopen(
-                request,
-                timeout=DETECTLANGUAGE_TIMEOUT,
-            ) as response:
-                raw_response = response.read().decode("utf-8")
-
-            parsed_response = json.loads(raw_response)
-
-            if not isinstance(parsed_response, list):
-                raise ServiceUnavailableError(
-                    "Detect Language API returned an invalid response."
-                )
-
-            return parsed_response
-
-        except HTTPError as exc:
-            if exc.code == 429:
-                raise RateLimitExceededError(
-                    "Detect Language API rate limit exceeded."
-                ) from exc
-
-            if exc.code in (401, 403):
-                raise ProviderAccessError(
-                    "Detect Language API access denied."
-                ) from exc
-
-            if 400 <= exc.code < 500:
-                raise InvalidRequestError(
-                    f"Detect Language API rejected the request "
-                    f"(HTTP {exc.code})."
-                ) from exc
-
-            raise ServiceUnavailableError(
-                f"Detect Language API returned HTTP {exc.code}."
-            ) from exc
-
-        except URLError as exc:
-            raise ServiceUnavailableError(
-                f"Detect Language API unavailable: {exc}"
-            ) from exc
-
-        except json.JSONDecodeError as exc:
-            raise ServiceUnavailableError(
-                "Detect Language API returned invalid JSON."
-            ) from exc
+        return parsed_response
 
     def _parse_response(
         self,
@@ -249,7 +198,7 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
             )
 
         if not results:
-            raise ServiceUnavailableError(
+            raise ValueError(
                 "Detect Language API returned no language detections."
             )
 

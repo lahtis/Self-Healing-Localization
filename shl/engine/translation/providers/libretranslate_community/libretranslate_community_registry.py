@@ -1,11 +1,12 @@
 """
-File: providers/deepl_registry.py — Registry for DeepL translation language support.
+File: providers/libretranslate_community_registry.py
+Registry for LibreTranslate Community translation language support.
 Author: Tuomas Lähteenmäki
 Version: 0.2.13
 License: MIT
 Description:
-    Manages DeepL language validation and runtime learning for unsupported
-    language pairs.
+    Manages LibreTranslate Community language validation and runtime
+    learning for unsupported language pairs.
 
     Supported languages are loaded from the shared provider language cache.
     No network requests are performed by this registry.
@@ -30,19 +31,20 @@ logger = logging.getLogger(__name__)
 # PATHS
 # ---------------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[4]
+PROJECT_ROOT = Path(__file__).resolve().parents[5]
 LANGUAGE_CACHE_FILE = PROJECT_ROOT / ".languages_cache.json"
 
 
-class DeepLRegistry:
+class LibreTranslateCommunityRegistry:
     """
-    Handles DeepL language support validation and runtime pair blacklisting.
+    Handles LibreTranslate Community language support validation and
+    runtime pair blacklisting.
 
     Supported languages are loaded from the shared provider language cache.
     The registry never performs network requests.
 
     The runtime unsupported-pair blacklist prevents repeated API calls for
-    language pairs that DeepL has previously rejected.
+    language pairs that LibreTranslate Community has previously rejected.
     """
 
     def __init__(self):
@@ -53,7 +55,10 @@ class DeepLRegistry:
         ] = {}
 
         # Load blacklist TTL from central SHL configuration.
-        configured_ttl = get_ttl("deepl", 86400)
+        configured_ttl = get_ttl(
+            "libretranslate_community",
+            86400,
+        )
 
         try:
             self.cache_ttl = float(configured_ttl)
@@ -64,7 +69,8 @@ class DeepLRegistry:
         self.supported_languages = self._load_supported_languages()
 
         logger.debug(
-            "DeepL registry loaded %d supported languages "
+            "LibreTranslate Community registry loaded "
+            "%d supported languages "
             "(pair blacklist TTL: %.1f seconds)",
             len(self.supported_languages),
             self.cache_ttl,
@@ -72,13 +78,14 @@ class DeepLRegistry:
 
     def _load_supported_languages(self) -> frozenset[str]:
         """
-        Load DeepL supported language codes from the shared provider cache.
+        Load LibreTranslate Community supported language codes from
+        the shared provider language cache.
 
         Expected cache structure:
 
             {
                 "providers": {
-                    "deepl": [
+                    "libretranslate_community": [
                         "en",
                         "fi",
                         "de",
@@ -101,21 +108,22 @@ class DeepLRegistry:
 
         except FileNotFoundError:
             logger.warning(
-                "DeepL language cache not found: %s",
+                "LibreTranslate Community language cache not found: %s",
                 LANGUAGE_CACHE_FILE,
             )
             return frozenset()
 
         except json.JSONDecodeError:
             logger.warning(
-                "DeepL language cache contains invalid JSON: %s",
+                "LibreTranslate Community language cache contains "
+                "invalid JSON: %s",
                 LANGUAGE_CACHE_FILE,
             )
             return frozenset()
 
         except OSError as exc:
             logger.warning(
-                "Unable to read DeepL language cache: %s",
+                "Unable to read LibreTranslate Community language cache: %s",
                 exc,
             )
             return frozenset()
@@ -128,11 +136,15 @@ class DeepLRegistry:
             )
             return frozenset()
 
-        languages = providers.get("deepl", [])
+        languages = providers.get(
+            "libretranslate_community",
+            [],
+        )
 
         if not isinstance(languages, list):
             logger.warning(
-                "Invalid DeepL language cache structure."
+                "Invalid LibreTranslate Community language "
+                "cache structure."
             )
             return frozenset()
 
@@ -148,7 +160,8 @@ class DeepLRegistry:
         target_lang: str,
     ) -> bool:
         """
-        Check whether a DeepL language pair is currently supported.
+        Check whether a LibreTranslate Community language pair is
+        currently supported.
 
         First checks the runtime unsupported-pair blacklist.
         If the pair is not blacklisted, both language codes are checked
@@ -174,7 +187,8 @@ class DeepLRegistry:
 
             if now < expiry:
                 logger.debug(
-                    "DeepL pair %s is currently blacklisted.",
+                    "LibreTranslate Community pair %s is "
+                    "currently blacklisted.",
                     pair,
                 )
                 return False
@@ -194,12 +208,13 @@ class DeepLRegistry:
         target_lang: str,
     ) -> None:
         """
-        Temporarily blacklist an unsupported DeepL language pair.
+        Temporarily blacklist an unsupported LibreTranslate Community
+        language pair.
 
         The blacklist duration is controlled by the central SHL
         configuration under:
 
-            ttl.deepl
+            ttl.libretranslate_community
         """
 
         pair = (
@@ -212,8 +227,8 @@ class DeepLRegistry:
         )
 
         logger.warning(
-            "Blacklisted DeepL language pair %s for %.1f seconds "
-            "due to API error.",
+            "Blacklisted LibreTranslate Community language pair "
+            "%s for %.1f seconds due to API error.",
             pair,
             self.cache_ttl,
         )

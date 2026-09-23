@@ -101,8 +101,23 @@ def test_blacklisted_deepl_pair_skips_adapter() -> None:
         def __init__(self, *args, **kwargs):
             raise AssertionError("blacklisted DeepL pair reached adapter")
 
+    source_provider_lang = router.language_parser.get_provider_code(
+        "en",
+        "deepl",
+    )
+    target_provider_lang = router.language_parser.get_provider_code(
+        "zh-cn",
+        "deepl",
+    )
+
+    assert source_provider_lang is not None
+    assert target_provider_lang is not None
+
     router._deepl_registry.clear_blacklist()
-    router._deepl_registry.mark_pair_unsupported("en", "zh-cn")
+    router._deepl_registry.mark_pair_unsupported(
+        source_provider_lang,
+        target_provider_lang,
+    )
     router.get_provider_priority = lambda **kwargs: ["deepl"]
     router.DeepLAdapter = UnexpectedAdapter
 
@@ -122,6 +137,7 @@ def test_blacklisted_deepl_pair_skips_adapter() -> None:
         router.get_provider_priority = original_priority
         router.DeepLAdapter = original_adapter
         router._deepl_registry.clear_blacklist()
+
 
 def test_translate_with_processor_denies_html() -> None:
     """HTML-denying providers must receive text without HTML markup."""
@@ -221,6 +237,7 @@ def test_translate_with_processor_undefined_policy_with_html_format() -> None:
 
     assert result == "<p>HELLO</p>"
     assert received == ["Hello"]
+
 
 def test_translate_with_processor_placeholder_is_not_configured() -> None:
     received: list[str] = []

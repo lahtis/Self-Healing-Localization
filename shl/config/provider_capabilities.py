@@ -85,6 +85,18 @@ PROVIDER_CAPABILITIES = {
         "batch_translation": True,
     },
 
+    "LibreTranslateCommunity": {
+        "html": True,
+        "glossary": False,
+        "formality": False,
+        "contextual_suggestions": False,
+        "honorific": False,
+        "language_detection": True,
+        "document_translation": True,
+        "website_translation": False,
+        "batch_translation": True,
+    },
+
     "MyMemory": {
         "html": False,
         "glossary": False,
@@ -189,13 +201,25 @@ SHL_WHITELIST = {
     },
 
     "LibreTranslate": {
-        "html": False,
+        "html": True,
+        "glossary": False,
+        "formality": False,
+        "contextual_suggestions": True,
+        "honorific": False,
+        "language_detection": True,
+        "document_translation": True,
+        "website_translation": False,
+        "batch_translation": False,
+    },
+
+    "LibreTranslateCommunity": {
+        "html": True,
         "glossary": False,
         "formality": False,
         "contextual_suggestions": False,
         "honorific": False,
-        "language_detection": False,
-        "document_translation": False,
+        "language_detection": True,
+        "document_translation": True,
         "website_translation": False,
         "batch_translation": False,
     },
@@ -299,6 +323,18 @@ PROVIDER_ALLOW = {
         "batch_translation": False,
     },
 
+    "libretranslateCommunity": {
+        "html": True,
+        "glossary": False,
+        "formality": False,
+        "contextual_suggestions": False,
+        "honorific": False,
+        "language_detection": False,
+        "document_translation": False,
+        "website_translation": False,
+        "batch_translation": False,
+    },
+
     "MyMemory": {
         "html": False,
         "glossary": False,
@@ -388,6 +424,18 @@ PROVIDER_DENY = {
     },
 
     "LibreTranslate": {
+        "html": False,
+        "glossary": False,
+        "formality": False,
+        "contextual_suggestions": False,
+        "honorific": True,
+        "language_detection": False,
+        "document_translation": False,
+        "website_translation": False,
+        "batch_translation": False,
+    },
+
+    "libretranslateCommunity": {
         "html": False,
         "glossary": False,
         "formality": False,

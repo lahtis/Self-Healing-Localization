@@ -1,7 +1,7 @@
 """
 File: shl/engine/errors/providers.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.13
 License: MIT
 Description:
     Provider-specific error response definitions for SHL.
@@ -229,6 +229,26 @@ MICROSOFT = {
     },
 }
 
+DETECTLANGUAGE = {
+    "failure_conditions": [],
+    "code_paths": (),
+    "message_paths": (
+        ("message",),
+        ("error",),
+    ),
+    "error_codes": {
+        400: INVALID_REQUEST,
+        401: AUTH_FAILED,
+        403: ACCESS_DENIED,
+        404: NOT_FOUND,
+        408: TIMEOUT,
+        429: RATE_LIMIT_EXCEEDED,
+        500: SERVICE_UNAVAILABLE,
+        502: SERVICE_UNAVAILABLE,
+        503: SERVICE_UNAVAILABLE,
+        504: SERVICE_UNAVAILABLE,
+    },
+}
 
 YANDEX = {
     "failure_conditions": [
@@ -256,6 +276,7 @@ YANDEX = {
         503: SERVICE_UNAVAILABLE,
     },
 }
+
 LOCAL = {
     "failure_conditions": [
         {

@@ -2,7 +2,7 @@
 File: shl/language_parser.py
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.11
+Version: 0.2.13
 Description:
     Language parser for SHL.
 
@@ -268,6 +268,7 @@ class LanguageParser:
     # Provider language resolution
     # ------------------------------------------------------------------
 
+
     def get_provider_code(
         self,
         language: str,
@@ -296,7 +297,12 @@ class LanguageParser:
         provider_data = None
 
         for key, value in providers.items():
-            if str(key).lower() == provider_key:
+            normalized_key = str(key).lower()
+
+            if (
+                normalized_key == provider_key
+                or normalized_key.startswith(provider_key + "_")
+            ):
                 provider_data = value
                 break
 
@@ -317,7 +323,9 @@ class LanguageParser:
         return self._find_best_provider_match(
             parsed,
             supported_codes,
+            provider_data if isinstance(provider_data, dict) else None,
         )
+
 
     # ------------------------------------------------------------------
     # Provider matching
@@ -327,6 +335,7 @@ class LanguageParser:
         self,
         language: ParsedLanguage,
         supported_codes: list[Any],
+        provider_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """
         Find the best provider-native code for a parsed language.
@@ -360,7 +369,6 @@ class LanguageParser:
             if exact is not None:
                 return exact
 
-        
         # --------------------------------------------------------------
         # 2. Match explicit script/region variant
         # --------------------------------------------------------------
@@ -379,10 +387,8 @@ class LanguageParser:
                             == language.region.casefold()
                         ):
                             return code
-    
+
             # Then prefer a provider code matching the explicit region.
-            # This allows providers such as Papago to represent script
-            # variants through regional language codes.
             if language.region:
                 for code in codes:
                     code_parts = code.split("-")
@@ -420,14 +426,23 @@ class LanguageParser:
                 return exact
 
         # --------------------------------------------------------------
-        # 4. Match ISO 639-1 if GLFM provides it
+        # 4. Match ISO 639-1 / ISO 639-3 through GLFM identity
         # --------------------------------------------------------------
 
         iso639_1 = language.glfm_info.get("iso639_1")
+        iso639_3 = language.iso639_3
+
+        iso_candidates = []
 
         if isinstance(iso639_1, str) and iso639_1:
+            iso_candidates.append(iso639_1)
+
+        if isinstance(iso639_3, str) and iso639_3:
+            iso_candidates.append(iso639_3)
+
+        for candidate in iso_candidates:
             exact = self._find_case_insensitive(
-                iso639_1,
+                candidate,
                 codes,
             )
 
@@ -435,19 +450,7 @@ class LanguageParser:
                 return exact
 
         # --------------------------------------------------------------
-        # 5. Match ISO 639-3
-        # --------------------------------------------------------------
-
-        exact = self._find_case_insensitive(
-            language.iso639_3,
-            codes,
-        )
-
-        if exact is not None:
-            return exact
-
-        # --------------------------------------------------------------
-        # 6. Match BCP 47 base language
+        # 5. Match BCP 47 base language
         # --------------------------------------------------------------
 
         if language.bcp47:
@@ -462,7 +465,7 @@ class LanguageParser:
                 return exact
 
         # --------------------------------------------------------------
-        # 7. Match provider code using BCP 47 language prefix
+        # 6. Match provider code using BCP 47 language prefix
         # --------------------------------------------------------------
 
         if language.bcp47:
@@ -471,6 +474,20 @@ class LanguageParser:
             for code in codes:
                 if code.split("-", 1)[0].casefold() == base:
                     return code
+
+        # --------------------------------------------------------------
+        # 7. Match provider language by GLFM language name
+        # --------------------------------------------------------------
+
+        if provider_data and language.name:
+            glfm_name = language.name.casefold().strip()
+
+            for code, provider_name in provider_data.items():
+                if (
+                    isinstance(provider_name, str)
+                    and provider_name.casefold().strip() == glfm_name
+                ):
+                    return str(code)
 
         logger.debug(
             "No provider language match for '%s' (%s).",

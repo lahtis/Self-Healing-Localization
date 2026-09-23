@@ -3,7 +3,7 @@
 
 * **Author:**  Tuomas Lähteenmäki  
 * **License:** MIT  
-* **Version:** 0.2.12
+* **Version:** 0.2.13
 * **Type:**    Library
 * **Status:**  stable, test, dev
 
@@ -22,6 +22,7 @@
 - GitHub Mirror: https://github.com/lahtis/Self-Healing-Localization
 - Documentation: https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/docs
 - Demonstration: https://youtu.be/t5veRZtt3dU?si=ADD4yS5C2VwNKx9f
+
 ---
 
 ## Overview
@@ -34,18 +35,31 @@ SHL follows a self‑healing principle: when the application requests a missing 
 * Automatic generation of new language files
 * BCP‑47 language code support (e.g., fi‑FI, pt‑BR, zh‑TW)
 * GLFM‑based language validation
-* Machine translation support: Microsoft Translator, DeepL, Google Translate, MyMemory, LibreTranslate, Papago Translate, Yandex Translate and Localhost.
+* Machine translation support: Microsoft Translator, DeepL, Google Translate, MyMemory, LibreTranslate, LibreTranslate Community, Papago Translate, Yandex Translate and Localhost.
 * Self‑healing localization pipeline
 * Unified high‑level localization engine
 * Offline and online support
 * Zero‑dependency core
 * Free and open‑source - SHL is fully free; paid providers may require separate subscriptions.
 
+### Translation Providers Status
+The following translation providers have been tested and are currently operational:
+
+* MyMemory
+* DeepL
+* LibreTranslate
+* LibreTranslate Community
+
+The other supported providers are implemented but have not yet been fully tested.
+
+> **Developer note:** SHL is a zero-budget project. Provider support is implemented first, while full provider testing is performed as resources allow. MyMemory, DeepL, LibreTranslate, and LibreTranslate Community have currently been tested successfully. Some providers may require a temporary paid subscription or other access in order to complete testing.
+
 ### Limitations
 SHL does not process user‑audited or user‑modified files. The library does not perform self‑healing corrections on user data files or configuration files; it operates strictly within the application’s own localization layer.
 
 ### Architecture
 SHL’s architecture is based on a layered model where the localization engine routes translation requests through a router to different providers. The provider layer uses configuration that defines provider priorities, timeouts, environment variables, and content filtering.
+
 
 ---
 

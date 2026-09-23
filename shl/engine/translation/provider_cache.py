@@ -2,10 +2,9 @@
 File: provider_cache.py - Provider language support and cache.
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.10
+Version: 0.2.13
 
 Checks the language support of service providers and saves it to the cache.
-puuttuu google ja DeepL
 """
 
 import json
@@ -16,8 +15,12 @@ from urllib.request import urlopen, Request
 
 from shl.utils.env_loader import get_env_value
 from shl.config import get_config_value
+from .providers.libretranslate_community.endpoints import (
+    LIBRETRANSLATE_COMMUNITY_ENDPOINTS,
+)
 
 logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # PATHS
@@ -35,12 +38,15 @@ PM_FILE = SHL_DIR / "data" / "papago_mymemory.json"
 
 def load_cache() -> dict:
     """Load the existing cache or generate a new one."""
+
     if CACHE_FILE.exists():
         try:
             with CACHE_FILE.open("r", encoding="utf-8") as file:
                 return json.load(file)
+
         except (json.JSONDecodeError, OSError):
             backup = CACHE_FILE.with_suffix(".json.bak")
+
             try:
                 shutil.copy2(CACHE_FILE, backup)
             except OSError:
@@ -54,17 +60,22 @@ def fetch_json(
     method: str = "GET",
     headers: dict | None = None,
     data: dict | None = None,
-) -> dict:
+) -> dict | list:
     """Fetch JSON data using the specified HTTP method."""
 
-    request_headers = dict(headers) if headers else {
-        "User-Agent": "SHL-Client"
-    }
+    request_headers = (
+        dict(headers)
+        if headers
+        else {
+            "User-Agent": "SHL-Client"
+        }
+    )
 
     request_data = None
 
     if data is not None:
         request_data = json.dumps(data).encode("utf-8")
+
         request_headers.setdefault(
             "Content-Type",
             "application/json",
@@ -78,7 +89,9 @@ def fetch_json(
     )
 
     with urlopen(request, timeout=10) as response:
-        return json.loads(response.read().decode("utf-8"))
+        return json.loads(
+            response.read().decode("utf-8")
+        )
 
 
 def generate_cache() -> dict:
@@ -94,7 +107,51 @@ def generate_cache() -> dict:
     except OSError:
         libretranslate = {}
 
-    yandex = fetch_yandex_translator()
+    # -----------------------------------------------------------------------
+    # LibreTranslate Community
+    #
+    # Endpoint URLs are loaded from endpoints.py.
+    # Each endpoint is queried separately and its /languages response
+    # is merged into one provider-specific language mapping.
+    #
+    # Endpoint URLs themselves are NOT stored in the language cache.
+    # -----------------------------------------------------------------------
+
+    libretranslate_community = {}
+
+    for endpoint in LIBRETRANSLATE_COMMUNITY_ENDPOINTS:
+        try:
+            languages = fetch_libretranslate_community(endpoint)
+
+            for code, name in languages.items():
+                libretranslate_community[code] = name
+
+        except OSError as exc:
+            logger.warning(
+                "LibreTranslate Community language fetch failed "
+                "for endpoint %s: %s",
+                endpoint,
+                exc,
+            )
+
+    # Registry-compatible provider language list.
+    libretranslate_community_languages = sorted(
+        code.lower()
+        for code in libretranslate_community
+        if isinstance(code, str) and code.strip()
+    )
+
+    logger.info(
+        "LibreTranslate Community: collected %d languages "
+        "from %d endpoints",
+        len(libretranslate_community_languages),
+        len(LIBRETRANSLATE_COMMUNITY_ENDPOINTS),
+    )
+
+    try:
+        yandex = fetch_yandex_translator()
+    except OSError:
+        yandex = {}
 
     try:
         deepl = fetch_deepl()
@@ -107,25 +164,62 @@ def generate_cache() -> dict:
         "providers": {
             "microsoft_translator": microsoft,
             "libretranslate": libretranslate,
+
+            # Provider-specific language list.
+            # Endpoint URLs are intentionally not stored here.
+            "libretranslate_community": (
+                libretranslate_community_languages
+            ),
+
             "deepl": deepl,
+
             "yandex": yandex,
+
             "papago": sorted(
                 code.lower()
-                for code in papago_mymemory.get("papago", [])
+                for code in papago_mymemory.get(
+                    "papago",
+                    [],
+                )
             ),
+
             "mymemory_iso_639_1": sorted(
                 code.lower()
-                for code in papago_mymemory.get("mymemory_iso_639_1", [])
+                for code in papago_mymemory.get(
+                    "mymemory_iso_639_1",
+                    [],
+                )
             ),
         }
     }
 
-    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CACHE_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-    with CACHE_FILE.open("w", encoding="utf-8") as file:
-        json.dump(cache, file, indent=4, ensure_ascii=False)
+    with CACHE_FILE.open(
+        "w",
+        encoding="utf-8",
+    ) as file:
+        json.dump(
+            cache,
+            file,
+            indent=4,
+            ensure_ascii=False,
+        )
+
+    logger.info(
+        "Provider language cache generated: %s",
+        CACHE_FILE,
+    )
 
     return cache
+
+
+# ---------------------------------------------------------------------------
+# DEEPL
+# ---------------------------------------------------------------------------
 
 def fetch_deepl() -> list:
     """Fetch supported language codes from DeepL."""
@@ -173,15 +267,24 @@ def fetch_deepl() -> list:
 
         return languages
 
-    except (OSError, json.JSONDecodeError) as exc:
+    except (
+        OSError,
+        json.JSONDecodeError,
+    ) as exc:
         logger.error(
             "DeepL language fetch failed: %s",
             exc,
         )
         return []
 
+
+# ---------------------------------------------------------------------------
+# MICROSOFT
+# ---------------------------------------------------------------------------
+
 def fetch_microsoft_translator() -> dict:
     """Fetch supported languages from Microsoft Translator."""
+
     data = fetch_json(
         "https://api.cognitive.microsofttranslator.com/languages"
         "?api-version=3.0"
@@ -189,13 +292,23 @@ def fetch_microsoft_translator() -> dict:
 
     return {
         code.lower(): info["name"]
-        for code, info in data.get("translation", {}).items()
+        for code, info in data.get(
+            "translation",
+            {},
+        ).items()
     }
 
 
+# ---------------------------------------------------------------------------
+# LIBRETRANSLATE
+# ---------------------------------------------------------------------------
+
 def fetch_libretranslate() -> dict:
     """Fetch supported languages from LibreTranslate."""
-    languages = fetch_json("https://libretranslate.com/languages")
+
+    languages = fetch_json(
+        "https://libretranslate.com/languages"
+    )
 
     return {
         lang["code"].lower(): lang["name"]
@@ -203,11 +316,69 @@ def fetch_libretranslate() -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# LIBRETRANSLATE COMMUNITY
+# ---------------------------------------------------------------------------
+
+def fetch_libretranslate_community(
+    endpoint: str,
+) -> dict:
+    """
+    Fetch supported languages from one LibreTranslate Community endpoint.
+
+    The endpoint itself is supplied by endpoints.py.
+    """
+
+    url = f"{endpoint.rstrip('/')}/languages"
+
+    data = fetch_json(url)
+
+    if not isinstance(data, list):
+        return {}
+
+    languages = {}
+
+    for lang in data:
+        if not isinstance(lang, dict):
+            continue
+
+        code = lang.get("code")
+        name = lang.get("name")
+
+        if not isinstance(code, str):
+            continue
+
+        if not isinstance(name, str):
+            continue
+
+        code = code.strip().lower()
+
+        if not code:
+            continue
+
+        languages[code] = name
+
+    logger.debug(
+        "LibreTranslate Community endpoint %s: "
+        "received %d languages",
+        endpoint,
+        len(languages),
+    )
+
+    return languages
+
+
+# ---------------------------------------------------------------------------
+# YANDEX
+# ---------------------------------------------------------------------------
+
 def fetch_yandex_translator() -> dict:
     """Fetch supported Yandex languages or use the static fallback."""
 
     api_key = get_env_value("YANDEX_API_KEY")
-    folder_id = get_config_value("providers.yandex.folder_id")
+    folder_id = get_config_value(
+        "providers.yandex.folder_id"
+    )
 
     if not api_key:
         return get_fallback_yandex_languages()
@@ -227,16 +398,25 @@ def fetch_yandex_translator() -> dict:
             data=data,
         )
 
-        languages = response.get("languages", [])
+        languages = response.get(
+            "languages",
+            [],
+        )
 
         if languages:
             return {
-                lang["code"].lower(): lang.get("name", lang["code"])
+                lang["code"].lower(): lang.get(
+                    "name",
+                    lang["code"],
+                )
                 for lang in languages
                 if lang.get("code")
             }
 
-    except (OSError, json.JSONDecodeError):
+    except (
+        OSError,
+        json.JSONDecodeError,
+    ):
         pass
 
     return get_fallback_yandex_languages()
@@ -244,6 +424,7 @@ def fetch_yandex_translator() -> dict:
 
 def get_fallback_yandex_languages() -> dict:
     """Return the fallback list of supported Yandex languages."""
+
     codes = [
         "af", "am", "ar", "az", "ba", "be", "bg", "bn", "bs", "ca",
         "ceb", "cs", "cy", "da", "de", "el", "en", "eo", "es", "et",
@@ -257,16 +438,29 @@ def get_fallback_yandex_languages() -> dict:
         "vi", "xh", "yi", "zh",
     ]
 
-    return {code: code for code in codes}
+    return {
+        code: code
+        for code in codes
+    }
 
 
-def load_papago_mymemory(path: Path = PM_FILE) -> dict:
+# ---------------------------------------------------------------------------
+# PAPAGO / MYMEMORY
+# ---------------------------------------------------------------------------
+
+def load_papago_mymemory(
+    path: Path = PM_FILE,
+) -> dict:
     """Load Papago and MyMemory language data from the JSON file."""
+
     if not path.exists():
         return {
             "papago": [],
             "mymemory_iso_639_1": [],
         }
 
-    with path.open("r", encoding="utf-8") as file:
+    with path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
         return json.load(file)

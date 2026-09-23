@@ -1,7 +1,7 @@
 """
 File: router.py — Policy-aware routing for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.2.11
+Version: 0.2.13
 License: MIT
 """
 
@@ -30,7 +30,9 @@ from .providers.microsoft_registry import MicrosoftServiceRegistry
 
 from .providers.libretranslate import LibreTranslateAdapter
 from .providers.libretranslate_registry import LibreTranslateRegistry
-from .providers.libretranslate_mirrors import LibreTranslateMirrorManager
+
+from .providers.libretranslate_community import (LibreTranslateCommunityAdapter)
+
 
 from .providers.deepl import DeepLAdapter
 from .providers.deepl_registry import DeepLRegistry
@@ -51,7 +53,7 @@ from shl.config import get_config_value
 from shl.config.policy_manager import ConfigManager
 from shl.utils.env_loader import get_env_value
 from shl.language_parser import LanguageParser
-
+from shl.engine.language_detection.detection_router import detect_language
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +89,6 @@ _memory_manager = MemoryManager()
 
 _mymemory_registry = MyMemoryRegistry()
 _libre_registry = LibreTranslateRegistry()
-_mirror_manager = LibreTranslateMirrorManager()
 _google_registry = GoogleRegistry()
 _papago_registry = PapagoRegistry()
 _yandex_registry = YandexRegistry()
@@ -107,6 +108,7 @@ language_parser = LanguageParser()
 _POLICY_PROVIDER_NAMES = {
     "mymemory": "MyMemory",
     "libretranslate": "LibreTranslate",
+    "libretranslate_community": "LibreTranslateCommunity",
     "deepl": "DeepL",
     "google": "Google",
     "microsoft_translator": "MicrosoftTranslator",
@@ -291,7 +293,16 @@ def get_provider_priority(
                 "Policy is enabled but no providers are available. "
                 "Check enabled flags and requires_env in policy config."
             )
-        return [name.lower() for name in (available or [])]
+
+        policy_to_runtime = {
+            policy_name: runtime_name
+            for runtime_name, policy_name in _POLICY_PROVIDER_NAMES.items()
+        }
+
+        return [
+            policy_to_runtime.get(name, name.lower())
+            for name in (available or [])
+        ]
 
     # --- Zero-budget fast path ---
     if not _has_any_paid_key():
@@ -302,7 +313,6 @@ def get_provider_priority(
 
         return ["libretranslate"]
 
-    # --- Legacy cache-based mode ---
     providers_cache = _PROVIDER_CACHE.get("providers", {})
 
     pg_langs = {
@@ -479,11 +489,6 @@ def get_best_provider(
     return providers[0] if providers else "mymemory"
 
 
-def get_libretranslate_mirror_stats() -> Dict[str, Any]:
-    """Get statistics about LibreTranslate mirrors."""
-    return _mirror_manager.get_stats()
-
-
 # ---------------------------------------------------------------------------
 # CLEAR UNAVAILABLE CACHE
 # ---------------------------------------------------------------------------
@@ -491,7 +496,6 @@ def get_libretranslate_mirror_stats() -> Dict[str, Any]:
 def clear_unavailable_cache() -> None:
     """Clear internal provider and language-pair availability caches."""
 
-    _mirror_manager.clear_blacklist()
     _libre_registry.clear_blacklist()
     _mymemory_registry.clear_blacklist()
     _deepl_registry.clear_blacklist()
@@ -512,9 +516,6 @@ def get_unavailable_cache_stats() -> Dict[str, Any]:
     local_status = _local_registry._status.get("local", {})
 
     return {
-        "blacklisted_mirrors": len(
-            _mirror_manager.blacklist
-        ),
         "blacklisted_mymemory_pairs": len(
             _mymemory_registry._unsupported_pairs_cache
         ),
@@ -803,11 +804,50 @@ def translate_text_with_metadata(
                     )
 
                 elif service == "libretranslate":
-                    adapter = LibreTranslateAdapter(
-                        mirror_manager=_mirror_manager,
+                    adapter = LibreTranslateAdapter()
+
+                    source_provider_lang = language_parser.get_provider_code(
+                        request.source_lang,
+                        service,
                     )
-                    translated = _translate_with_processor(
+                    target_provider_lang = language_parser.get_provider_code(
+                        request.target_lang,
+                        service,
+                    )
+
+                    provider_request = replace(
                         request,
+                        source_lang=source_provider_lang,
+                        target_lang=target_provider_lang,
+                    )
+
+                    translated = _translate_with_processor(
+                        provider_request,
+                        adapter.translate,
+                        get_provider_html_policy(service),
+                    )
+
+
+                elif service == "libretranslate_community":
+                    adapter = LibreTranslateCommunityAdapter()
+
+                    source_provider_lang = language_parser.get_provider_code(
+                        request.source_lang,
+                        service,
+                    )
+                    target_provider_lang = language_parser.get_provider_code(
+                        request.target_lang,
+                        service,
+                    )
+
+                    provider_request = replace(
+                        request,
+                        source_lang=source_provider_lang,
+                        target_lang=target_provider_lang,
+                    )
+
+                    translated = _translate_with_processor(
+                        provider_request,
                         adapter.translate,
                         get_provider_html_policy(service),
                     )
@@ -823,7 +863,10 @@ def translate_text_with_metadata(
                         get_provider_html_policy(service),
                     )
 
-                if translated is not None:
+                if translated is not None:                
+                    if not _accept_unchanged_translation(text, translated, source_lang, target_lang):
+                        continue
+
                     if use_cache:
                         _translation_cache.set(
                             text,
@@ -869,7 +912,10 @@ def translate_text_with_metadata(
                     )
 
                 elif service == "deepl":
-                    pass
+                    _deepl_registry.mark_pair_unsupported(
+                        source_lang,
+                        target_lang,
+                    )
 
                 elif service == "papago":
                     _papago_registry.mark_pair_unsupported(
@@ -946,7 +992,72 @@ def translate_text_with_metadata(
         f"within {total_timeout}s."
     )
 
+def _accept_unchanged_translation(
+    text: str,
+    translated: str,
+    source_lang: str,
+    target_lang: str,
+) -> bool:
+    """Validate an unchanged translation using SHL language detection."""
 
+    logger.info(
+        "Checking translation result: '%s' -> '%s' (%s -> %s)",
+        text,
+        translated,
+        source_lang,
+        target_lang,
+    )
+
+    if text.strip() != translated.strip():
+        logger.info("Translation changed; accepting result.")
+        return True
+
+    if source_lang == target_lang:
+        logger.info("Source and target are identical; accepting result.")
+        return True
+
+    try:
+        detections = detect_language(
+            text,
+            source_lang=source_lang,
+        )
+
+        logger.info(
+            "Language detection for unchanged text '%s': %s",
+            text,
+            detections,
+        )
+
+        if not detections:
+            logger.info("No language detections; rejecting result.")
+            return False
+
+        target_normalized = language_parser.normalize(
+            target_lang
+        )
+
+        detected_languages = [
+            language_parser.normalize(detection.language)
+            for detection in detections
+        ]
+
+        logger.info(
+            "Unchanged translation language check: "
+            "target=%s (%s), detected=%s",
+            target_lang,
+            target_normalized,
+            detected_languages,
+        )
+
+        return target_normalized in detected_languages
+
+    except Exception as exc:
+        logger.debug(
+            "Language detection failed for unchanged translation: %s",
+            exc,
+            exc_info=True,
+        )
+        return False
 # ---------------------------------------------------------------------------
 # RAW TRANSLATION WRAPPER
 # ---------------------------------------------------------------------------

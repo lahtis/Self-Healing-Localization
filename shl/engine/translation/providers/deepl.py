@@ -1,7 +1,7 @@
 """
 File: deepl.py — module for DeepL translation adapter.
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.13
 License: MIT
 Description: Robust translation provider adapter for the DeepL API.
 Handles advanced features including context matching,
@@ -46,7 +46,6 @@ class DeepLAdapter(TranslationProvider):
     - formality
     - glossary
     - registry validation
-    - security checks
     """
 
     def __init__(
@@ -275,22 +274,14 @@ class DeepLAdapter(TranslationProvider):
 
                 # --- SECURITY CHECK: DeepL output validation ---
 
-                # 1. Empty or unchanged output
+                # 1. Empty output
+                # Unchanged output is intentionally accepted here.
+                # The translation router validates unchanged results
+                # using SHL language detection.
                 if not translated or translated.strip() == "":
                     error = self.error_parser.parse(
                         {
                             "message": "DeepL returned empty text."
-                        },
-                        http_status=response.status,
-                    )
-                    self._raise_normalized_error(error, request)
-
-                if translated.strip() == payload["text"][0].strip():
-                    error = self.error_parser.parse(
-                        {
-                            "message": (
-                                "DeepL returned unchanged text."
-                            )
                         },
                         http_status=response.status,
                     )

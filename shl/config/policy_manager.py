@@ -2,7 +2,7 @@
 file: /shl/config/policy_manager.py - SHL policy manager
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.12
+Version: 0.2.13
 Description: Policy-konfiguraatio projektin juuresta (CWD).
 """
 
@@ -186,6 +186,14 @@ class ConfigManager:
                 "detection_priority": 2,
                 "retry": 2,
             },
+            "LibreTranslateCommunity": {
+                "enabled": True,
+                "timeout": 15,
+                "requires_env": [],
+                "priority": 9,
+                "detection_priority": 7,
+                "retry": 2,
+            },
             "DeepL": {
                 "enabled": True,
                 "timeout": 5,
@@ -241,8 +249,10 @@ class ConfigManager:
                 "enabled": True,
                 "timeout": 10,
                 "requires_env": ["DETECTLANGUAGE_API_KEY"],
+                "priority": None,
                 "detection_priority": 7,
                 "retry": 2,
+                
             },
         }
 
@@ -375,6 +385,24 @@ class ConfigManager:
             )
         )
 
+    def get_retry(
+        self,
+        provider_name: str,
+        default: int = 0,
+    ) -> int:
+        """Get provider retry count from policy manager or default."""
+
+        value = self.get_provider_setting(
+            provider_name,
+            "retry",
+            default=default,
+        )
+
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return default
+
     def get_enabled_providers(self) -> List[str]:
         with self._lock:
             providers = self._config.get("providers", {})
@@ -385,6 +413,7 @@ class ConfigManager:
                 if isinstance(config, dict)
                 and config.get("enabled", False) is True
             ]
+
 
     def get_available_providers(self) -> List[str]:
         with self._lock:
@@ -404,12 +433,26 @@ class ConfigManager:
                     if not all(self.get_env(key) for key in requires):
                         continue
 
-                priority = config.get("priority", 999)
-                providers.append((priority, name))
+                priority = config.get(
+                    "priority",
+                    999,
+                )
 
-            providers.sort(key=lambda item: item[0])
+                if priority is None:
+                    continue
 
-            return [name for _, name in providers]
+                providers.append(
+                    (priority, name)
+                )
+
+            providers.sort(
+                key=lambda item: item[0]
+            )
+
+            return [
+                name
+                for _, name in providers
+            ]
 
     def get_fallback_providers(
         self,
