@@ -84,6 +84,7 @@ Create a `.env` file in your project root (optional):
 MYMEMORY_EMAIL=your@email.com
 MYMEMORY_API_KEY=your-api-key
 LIBRETRANSLATE_API_KEY=your-api-key
+LIBRETRANSLATE_COMMUNITY_API_KEY=your-api-key
 DEEPL_API_KEY=your-api-key
 GOOGLE_API_KEY=your-api-key
 MICROSOFT_TRANSLATOR_KEY=your-api-key
