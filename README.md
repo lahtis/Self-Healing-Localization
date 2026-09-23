@@ -148,6 +148,8 @@ So SHL does:
 
 * 3. Return the Finnish result
 
+> Note: SHL uses ISO 639-3 (ISO 3-letter) language codes, such as eng for English, fin for Finnish, ita for Italian, and fra for French.
+
 #### Core takeaway
 
 - base_lang = the language your source JSON files are written in  
@@ -166,7 +168,6 @@ SHL uses base_lang to:
 * know what language missing keys should be stored in
 * know what language to translate from when generating other languages
 
-> Note: SHL uses ISO 639-3 (ISO 3-letter) language codes, such as eng for English, fin for Finnish, ita for Italian, and fra for French.
 
 ##### 2) lang_code
 
