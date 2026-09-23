@@ -108,8 +108,8 @@ Create a `config.conf` in your project root:
 
 ```ini
 [SETTINGS]
-language = fi
-base_lang = en
+language = fin
+base_lang = eng
 m_translation_enabled = true
 ```
 
@@ -126,7 +126,7 @@ from shl.engine import LocalizationEngine
 shl.setup_logging("DEBUG")
 
 # Initialize the engine (user language = Finnish, base = English)
-engine = LocalizationEngine(base_lang="en")
+engine = LocalizationEngine(base_lang="eng")
 
 # If 'welcome_msg' is missing, it is created with the given default value
 title = engine.ui_text("welcome_msg", "Welcome to the App!")
@@ -136,13 +136,13 @@ print(title)  # "Tervetuloa sovellukseen!" (if translation exists)
 
 #### SHL interprets this as:
 
-* base_lang="en" → source code strings are English
-* lang_code="fi" → user wants Finnish UI
+* base_lang="eng" → source code strings are English
+* lang_code="fin" → user wants Finnish UI
 
 So SHL does:
-* 1. Look for welcome_msg in fi.json
+* 1. Look for welcome_msg in fin.json
 * 2. If missing:
-- Create the key in fi.json
+- Create the key in fin.json
 - Use the default value "Welcome to the App!" as the English source
 - Translate English → Finnish
 
@@ -160,24 +160,22 @@ Everything else in SHL’s behavior flows from that.
 
 This is the language of your canonical UI strings — the language your codebase “speaks”.
 
-Examples:
-* If your app is written in English → base_lang="en"
-* If your app is written in Finnish → base_lang="fi"
-* If your app is written in Italian → base_lang="it"
 
 SHL uses base_lang to:
-* now which JSON file is the authoritative source
+* know which JSON file is the authoritative source
 * know what language missing keys should be stored in
 * know what language to translate from when generating other languages
+
+> Note: SHL uses ISO 639-3 (ISO 3-letter) language codes, such as eng for English, fin for Finnish, ita for Italian, and fra for French.
 
 ##### 2) lang_code
 
 This is the language the user wants to see.
 
 Examples:
-* Finnish user → lang_code="fi"
-* English user → lang_code="en"
-* Italian user → lang_code="it"
+* Finnish user → lang_code="fin"
+* English user → lang_code="eng"
+* Italian user → lang_code="ita"
 
 SHL uses lang_code to:
 
@@ -192,7 +190,7 @@ Machine translation is disabled by default. Enable it when you want missing text
 
 ```python
 config = {"m_translation_enabled": True} 					# you can overwrite config in code
-engine = LocalizationEngine(lang_code="fi", config=config)
+engine = LocalizationEngine(lang_code="fin", config=config)
 
 text = engine.ui_text("new_key", "Hello World!")
 
@@ -214,14 +212,14 @@ If the template file for the current language does not exist, it is created auto
 Switch languages at runtime without restarting the application.
 
 ```python
-engine = LocalizationEngine(lang_code="en", config={"m_translation_enabled": True})
+engine = LocalizationEngine(lang_code="eng", config={"m_translation_enabled": True})
 
 # Switch to Finnish
-engine.set_language("fi")
+engine.set_language("fin")
 print(engine.ui_text("greeting", "Hello!"))  # "Hei!" (Machine-translated)
 
 # Switch to Swedish
-engine.set_language("sv")
+engine.set_language("swe")
 print(engine.ui_text("greeting", "Hello!"))  # "Hej!" (Machine-translated)
 ```
 
@@ -242,7 +240,7 @@ engine = LocalizationEngine(lang_code="zh-CN")  # → zh-cn.json
 from shl.engine.translation import translate_text
 
 # Automatically chooses the best provider
-result = translate_text("Hello World", target_lang="fi")
+result = translate_text("Hello World", target_lang="fin")
 print(result)  # "Hei maailma"
 ```
 
