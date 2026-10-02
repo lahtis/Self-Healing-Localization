@@ -458,9 +458,11 @@ root.config(
 # Translation and Detection.
 #
 # Translation uses:
+#     enabled
 #     priority
 #
 # Detection uses:
+#     detection_enabled
 #     detection_priority
 #
 # The right-side capabilities panel remains
@@ -679,14 +681,19 @@ providers = policy.get(
 # Normalize missing fields so every provider has
 # the required common keys.
 #
-# detection_priority is intentionally separate from
-# translation priority.
+# detection_enabled and detection_priority are
+# intentionally separate from translation settings.
 for name, cfg in providers.items():
     if not isinstance(cfg, dict):
         providers[name] = cfg = {}
 
     cfg.setdefault(
         "enabled",
+        False,
+    )
+
+    cfg.setdefault(
+        "detection_enabled",
         False,
     )
 
@@ -722,6 +729,16 @@ def active_priority_key():
         return "detection_priority"
 
     return "priority"
+
+
+def active_enabled_key():
+    """
+    Return the enabled field used by the active view.
+    """
+    if current_view == VIEW_DETECTION:
+        return "detection_enabled"
+
+    return "enabled"
 
 
 def active_priority_label():
@@ -788,6 +805,7 @@ def refresh_provider_tree():
         return
 
     priority_key = active_priority_key()
+    enabled_key = active_enabled_key()
 
     visible = []
 
@@ -825,7 +843,7 @@ def refresh_provider_tree():
             values=(
                 name,
                 cfg.get(
-                    "enabled",
+                    enabled_key,
                     False,
                 ),
                 priority,
@@ -1167,7 +1185,6 @@ def capability_value(value):
     return L("Unknown"), "orange"
 
 
-
 def show_capabilities(provider):
     """
     Display provider capability and SHL handling information.
@@ -1319,6 +1336,7 @@ def show_capabilities(provider):
                 label
             )
 
+
 # ------------------------------------------------
 # Provider selection
 # ------------------------------------------------
@@ -1338,7 +1356,7 @@ def on_select(event):
 
     enabled_var.set(
         cfg.get(
-            "enabled",
+            active_enabled_key(),
             False,
         )
     )
@@ -1448,7 +1466,7 @@ def save_changes():
 
     cfg = providers[current_provider]
 
-    cfg["enabled"] = enabled_var.get()
+    cfg[active_enabled_key()] = enabled_var.get()
 
     cfg["timeout"] = timeout_var.get()
 
@@ -1461,6 +1479,14 @@ def save_changes():
     #
     # Detection:
     #     cfg["detection_priority"]
+    #
+    # Enabled state is also view-specific:
+    #
+    # Translation:
+    #     cfg["enabled"]
+    #
+    # Detection:
+    #     cfg["detection_enabled"]
     #
     # Provider capabilities, SHL whitelist rules,
     # provider allow rules, and provider deny rules
@@ -1813,4 +1839,3 @@ save_button.pack(
 # Start application
 # ------------------------------------------------
 root.mainloop()
-

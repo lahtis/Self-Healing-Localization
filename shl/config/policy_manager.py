@@ -2,7 +2,7 @@
 file: /shl/config/policy_manager.py - SHL policy manager
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.13
+Version: 0.2.14
 Description: Policy-konfiguraatio projektin juuresta (CWD).
 """
 
@@ -172,6 +172,7 @@ class ConfigManager:
         provider_defaults = {
             "MyMemory": {
                 "enabled": True,
+                "detection_enabled": False,
                 "timeout": 10,
                 "requires_env": ["MYMEMORY_EMAIL"],
                 "priority": 1,
@@ -180,6 +181,7 @@ class ConfigManager:
             },
             "LibreTranslate": {
                 "enabled": True,
+                "detection_enabled": False,
                 "timeout": 8,
                 "requires_env": [],
                 "priority": 2,
@@ -188,6 +190,7 @@ class ConfigManager:
             },
             "LibreTranslateCommunity": {
                 "enabled": True,
+                "detection_enabled": False,
                 "timeout": 15,
                 "requires_env": [],
                 "priority": 9,
@@ -196,6 +199,7 @@ class ConfigManager:
             },
             "DeepL": {
                 "enabled": True,
+                "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["DEEPL_API_KEY"],
                 "priority": 3,
@@ -204,6 +208,7 @@ class ConfigManager:
             },
             "Google": {
                 "enabled": True,
+                "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["GOOGLE_API_KEY"],
                 "priority": 4,
@@ -212,6 +217,7 @@ class ConfigManager:
             },
             "MicrosoftTranslator": {
                 "enabled": True,
+                "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["MICROSOFT_TRANSLATOR_KEY"],
                 "priority": 5,
@@ -220,6 +226,7 @@ class ConfigManager:
             },
             "Papago": {
                 "enabled": True,
+                "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": [
                     "NAVER_CLIENT_ID",
@@ -231,6 +238,7 @@ class ConfigManager:
             },
             "Yandex": {
                 "enabled": True,
+                "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["YANDEX_API_KEY"],
                 "priority": 7,
@@ -239,6 +247,7 @@ class ConfigManager:
             },
             "Local": {
                 "enabled": True,
+                "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["LOCAL_API_KEY"],
                 "priority": 8,
@@ -246,7 +255,8 @@ class ConfigManager:
                 "retry": 2,
             },
             "DetectLanguage": {
-                "enabled": True,
+                "enabled": False,
+                "detection_enabled": True,
                 "timeout": 10,
                 "requires_env": ["DETECTLANGUAGE_API_KEY"],
                 "priority": None,
@@ -427,6 +437,7 @@ class ConfigManager:
                 if not config.get("enabled", False):
                     continue
 
+
                 requires = config.get("requires_env", [])
 
                 if isinstance(requires, list) and requires:
@@ -555,7 +566,7 @@ class ConfigManager:
                 if not isinstance(config, dict):
                     continue
 
-                if not config.get("enabled", False):
+                if not config.get("detection_enabled", False):
                     continue
 
                 capabilities = PROVIDER_CAPABILITIES.get(name, {})

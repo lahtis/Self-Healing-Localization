@@ -1,6 +1,7 @@
 """
-File: /shl/config/provider_settings.py
+File: /shl/config/provider_capabilities.py
 Author: Tuomas Lähteenmäki
+Version: 0.2.13
 License: MIT
 Description:
     Main provider settings for SHL.
@@ -323,7 +324,7 @@ PROVIDER_ALLOW = {
         "batch_translation": False,
     },
 
-    "libretranslateCommunity": {
+    "LibreTranslateCommunity": {
         "html": True,
         "glossary": False,
         "formality": False,
@@ -435,7 +436,7 @@ PROVIDER_DENY = {
         "batch_translation": False,
     },
 
-    "libretranslateCommunity": {
+    "LibreTranslateCommunity": {
         "html": False,
         "glossary": False,
         "formality": False,

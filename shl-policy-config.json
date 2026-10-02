@@ -1,13 +1,14 @@
 {
     "providers": {
         "MyMemory": {
-            "enabled": false,
+            "enabled": true,
+            "detection_enabled": false,
             "timeout": 10,
             "requires_env": [
                 "MYMEMORY_EMAIL"
             ],
-            "priority": 3,
-            "detection_priority": 3,
+            "priority": 1,
+            "detection_priority": 2,
             "retry": 2,
             "allow": [],
             "deny": [
@@ -17,9 +18,10 @@
         },
         "LibreTranslate": {
             "enabled": false,
+            "detection_enabled": false,
             "timeout": 8,
             "requires_env": [],
-            "priority": 4,
+            "priority": 3,
             "detection_priority": 4,
             "retry": 2,
             "allow": [
@@ -30,17 +32,23 @@
             ]
         },
         "LibreTranslateCommunity": {
-            "enabled": true,
+            "enabled": false,
+            "detection_enabled": true,
             "timeout": 15,
             "requires_env": [],
-            "priority": 1,
-            "detection_priority": 2,
+            "priority": 4,
+            "detection_priority": 3,
             "retry": 2,
-            "allow": [],
-            "deny": []
+            "allow": [
+                "html"
+            ],
+            "deny": [
+                "honorific"
+            ]
         },
         "DeepL": {
-            "enabled": false,
+            "enabled": true,
+            "detection_enabled": false,
             "timeout": 5,
             "requires_env": [
                 "DEEPL_API_KEY"
@@ -57,6 +65,7 @@
         },
         "Google": {
             "enabled": false,
+            "detection_enabled": false,
             "timeout": 5,
             "requires_env": [
                 "GOOGLE_API_KEY"
@@ -73,6 +82,7 @@
         },
         "MicrosoftTranslator": {
             "enabled": false,
+            "detection_enabled": false,
             "timeout": 5,
             "requires_env": [
                 "MICROSOFT_TRANSLATOR_KEY"
@@ -89,6 +99,7 @@
         },
         "Papago": {
             "enabled": false,
+            "detection_enabled": false,
             "timeout": 5,
             "requires_env": [
                 "NAVER_CLIENT_ID",
@@ -104,6 +115,7 @@
         },
         "Yandex": {
             "enabled": false,
+            "detection_enabled": false,
             "timeout": 5,
             "requires_env": [
                 "YANDEX_API_KEY"
@@ -120,6 +132,7 @@
         },
         "Local": {
             "enabled": false,
+            "detection_enabled": false,
             "timeout": 5,
             "requires_env": [
                 "LOCAL_API_KEY"
@@ -134,15 +147,16 @@
         },
         "DetectLanguage": {
             "enabled": true,
+            "detection_enabled": true,
             "timeout": 10,
             "requires_env": [
                 "DETECTLANGUAGE_API_KEY"
             ],
+            "priority": null,
             "detection_priority": 1,
             "retry": 2,
             "allow": [],
-            "deny": [],
-            "priority": null
+            "deny": []
         }
     },
     "memory": {
@@ -157,7 +171,8 @@
             "enabled": false,
             "space_name": "SHL Public Memory",
             "space_uuid": "",
-            "timeout": "30"
+            "timeout": "30",
+            "requires_env": ""
         }
     }
 }

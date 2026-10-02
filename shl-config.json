@@ -23,9 +23,6 @@
         "local": {
             "url": "http://localhost:8000"
         },
-        "libretranslate": {
-            "url": "http://localhost:5002"
-        },
         "yandex": {
             "folder_id": null
         }
