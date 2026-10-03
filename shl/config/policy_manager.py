@@ -2,7 +2,7 @@
 file: /shl/config/policy_manager.py - SHL policy manager
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.14
+Version: 0.2.15
 Description: Policy-konfiguraatio projektin juuresta (CWD).
 """
 
@@ -178,6 +178,7 @@ class ConfigManager:
                 "priority": 1,
                 "detection_priority": 1,
                 "retry": 2,
+                "retry_delay": 2.0,
             },
             "LibreTranslate": {
                 "enabled": True,
@@ -187,6 +188,7 @@ class ConfigManager:
                 "priority": 2,
                 "detection_priority": 2,
                 "retry": 2,
+                "retry_delay": 2.0,
             },
             "LibreTranslateCommunity": {
                 "enabled": True,
@@ -196,6 +198,7 @@ class ConfigManager:
                 "priority": 9,
                 "detection_priority": 7,
                 "retry": 2,
+                "retry_delay": 2.0,
             },
             "DeepL": {
                 "enabled": True,
@@ -205,6 +208,7 @@ class ConfigManager:
                 "priority": 3,
                 "detection_priority": None,
                 "retry": 2,
+                "retry_delay": 2.0,
             },
             "Google": {
                 "enabled": True,
@@ -214,6 +218,7 @@ class ConfigManager:
                 "priority": 4,
                 "detection_priority": 3,
                 "retry": 2,
+                "retry_delay": 2.0,
             },
             "MicrosoftTranslator": {
                 "enabled": True,
@@ -223,6 +228,7 @@ class ConfigManager:
                 "priority": 5,
                 "detection_priority": 4,
                 "retry": 2,
+                "retry_delay": 2.0,
             },
             "Papago": {
                 "enabled": True,
@@ -235,6 +241,7 @@ class ConfigManager:
                 "priority": 6,
                 "detection_priority": 5,
                 "retry": 2,
+                "retry_delay": 2.0,
             },
             "Yandex": {
                 "enabled": True,
@@ -244,6 +251,7 @@ class ConfigManager:
                 "priority": 7,
                 "detection_priority": 6,
                 "retry": 2,
+                "retry_delay": 2.0,
             },
             "Local": {
                 "enabled": True,
@@ -253,6 +261,7 @@ class ConfigManager:
                 "priority": 8,
                 "detection_priority": None,
                 "retry": 2,
+                "retry_delay": 2.0,
             },
             "DetectLanguage": {
                 "enabled": False,
@@ -262,6 +271,7 @@ class ConfigManager:
                 "priority": None,
                 "detection_priority": 7,
                 "retry": 2,
+                "retry_delay": 2.0,
                 
             },
         }
@@ -299,12 +309,16 @@ class ConfigManager:
                     "space_name": "SHL Private Memory",
                     "space_uuid": "",
                     "timeout": "30",
+                    "retry": 2,
+                    "retry_delay": 2.0,
                 },
                 "public_mymemory": {
                     "enabled": False,
                     "space_name": "SHL Public Memory",
                     "space_uuid": "",
                     "timeout": "30",
+                    "retry": 2,
+                    "retry_delay": 2.0,
                 },
             },
         }
@@ -410,6 +424,24 @@ class ConfigManager:
 
         try:
             return max(0, int(value))
+        except (TypeError, ValueError):
+            return default
+
+    def get_retry_delay(
+        self,
+        provider_name: str,
+        default: float = 1.0,
+    ) -> float:
+        """Get provider retry delay from policy manager or default."""
+
+        value = self.get_provider_setting(
+            provider_name,
+            "retry_delay",
+            default=default,
+        )
+
+        try:
+            return max(0.0, float(value))
         except (TypeError, ValueError):
             return default
 

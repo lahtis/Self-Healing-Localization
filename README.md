@@ -3,7 +3,7 @@
 
 * **Author:**  Tuomas Lähteenmäki  
 * **License:** MIT  
-* **Version:** 0.2.14
+* **Version:** 0.2.15
 * **Type:**    Library
 * **Status:**  stable, test, dev
 
@@ -67,6 +67,13 @@ SHL’s architecture is based on a layered model where the localization engine r
 
 ### Installation
 
+## Creating a virtual environment
+```bash
+python3 -m venv venv
+
+source venv/bin/activate
+```
+
 ### Stable (PyPI)
 ```bash
 pip install self-healing-localization
@@ -75,7 +82,7 @@ pip install self-healing-localization
 
 ### Latest Development (TestPyPI)
 ```bash
-pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.14
+pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.15
 ```
 
 ## Environment Variables (.env)
@@ -93,15 +100,9 @@ NAVER_CLIENT_SECRET=your-api-key
 YANDEX_API_KEY=your-api-key
 LOCAL_TRANSLATOR_API_KEY=your-api-key
 DETECTLANGUAGE_API_KEY=your-api-key
-OPENROUTER_API_KEY=your-api-key
-GEMINI_API_KEY=your-api-key
-GROQ_API_KEY=your-api-key
-CLAUDE_API_KEY=your-api-key
-CHATGPT_API_KEY=your-api-key
 ```
 
-> Environment variables are optional, but required for providers that use API keys.
-If a provider has no API key, SHL will still work offline and fall back to local translation or self‑healing behavior
+> Environment variables are optional, but required for providers that use API keys. If a provider has no API key, SHL will still work offline and fall back to local translation or self‑healing behavior.
 
 ## Configuration via config.conf
 Create a `config.conf` in your project root:
@@ -125,7 +126,7 @@ from shl.engine import LocalizationEngine
 
 shl.setup_logging("DEBUG")
 
-# Initialize the engine (user language = Finnish, base = English)
+# Initialize the engine ISO 639-3 (user language = Finnish, base = English)
 engine = LocalizationEngine(base_lang="eng")
 
 # If 'welcome_msg' is missing, it is created with the given default value

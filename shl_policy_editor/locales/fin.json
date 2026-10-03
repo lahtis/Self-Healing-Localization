@@ -25,5 +25,6 @@
     "Yes": "Kyllä",
     "No": "Ei",
     "Unknown": "Tuntematon",
-    "Detection Priority": "Havaitsemisprioriteetti"
+    "Detection Priority": "Havaitsemisprioriteetti",
+    "Retry delay": "Uudelleenkäynnistysviive"
 }

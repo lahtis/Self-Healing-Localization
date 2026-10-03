@@ -40,7 +40,7 @@ POLICY_FILE = "shl-policy-config.json"
 CONFIG_FILE = "shl_policy_editor/config.conf"
 LOCALES_DIR = "shl_policy_editor/locales"
 DEFAULT_RETRY = 2
-
+DEFAULT_RETRY_DELAY = 1.0
 
 # ------------------------------------------------
 # Capability catalog
@@ -591,6 +591,7 @@ tree = ttk.Treeview(
         "priority",
         "timeout",
         "retry",
+        "retry_delay",
     ),
     show="headings",
     selectmode="browse",
@@ -620,6 +621,11 @@ tree.heading(
 tree.heading(
     "retry",
     text=L("Retry"),
+)
+
+tree.heading(
+    "retry_delay",
+    text=L("Retry delay"),
 )
 
 
@@ -660,6 +666,14 @@ tree.column(
     anchor="center",
     width=80,
     minwidth=70,
+    stretch=True,
+)
+
+tree.column(
+    "retry_delay",
+    anchor="center",
+    width=100,
+    minwidth=90,
     stretch=True,
 )
 
@@ -715,6 +729,11 @@ for name, cfg in providers.items():
     cfg.setdefault(
         "retry",
         DEFAULT_RETRY,
+    )
+
+    cfg.setdefault(
+        "retry_delay",
+        DEFAULT_RETRY_DELAY,
     )
 
 
@@ -854,6 +873,10 @@ def refresh_provider_tree():
                 cfg.get(
                     "retry",
                     DEFAULT_RETRY,
+                ),
+                cfg.get(
+                    "retry_delay",
+                    DEFAULT_RETRY_DELAY,
                 ),
             ),
         )
@@ -1115,6 +1138,34 @@ tk.Spinbox(
     pady=(0, 20),
 )
 
+# ------------------------------------------------
+# Retry delay
+# ------------------------------------------------
+retry_delay_label = tk.Label(
+    center_frame,
+    text=L("Retry delay"),
+    font=("Arial", 12),
+)
+
+retry_delay_label.pack(
+    anchor="nw",
+)
+
+
+retry_delay_var = tk.DoubleVar(
+    value=DEFAULT_RETRY_DELAY,
+)
+
+
+tk.Entry(
+    center_frame,
+    textvariable=retry_delay_var,
+    width=25,
+    font=("Arial", 12),
+).pack(
+    anchor="nw",
+    pady=(0, 20),
+)
 
 # ------------------------------------------------
 # Provider information — READ ONLY
@@ -1386,6 +1437,13 @@ def on_select(event):
         )
     )
 
+    retry_delay_var.set(
+        cfg.get(
+            "retry_delay",
+            DEFAULT_RETRY_DELAY,
+        )
+    )
+
     priority_label.config(
         text=f"{active_priority_label()}:"
     )
@@ -1426,6 +1484,7 @@ def switch_view(event=None):
     priority_var.set(0)
     timeout_var.set(30)
     retry_var.set(DEFAULT_RETRY)
+    retry_delay_var.set(DEFAULT_RETRY_DELAY)
 
     if current_view == VIEW_MEMORY:
         tree.selection_remove(
@@ -1471,6 +1530,8 @@ def save_changes():
     cfg["timeout"] = timeout_var.get()
 
     cfg["retry"] = retry_var.get()
+
+    cfg["retry_delay"] = retry_delay_var.get()
 
     # Priority is controlled by the Treeview order.
     #
@@ -1690,6 +1751,11 @@ def update_ui_language():
         text=L("Retry"),
     )
 
+    tree.heading(
+        "retry_delay",
+        text=L("Retry delay"),
+    )
+
     provider_editor_label.config(
         text=L("Provider Editor")
     )
@@ -1708,6 +1774,10 @@ def update_ui_language():
 
     retry_label.config(
         text=L("Retry")
+    )
+
+    retry_delay_label.config(
+        text=L("Retry delay")
     )
 
     capabilities_label.config(

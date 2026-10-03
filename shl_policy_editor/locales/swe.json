@@ -16,5 +16,7 @@
     "Provider Editor": "Leverantörsredigerare",
     "Provider Capabilities": "Leverantörsfunktioner",
     "File": "Fil",
-    "Language": "Språk"
+    "Language": "Språk",
+    "Retry delay": "Fördröjning innan nytt försök",
+    "Priority:": "Prioritet:"
 }

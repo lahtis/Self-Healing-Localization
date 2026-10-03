@@ -14,7 +14,8 @@
             "deny": [
                 "html",
                 "honorific"
-            ]
+            ],
+            "retry_delay": 1.0
         },
         "LibreTranslate": {
             "enabled": false,
@@ -29,11 +30,12 @@
             ],
             "deny": [
                 "honorific"
-            ]
+            ],
+            "retry_delay": 1.0
         },
         "LibreTranslateCommunity": {
             "enabled": false,
-            "detection_enabled": true,
+            "detection_enabled": false,
             "timeout": 15,
             "requires_env": [],
             "priority": 4,
@@ -44,7 +46,8 @@
             ],
             "deny": [
                 "honorific"
-            ]
+            ],
+            "retry_delay": 1.0
         },
         "DeepL": {
             "enabled": true,
@@ -61,7 +64,8 @@
             ],
             "deny": [
                 "honorific"
-            ]
+            ],
+            "retry_delay": 1.0
         },
         "Google": {
             "enabled": false,
@@ -78,7 +82,8 @@
             ],
             "deny": [
                 "honorific"
-            ]
+            ],
+            "retry_delay": 1.0
         },
         "MicrosoftTranslator": {
             "enabled": false,
@@ -95,7 +100,8 @@
             ],
             "deny": [
                 "honorific"
-            ]
+            ],
+            "retry_delay": 1.0
         },
         "Papago": {
             "enabled": false,
@@ -111,7 +117,8 @@
             "allow": [],
             "deny": [
                 "html"
-            ]
+            ],
+            "retry_delay": 1.0
         },
         "Yandex": {
             "enabled": false,
@@ -128,7 +135,8 @@
             ],
             "deny": [
                 "honorific"
-            ]
+            ],
+            "retry_delay": 1.0
         },
         "Local": {
             "enabled": false,
@@ -143,7 +151,8 @@
             "allow": [],
             "deny": [
                 "honorific"
-            ]
+            ],
+            "retry_delay": 1.0
         },
         "DetectLanguage": {
             "enabled": true,
@@ -156,7 +165,8 @@
             "detection_priority": 1,
             "retry": 2,
             "allow": [],
-            "deny": []
+            "deny": [],
+            "retry_delay": 1.0
         }
     },
     "memory": {

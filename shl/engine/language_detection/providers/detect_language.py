@@ -1,7 +1,7 @@
 """
 File: detect_language.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.13
+Version: 0.2.15
 License: MIT
 Description:
     Detect Language API adapter for SHL language detection.
@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value
+from shl.engine.translation.exceptions import InvalidRequestError
 
 from .base import (
     LanguageDetectionProvider,
@@ -84,7 +85,7 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
             List of LanguageDetectionResult objects.
         """
         if not isinstance(text, str) or not text.strip():
-            raise ValueError(
+            raise InvalidRequestError(
                 "Text must be a non-empty string."
             )
 

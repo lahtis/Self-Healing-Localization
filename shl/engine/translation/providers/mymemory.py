@@ -6,7 +6,7 @@ License: MIT
 Description: Robust translation provider adapter for the MyMemory API.
 Handles optional email-based quota enhancement, optional private
 translation memory access, registry validation, and security checks
-for suspicious output.
+for suspicious output. (max allowed query : 500 chars)
 """
 
 import json

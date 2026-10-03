@@ -1,7 +1,7 @@
 """
 File: core.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.15
 License: MIT
 Description:
     Central localization engine for the Self-Healing Localization Layer.

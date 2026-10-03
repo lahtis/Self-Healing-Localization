@@ -1,7 +1,7 @@
 """
 File: router.py — Policy-aware routing for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.2.13
+Version: 0.2.15
 License: MIT
 """
 
@@ -452,6 +452,27 @@ def get_provider_timeout(provider_name: str) -> float:
 
     return 10.0
 
+def get_provider_retry(provider_name: str, default: int = 2) -> int:
+    """Get provider retry count from policy manager or default."""
+
+    if _USE_POLICY and _policy is not None:
+        return _policy.get_retry(
+            provider_name,
+            default=default,
+        )
+
+    return default
+
+def get_provider_retry_delay(provider_name: str, default: float = 1.0) -> float:
+    """Get provider retry delay from policy manager or default."""
+
+    if _USE_POLICY and _policy is not None:
+        return _policy.get_retry_delay(
+            provider_name,
+            default=default,
+        )
+
+    return default
 
 # ---------------------------------------------------------------------------
 # BEST PROVIDER
@@ -563,8 +584,8 @@ def translate_text_with_metadata(
     microsoft_api_key: Optional[str] = None,
     yandex_api_key: Optional[str] = None,
     local_api_key: Optional[str] = None,
-    max_retries: int = 2,
-    retry_delay: float = 1.0,
+    max_retries: Optional[int] = None,
+    retry_delay: Optional[float] = None,
     total_timeout: float = 30.0,
     placeholder_pattern: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
@@ -664,12 +685,22 @@ def translate_text_with_metadata(
 
         provider_timeout = get_provider_timeout(service)
 
+        if max_retries is not None:
+            provider_retry = max(0, int(max_retries))
+        else:
+            provider_retry = get_provider_retry(service)
+
+        if retry_delay is not None:
+            provider_retry_delay = max(0.0, float(retry_delay))
+        else:
+            provider_retry_delay = get_provider_retry_delay(service)
+
         service_deadline = min(
             start_time + total_timeout,
             time.time() + provider_timeout,
         )
 
-        for attempt in range(max_retries):
+        for attempt in range(provider_retry):
             if time.time() > service_deadline:
                 break
 
@@ -863,7 +894,7 @@ def translate_text_with_metadata(
                         get_provider_html_policy(service),
                     )
 
-                if translated is not None:                
+                if translated is not None:
                     if not _accept_unchanged_translation(text, translated, source_lang, target_lang):
                         continue
 
@@ -942,12 +973,13 @@ def translate_text_with_metadata(
                     source_lang,
                     target_lang,
                     attempt + 1,
-                    max_retries,
+                    provider_retry,
                     type(error).__name__,
                     error,
                 )
 
-                backoff = retry_delay * (attempt + 1)
+                # backoff = retry_delay * (attempt + 1)
+                backoff = provider_retry_delay * (attempt + 1)
 
                 if time.time() + backoff > service_deadline:
                     logger.debug(
@@ -955,11 +987,11 @@ def translate_text_with_metadata(
                         "after attempt %d/%d.",
                         service,
                         attempt + 1,
-                        max_retries,
+                        provider_retry,
                     )
                     break
 
-                if attempt < max_retries - 1:
+                if attempt < provider_retry - 1:
                     logger.debug(
                         "Retrying provider '%s' in %.1f seconds.",
                         service,
@@ -1058,6 +1090,7 @@ def _accept_unchanged_translation(
             exc_info=True,
         )
         return False
+
 # ---------------------------------------------------------------------------
 # RAW TRANSLATION WRAPPER
 # ---------------------------------------------------------------------------
@@ -1077,8 +1110,8 @@ def translate_text(
     microsoft_api_key: Optional[str] = None,
     yandex_api_key: Optional[str] = None,
     local_api_key: Optional[str] = None,
-    max_retries: int = 2,
-    retry_delay: float = 1.0,
+    max_retries: Optional[int] = None,
+    retry_delay: Optional[float] = None,
     total_timeout: float = 30.0,
     placeholder_pattern: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
