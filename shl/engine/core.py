@@ -458,7 +458,7 @@ class LocalizationEngine:
         if value is not None:
             return value
 
-        self.template_localizer.set_text(
+        self.template_localizer.set_template(
             validated_key,
             default,
         )
@@ -480,7 +480,7 @@ class LocalizationEngine:
         if value is None:
             value = default
 
-            self.template_localizer.set_text(
+            self.template_localizer.set_template(
                 validated_key,
                 value,
             )
@@ -527,7 +527,7 @@ class LocalizationEngine:
 
         for key, value in source_templates.templates.items():
             if key not in self.template_localizer.templates:
-                self.template_localizer.set_text(key, value)
+                self.template_localizer.set_template(key, value)
 
     def sync(self) -> None:
         """Synchronize missing keys from fallback languages and base."""

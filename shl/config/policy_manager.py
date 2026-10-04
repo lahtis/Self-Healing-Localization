@@ -2,7 +2,7 @@
 file: /shl/config/policy_manager.py - SHL policy manager
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.15
+Version: 0.2.17
 Description: Policy-konfiguraatio projektin juuresta (CWD).
 """
 
@@ -305,7 +305,7 @@ class ConfigManager:
             "memory": {
                 "private_mymemory": {
                     "enabled": True,
-                    "requires_env": "MYMEMORY_API_KEY",
+                    "requires_env": "MYMEMORY_DEV_API_KEY",
                     "space_name": "SHL Private Memory",
                     "space_uuid": "",
                     "timeout": "30",

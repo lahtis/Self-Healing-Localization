@@ -9,12 +9,12 @@ import requests
 from shl.utils.env_loader import get_env_value
 
 BASE_URL = "https://api.mymemory.dev/v1"
-api_key = get_env_value("MYMEMORY_API_KEY")
+api_key = get_env_value("MYMEMORY_DEV_API_KEY")
 space_uuid = "4G9yjBCS1m"
 translations_uuid = "NiEqzkKVRs"
 
 if not api_key:
-    raise RuntimeError("MYMEMORY_API_KEY is not configured.")
+    raise RuntimeError("MYMEMORY_DEV_API_KEY is not configured.")
 
 headers = {
     "Authorization": f"Bearer {api_key}",

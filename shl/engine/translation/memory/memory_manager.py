@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/memory/memory_manager.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.16
+Version: 0.2.17
 License: MIT
 Description:
     Provider-independent translation memory management for SHL.
@@ -62,7 +62,7 @@ class MemoryManager:
 
             api_key_env = settings.get(
                 "requires_env",
-                "MYMEMORY_API_KEY",
+                "MYMEMORY_DEV_API_KEY",
             )
 
             configured_uuid = settings.get("space_uuid")

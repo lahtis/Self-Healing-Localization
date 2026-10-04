@@ -275,7 +275,7 @@ SHL:n integraatiossa on siis hyvä huomioida, että muistin lisääminen ja sen 
 * Base URL: `https://api.mymemory.dev/v1`
 * Todennus: `Authorization: Bearer <API_KEY>`
 * POST-pyynnöissä: `Content-Type: application/json`
-* API-avain: `MYMEMORY_API_KEY`
+* API-avain: `MYMEMORY_DEV_API_KEY`
 * SHL käyttää API-kutsuissa Pythonin standardikirjaston `urllib`-toteutusta.
 
 ## Space-luonti
@@ -835,7 +835,7 @@ API-avain luetaan SHL:n ympäristölataajan kautta:
 ```python
 from shl.utils.env_loader import get_env_value
 
-API_KEY = get_env_value("MYMEMORY_API_KEY")
+API_KEY = get_env_value("MYMEMORY_DEV_API_KEY")
 ```
 
 Testi suoritetaan SHL-projektin juuresta moduulina:
@@ -1316,7 +1316,7 @@ erehdyksen kautta.
 - Base URL: https://api.mymemory.dev/v1
 - Todennus: Authorization: Bearer <API_KEY>
 - Content-Type: application/json (POST-pyynnöissä)
-- API-avain: MYMEMORY_API_KEY ympäristömuuttujassa
+- API-avain: MYMEMORY_DEV_API_KEY ympäristömuuttujassa
 
 ## Space-luonti
 POST /v1/spaces/create

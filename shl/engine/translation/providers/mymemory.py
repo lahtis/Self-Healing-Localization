@@ -15,7 +15,8 @@ import socket
 from typing import Any, Dict, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from shl.utils.safe_http import safe_urlopen as urlopen
 
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value, mask_api_key

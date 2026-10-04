@@ -21,7 +21,8 @@ import re
 import socket
 from typing import Dict, Any, Optional
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from shl.utils.safe_http import safe_urlopen as urlopen
 from urllib.error import URLError, HTTPError
 
 from shl._version import __version__ as SHL_VERSION

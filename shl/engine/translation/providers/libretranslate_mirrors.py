@@ -8,7 +8,8 @@ import logging
 import os
 import time
 from typing import List, Dict, Optional, Any
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from shl.utils.safe_http import safe_urlopen as urlopen
 from urllib.error import URLError
 
 from shl._version import __version__ as SHL_VERSION

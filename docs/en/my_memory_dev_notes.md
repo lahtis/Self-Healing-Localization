@@ -32,7 +32,7 @@ Authentication:
 Authorization: Bearer <API_KEY>
 
 API key:
-MYMEMORY_API_KEY
+MYMEMORY_DEV_API_KEY
 
 POST content type:
 Content-Type: application/json

@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/memory/private_mymemory.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.16
+Version: 0.2.17
 License: MIT
 Description:
     MyMemory.dev memory backend for SHL.
@@ -16,7 +16,8 @@ Description:
 import json
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import Request
+from shl.utils.safe_http import safe_urlopen as urlopen
 
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value
@@ -56,7 +57,7 @@ class PrivateMyMemoryBackend:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        api_key_env: str = "MYMEMORY_API_KEY",
+        api_key_env: str = "MYMEMORY_DEV_API_KEY",
         space_uuid: Optional[str] = None,
         timeout: int = 30,
     ) -> None:

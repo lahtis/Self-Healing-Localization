@@ -3,7 +3,7 @@
 
 * **Author:**  Tuomas Lähteenmäki  
 * **License:** MIT  
-* **Version:** 0.2.16
+* **Version:** 0.2.17
 * **Type:**    Library
 * **Status:**  stable, test, dev
 
@@ -82,14 +82,14 @@ pip install self-healing-localization
 
 ### Latest Development (TestPyPI)
 ```bash
-pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.16
+pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.17
 ```
 
 ## Environment Variables (.env)
 Create a `.env` file in your project root (optional):
 ```ini
 MYMEMORY_EMAIL=your@email.com
-MYMEMORY_API_KEY=your-api-key
+MYMEMORY_DEV_API_KEY=your-api-key
 LIBRETRANSLATE_API_KEY=your-api-key
 LIBRETRANSLATE_COMMUNITY_API_KEY=your-api-key
 DEEPL_API_KEY=your-api-key

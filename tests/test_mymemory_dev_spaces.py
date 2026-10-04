@@ -21,7 +21,7 @@ from shl.utils.env_loader import get_env_value
 
 
 BASE = "https://api.mymemory.dev/v1"
-API_KEY = get_env_value("MYMEMORY_API_KEY")
+API_KEY = get_env_value("MYMEMORY_DEV_API_KEY")
 
 HEADERS = {
     "Authorization": f"Bearer {API_KEY}",
@@ -160,7 +160,7 @@ print("MyMemory.dev SPACE API INVESTIGATION")
 print("=" * 70)
 
 if not API_KEY:
-    print("ERROR: MYMEMORY_API_KEY is not configured.")
+    print("ERROR: MYMEMORY_DEV_API_KEY is not configured.")
     raise SystemExit(1)
 
 

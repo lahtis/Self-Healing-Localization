@@ -5,10 +5,10 @@ from urllib.request import Request, urlopen
 from shl.utils.env_loader import get_env_value
 
 
-API_KEY = get_env_value("MYMEMORY_API_KEY")
+API_KEY = get_env_value("MYMEMORY_DEV_API_KEY")
 
 if not API_KEY:
-    raise RuntimeError("MYMEMORY_API_KEY is not configured.")
+    raise RuntimeError("MYMEMORY_DEV_API_KEY is not configured.")
 
 BASE = "https://api.mymemory.dev/v1"
 

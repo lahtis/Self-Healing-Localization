@@ -20,7 +20,7 @@ def test_store_translation():
 
     config_manager.get_memory_settings.return_value = {
         "enabled": True,
-        "requires_env": "MYMEMORY_API_KEY",
+        "requires_env": "MYMEMORY_DEV_API_KEY",
         "space_name": "SHL Test Space",
         "space_uuid": "T5x1ovmY6m",
         "timeout": "12",
