@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/memory/private_mymemory.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.14
+Version: 0.2.15
 License: MIT
 Description:
     MyMemory.dev memory backend for SHL.
@@ -187,18 +187,41 @@ class PrivateMyMemoryBackend:
         is_public: bool = False,
     ) -> str:
         """Return an existing space UUID or create the space."""
+
         if self.space_uuid:
-            return self.space_uuid
+            try:
+                space = self.get_space(self.space_uuid)
+
+                if (
+                    space.get("name") == name
+                    and space.get("isPublic") == is_public
+                ):
+                    return self.space_uuid
+
+            except MyMemoryNotFoundError:
+                pass
 
         spaces = self.list_spaces()
 
-        for space in spaces:
-            if space.get("name") == name:
-                uuid = space.get("uuid")
+        matches = [
+            space
+            for space in spaces
+            if (
+                space.get("name") == name
+                and space.get("isPublic") == is_public
+                and space.get("uuid")
+            )
+        ]
 
-                if uuid:
-                    self.space_uuid = uuid
-                    return uuid
+        if len(matches) == 1:
+            self.space_uuid = matches[0]["uuid"]
+            return self.space_uuid
+
+        if len(matches) > 1:
+            raise MyMemoryValidationError(
+                f"MyMemory.dev returned multiple spaces named "
+                f"'{name}'. Space UUID cannot be resolved uniquely."
+            )
 
         data = self.create_space(
             name=name,

@@ -2,26 +2,46 @@
 File: shl/language_parser.py
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.13
+Version: 0.2.16
 Description:
-    Language parser for SHL.
+Language parser for SHL.
 
-    Resolves user-provided language identifiers through GLFM and
-    maps the resolved ISO 639-3 language identity to provider-native
-    language codes using the provider language cache.
+Resolves user-provided language identifiers through GLFM,
+providing a canonical language identity for SHL and mapping
+resolved languages to provider-native language codes when
+required.
 
-    Resolution flow:
+GLFM is the authoritative source for language identity.
+ISO 639-3 is used as SHL's canonical internal language
+identifier, while GLFM provides BCP-47 and other language
+metadata.
 
-        User input
-            ↓
-        GLFM
-            ↓
-        ISO 639-3
-            ↓
-        Provider language cache
-            ↓
-        Provider-native code
+The parser does not contain provider-specific language
+aliases. Provider-native codes are resolved through the
+provider language cache.
+
+Resolution flow:
+
+    User input
+        ↓
+    GLFM
+        ↓
+    Canonical ISO 639-3 identity
+        ↓
+    ┌───────────────────────────────┐
+    │                               │
+    ↓                               ↓
+SHL language                  Provider cache
+   identity                         ↓
+    │                         Provider-native
+    │                             code
+    ↓
+Language pairs
+and BCP-47
+metadata
+
 """
+
 
 import json
 import logging
@@ -110,22 +130,31 @@ class LanguageParser:
         """
         Resolve a language identifier through GLFM.
 
-        Accepted input may be:
+        The input may be a recognized language identifier supported
+        by GLFM, including:
+
             - language name
-            - ISO 639-1
-            - ISO 639-3
-            - BCP 47
+            - ISO 639-1 code
+            - ISO 639-3 code
+            - BCP-47 language tag
             - GLFM language identifier
 
+        GLFM is the authoritative source for language identity.
+        The resolved language is represented internally by its
+        ISO 639-3 identifier.
+
         Returns:
-            ParsedLanguage
+            ParsedLanguage:
+                The resolved language identity and related GLFM
+                language metadata.
 
         Raises:
             ValueError:
-                If the language cannot be resolved.
+            If the language cannot be resolved through GLFM.
             TypeError:
                 If language is not a string.
         """
+
         if not isinstance(language, str):
             raise TypeError("Language identifier must be a string.")
 
@@ -196,13 +225,50 @@ class LanguageParser:
         """
         return self.parse(language).iso639_3
 
+    def normalize_pair(
+        self,
+        source_language: str,
+        target_language: str,
+    ) -> str:
+        """
+        Resolve a source/target language pair to SHL's canonical
+        ISO 639-3 identifiers.
+        """
+        source = self.normalize(source_language)
+        target = self.normalize(target_language)
+
+        return f"{source}-{target}"
+
+    def normalize_bcp47_pair(
+        self,
+        source_language: str,
+        target_language: str,
+    ) -> str:
+        """
+        Resolve a source/target language pair to GLFM's canonical BCP-47 tags.
+        """
+        source = self.get_bcp47(source_language)
+        target = self.get_bcp47(target_language)
+
+        if not source:
+            raise ValueError(
+                f"Unable to resolve BCP-47 language tag: {source_language}"
+            )
+
+        if not target:
+            raise ValueError(
+                f"Unable to resolve BCP-47 language tag: {target_language}"
+            )
+
+        return f"{source}-{target}"
+
     # ------------------------------------------------------------------
     # BCP 47
     # ------------------------------------------------------------------
 
     def get_bcp47(self, language: str) -> Optional[str]:
         """
-        Return the GLFM BCP 47 tag for a language.
+        Return the GLFM BCP-47 tag for a language.
         """
         return self.parse(language).bcp47
 

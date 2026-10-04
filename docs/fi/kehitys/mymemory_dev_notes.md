@@ -1,3 +1,388 @@
+# MyMemory.dev – Spaces- ja Memory-integraation testitulokset
+
+## Tarkoitus
+
+Tällä testillä selvitettiin, miten MyMemory.dev:n `spaces` ja `memories` toimivat yhdessä SHL:n näkökulmasta.
+
+Testissä luotiin yksi yksityinen ja yksi julkinen space. Kumpaankin lisättiin yksi memory käyttäen `/v1/add`-päätepistettä. Tämän jälkeen odotettiin, että memory ilmestyy space-kohtaiseen muistilistaan, ja testattiin vielä haku `/v1/search`-päätepisteellä käyttäen space-rajausta.
+
+Testi suoritetaan SHL-projektin juuresta:
+
+```text
+python3 -m tests.test_mymemory_dev_spaces_memory
+```
+
+## `/v1/add` – oikea sisältömuoto
+
+Testin aikana varmistui, että `/v1/add`-päätepisteen `content`-kentän täytyy olla merkkijono.
+
+Toimiva rakenne on:
+
+```json
+{
+  "content": "SHL regression test memory with tags and space",
+  "type": "note",
+  "tags": [
+    "shl-regression",
+    "test"
+  ],
+  "spaces": [
+    "SPACE_UUID"
+  ]
+}
+```
+
+Aiemmin kokeiltu rakenne, jossa `content` oli objekti:
+
+```json
+{
+  "content": {
+    "source": "...",
+    "target": "..."
+  }
+}
+```
+
+ei toimi. API palauttaa HTTP 400 -virheen:
+
+```text
+Expected string, received object
+```
+
+SHL:n spaces-testissä source- ja target-tekstit yhdistettiin tämän vuoksi yhdeksi `content`-merkkijonoksi.
+
+## Yksityinen space
+
+Testi loi yksityisen spacen:
+
+```text
+Name: SHL Private Memory Integration Test
+UUID: s5L2X9G3Dk
+ownerId: 124
+isPublic: false
+```
+
+Muistin lisääminen onnistui:
+
+```text
+POST /v1/add
+HTTP 200
+```
+
+API palautti:
+
+```json
+{
+  "message": "Content added successfully",
+  "id": "add-124-8EdEjQ4ALh",
+  "type": "note",
+  "isFirstUserMemory": false
+}
+```
+
+### Space-kohtainen muistilista
+
+Välittömästi lisäämisen jälkeen:
+
+```text
+GET /v1/memories?spaceId=s5L2X9G3Dk
+HTTP 200
+items=0
+total=0
+```
+
+Muisti ei siis tullut listalle välittömästi.
+
+Testi suoritti kyselyn uudelleen kahden sekunnin välein. Lopulta memory tuli näkyviin:
+
+```text
+items=1
+total=1
+```
+
+Muisti:
+
+```text
+ID: add-124-8EdEjQ4ALh
+type: note
+tags: shl-spaces-test, en-fi
+```
+
+Sisältö:
+
+```text
+SHL private space memory test 2026-10-04
+->
+SHL yksityisen spacen muistitesti 2026-10-04
+```
+
+Memoryn `processingStage` oli tässä vaiheessa vielä `embedding` ja `isSuccessfullyProcessed` oli `false`.
+
+Tästä huolimatta memory oli jo löydettävissä haulla.
+
+### Space-rajoitettu haku
+
+Haku suoritettiin:
+
+```text
+POST /v1/search
+```
+
+payloadilla:
+
+```json
+{
+  "query": "SHL private space memory test 2026-10-04",
+  "spaceId": "s5L2X9G3Dk"
+}
+```
+
+Tulos:
+
+```text
+HTTP 200
+```
+
+Haku palautti juuri kyseisen memoryn:
+
+```text
+matchType: hybrid
+similarity: 0.7962
+```
+
+Yksityisen spacen testi siis onnistui kokonaisuudessaan.
+
+## Julkinen space
+
+Testi loi julkisen spacen:
+
+```text
+Name: SHL Public Memory Integration Test
+UUID: TAn2v789wN
+ownerId: 124
+isPublic: true
+```
+
+Muistin lisääminen onnistui:
+
+```text
+POST /v1/add
+HTTP 200
+```
+
+API palautti:
+
+```json
+{
+  "message": "Content added successfully",
+  "id": "add-124-tNAsZbSVhC",
+  "type": "note",
+  "isFirstUserMemory": false
+}
+```
+
+### Space-kohtainen muistilista
+
+Myös tässä tapauksessa memory ei tullut listalle välittömästi.
+
+Ensimmäiset haut palauttivat:
+
+```text
+items=0
+total=0
+```
+
+Polling jatkui kahden sekunnin välein, kunnes memory löytyi.
+
+Lopputulos:
+
+```text
+items=1
+total=1
+```
+
+Muisti:
+
+```text
+ID: add-124-tNAsZbSVhC
+type: note
+tags: shl-spaces-test, en-fi
+processingStage: ready
+isSuccessfullyProcessed: true
+```
+
+Sisältö:
+
+```text
+SHL public space memory test 2026-10-04
+->
+SHL julkisen spacen muistitesti 2026-10-04
+```
+
+### Space-rajoitettu haku
+
+Haku suoritettiin:
+
+```text
+POST /v1/search
+```
+
+payloadilla:
+
+```json
+{
+  "query": "SHL public space memory test 2026-10-04",
+  "spaceId": "TAn2v789wN"
+}
+```
+
+Tulos:
+
+```text
+HTTP 200
+```
+
+Memory löytyi:
+
+```text
+matchType: hybrid
+similarity: 0.8397
+```
+
+Myös julkisen spacen testi onnistui kokonaisuudessaan.
+
+## Havainto: memoryjen käsittely on asynkronista
+
+Testi osoitti selvästi, että `/v1/add` palauttaa onnistumisen ennen kuin memory näkyy `GET /v1/memories?spaceId=...` -listassa.
+
+Prosessi näyttää käytännössä tältä:
+
+```text
+POST /v1/add
+      │
+      ├── HTTP 200
+      │
+      ▼
+Memory lisätty
+      │
+      │  käsittely / embedding
+      ▼
+GET /v1/memories?spaceId=...
+      │
+      ├── items=0
+      │
+      │  ...odotetaan...
+      │
+      ▼
+Memory tulee näkyviin
+      │
+      ▼
+Memory voidaan hakea /search-päätepisteellä
+```
+
+Tästä syystä välittömästi `/add`-kutsun jälkeen tehty `GET /memories?spaceId=...` ei sovellu yksinään todistamaan, että memoryn lisääminen epäonnistui.
+
+SHL:n testissä tämä ratkaistiin pollingilla.
+
+## Vahvistetut ominaisuudet
+
+Testien perusteella seuraavat asiat on nyt vahvistettu:
+
+1. Space voidaan luoda `/v1/spaces/create`-päätepisteellä.
+
+2. Sekä private- että public-space voidaan luoda API:n kautta.
+
+3. `/v1/add` hyväksyy `spaces`-kentän space UUID:n sisältävänä listana.
+
+4. Memory voidaan sitoa tiettyyn spaceen lisäämisen yhteydessä.
+
+5. `GET /v1/memories?spaceId=<uuid>` palauttaa kyseiseen spaceen kuuluvat memoryt.
+
+6. Memory voi ilmestyä space-kohtaiseen listaan vasta viiveellä.
+
+7. `/v1/search` hyväksyy `spaceId`-rajauksen.
+
+8. Space-rajoitettu haku löytää kyseiseen spaceen lisätyn memoryn.
+
+9. Sekä private- että public-space toimivat näissä operaatioissa.
+
+10. `/v1/search` voi löytää memoryn jo ennen kuin memoryn processing-status on `ready`.
+
+## SHL:n kannalta merkityksellinen rakenne
+
+MyMemory.dev soveltuu tämän testin perusteella hyvin SHL:n translation memory -käyttöön.
+
+SHL voi esimerkiksi tallentaa käännöksen spaceen seuraavan kaltaisena sisältönä:
+
+```text
+source text -> translated text
+```
+
+ja käyttää language pair -tagia:
+
+```text
+en-fi
+```
+
+Space voidaan puolestaan valita SHL:n käyttötarkoituksen mukaan.
+
+Esimerkiksi:
+
+```text
+SHL Translation Memory
+    │
+    ├── en-fi
+    ├── en-sv
+    ├── en-de
+    └── ...
+```
+
+Space-rajoitettu haku mahdollistaa sen, että SHL ei joudu tekemään jokaista hakua koko memory-kannasta.
+
+## Vielä testaamatta
+
+Tässä testissä ei vielä selvitetty käyttäjien välistä näkyvyyttä.
+
+Erityisesti seuraavat asiat ovat vielä avoinna:
+
+* Näkeekö toinen käyttäjä public-spacen?
+* Näkeekö toinen käyttäjä public-spacen memoryt?
+* Näkeekö toinen käyttäjä private-spacen?
+* Toimiiko `spaceId`-rajoitettu haku toisella käyttäjällä public-spacessa?
+* Miten public-spacen oikeudet tarkalleen määräytyvät?
+
+Näiden testaamiseen tarvitaan toinen MyMemory.dev-käyttäjä tai toinen toimiva API-avain.
+
+## Yhteenveto
+
+MyMemory.dev:n spaces- ja memory-toiminnot toimivat SHL:n tarvitsemalla tavalla.
+
+Erityisesti vahvistui, että memory voidaan lisätä suoraan tiettyyn spaceen:
+
+```text
+POST /v1/add
+    spaces: [space_uuid]
+```
+
+ja myöhemmin hakea sekä listauksella:
+
+```text
+GET /v1/memories?spaceId=<space_uuid>
+```
+
+että semanttisella haulla:
+
+```text
+POST /v1/search
+    query: ...
+    spaceId: <space_uuid>
+```
+
+Tärkein käytännön huomio on asynkroninen käsittely. `/add` voi palauttaa HTTP 200:n, vaikka memory ei vielä hetkeen näy space-kohtaisessa listassa tai ole valmis embedding-käsittelystä.
+
+Tämän vuoksi SHL:n mahdollisen MyMemory.dev-integraation ei pidä tulkita välitöntä tyhjää memory-listaa lisäyksen epäonnistumiseksi.
+
+
 # MyMemory.dev – Spaces API:n testaus ja havainnot
 
 ## Tarkoitus

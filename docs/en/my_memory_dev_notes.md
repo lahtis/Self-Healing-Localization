@@ -1,3 +1,395 @@
+# MyMemory.dev – Spaces and Memory Integration Test Results
+
+## Purpose
+
+This test investigated how MyMemory.dev `spaces` and `memories` work together from the SHL perspective.
+
+The test created one private space and one public space. One memory was added to each space using the `/v1/add` endpoint. The test then waited for the memory to become visible in the space-specific memory list and finally tested searching within the space using `/v1/search`.
+
+Run the test from the SHL project root:
+
+```text
+python3 -m tests.test_mymemory_dev_spaces_memory
+```
+
+## `/v1/add` – Correct Content Format
+
+The test confirmed that the `/v1/add` endpoint expects the `content` field to be a string.
+
+The working structure is:
+
+```json
+{
+  "content": "SHL regression test memory with tags and space",
+  "type": "note",
+  "tags": [
+    "shl-regression",
+    "test"
+  ],
+  "spaces": [
+    "SPACE_UUID"
+  ]
+}
+```
+
+The previously tested structure where `content` was an object:
+
+```json
+{
+  "content": {
+    "source": "...",
+    "target": "..."
+  }
+}
+```
+
+does not work.
+
+The API returns HTTP 400 with:
+
+```text
+Expected string, received object
+```
+
+For the spaces integration test, the source and target texts were therefore combined into a single `content` string.
+
+## Private Space
+
+The test created a private space:
+
+```text
+Name: SHL Private Memory Integration Test
+UUID: s5L2X9G3Dk
+ownerId: 124
+isPublic: false
+```
+
+Adding the memory succeeded:
+
+```text
+POST /v1/add
+HTTP 200
+```
+
+The API returned:
+
+```json
+{
+  "message": "Content added successfully",
+  "id": "add-124-8EdEjQ4ALh",
+  "type": "note",
+  "isFirstUserMemory": false
+}
+```
+
+### Space-specific Memory List
+
+Immediately after adding the memory, the space-specific request returned:
+
+```text
+GET /v1/memories?spaceId=s5L2X9G3Dk
+HTTP 200
+items=0
+total=0
+```
+
+The memory was therefore not immediately visible.
+
+The test polled the endpoint every two seconds. The memory eventually appeared:
+
+```text
+items=1
+total=1
+```
+
+The resulting memory had:
+
+```text
+ID: add-124-8EdEjQ4ALh
+type: note
+tags: shl-spaces-test, en-fi
+```
+
+Content:
+
+```text
+SHL private space memory test 2026-10-04
+->
+SHL yksityisen spacen muistitesti 2026-10-04
+```
+
+At this point the memory still had:
+
+```text
+processingStage: embedding
+isSuccessfullyProcessed: false
+```
+
+Despite this, it was already searchable.
+
+### Space-restricted Search
+
+The search was performed using:
+
+```text
+POST /v1/search
+```
+
+with:
+
+```json
+{
+  "query": "SHL private space memory test 2026-10-04",
+  "spaceId": "s5L2X9G3Dk"
+}
+```
+
+The result was:
+
+```text
+HTTP 200
+```
+
+The search returned the expected memory:
+
+```text
+matchType: hybrid
+similarity: 0.7962
+```
+
+The private-space test therefore succeeded end-to-end.
+
+## Public Space
+
+The test created a public space:
+
+```text
+Name: SHL Public Memory Integration Test
+UUID: TAn2v789wN
+ownerId: 124
+isPublic: true
+```
+
+Adding the memory succeeded:
+
+```text
+POST /v1/add
+HTTP 200
+```
+
+The API returned:
+
+```json
+{
+  "message": "Content added successfully",
+  "id": "add-124-tNAsZbSVhC",
+  "type": "note",
+  "isFirstUserMemory": false
+}
+```
+
+### Space-specific Memory List
+
+As with the private space, the memory did not appear immediately.
+
+The initial requests returned:
+
+```text
+items=0
+total=0
+```
+
+The test continued polling every two seconds until the memory appeared.
+
+The final result was:
+
+```text
+items=1
+total=1
+```
+
+The memory had:
+
+```text
+ID: add-124-tNAsZbSVhC
+type: note
+tags: shl-spaces-test, en-fi
+processingStage: ready
+isSuccessfullyProcessed: true
+```
+
+Content:
+
+```text
+SHL public space memory test 2026-10-04
+->
+SHL julkisen spacen muistitesti 2026-10-04
+```
+
+### Space-restricted Search
+
+The search was performed using:
+
+```text
+POST /v1/search
+```
+
+with:
+
+```json
+{
+  "query": "SHL public space memory test 2026-10-04",
+  "spaceId": "TAn2v789wN"
+}
+```
+
+The result was:
+
+```text
+HTTP 200
+```
+
+The expected memory was returned:
+
+```text
+matchType: hybrid
+similarity: 0.8397
+```
+
+The public-space test therefore also succeeded end-to-end.
+
+## Observation: Memory Processing Is Asynchronous
+
+The test clearly demonstrated that `/v1/add` can return a successful response before the memory becomes visible through `GET /v1/memories?spaceId=...`.
+
+The practical sequence is:
+
+```text
+POST /v1/add
+      │
+      ├── HTTP 200
+      │
+      ▼
+Memory added
+      │
+      │  processing / embedding
+      ▼
+GET /v1/memories?spaceId=...
+      │
+      ├── items=0
+      │
+      │  ...wait...
+      │
+      ▼
+Memory becomes visible
+      │
+      ▼
+Memory can be found through /search
+```
+
+Therefore, an immediately empty space-specific memory list must not be interpreted as evidence that adding the memory failed.
+
+The SHL test handles this by polling until the memory becomes visible or a timeout is reached.
+
+## Confirmed Capabilities
+
+The tests confirmed the following:
+
+1. A space can be created through `/v1/spaces/create`.
+
+2. Both private and public spaces can be created through the API.
+
+3. The `/v1/add` endpoint accepts a `spaces` field containing a space UUID.
+
+4. A memory can be assigned to a specific space when it is added.
+
+5. `GET /v1/memories?spaceId=<uuid>` returns memories belonging to that space.
+
+6. A newly added memory may take several seconds to appear in the space-specific memory list.
+
+7. `/v1/search` accepts a `spaceId` restriction.
+
+8. A space-restricted search can find a memory assigned to that space.
+
+9. Both private and public spaces work with these operations.
+
+10. `/v1/search` can find a memory before its processing status reaches `ready`.
+
+## Relevance to SHL
+
+Based on these tests, MyMemory.dev appears suitable for SHL's translation-memory use case.
+
+SHL could, for example, store a translation as a single memory:
+
+```text
+source text -> translated text
+```
+
+and use a language-pair tag such as:
+
+```text
+en-fi
+```
+
+A space can then be used to separate memories according to their intended purpose.
+
+For example:
+
+```text
+SHL Translation Memory
+    │
+    ├── en-fi
+    ├── en-sv
+    ├── en-de
+    └── ...
+```
+
+Space-restricted search also allows SHL to avoid searching the entire memory collection for every lookup.
+
+## Not Yet Tested
+
+This test did not investigate visibility and permissions across different users.
+
+The following questions remain open:
+
+* Can another user see a public space?
+* Can another user see memories stored in a public space?
+* Can another user see a private space?
+* Does a space-restricted search work for another user when the space is public?
+* How exactly are public-space permissions enforced?
+
+Testing these questions requires a second MyMemory.dev user or another working API key.
+
+## Summary
+
+The MyMemory.dev spaces and memory functionality works as required for the tested SHL use case.
+
+In particular, it has been confirmed that a memory can be assigned directly to a specific space:
+
+```text
+POST /v1/add
+    spaces: [space_uuid]
+```
+
+and subsequently retrieved through a space-specific memory listing:
+
+```text
+GET /v1/memories?spaceId=<space_uuid>
+```
+
+as well as through semantic search:
+
+```text
+POST /v1/search
+    query: ...
+    spaceId: <space_uuid>
+```
+
+The most important practical observation is the asynchronous processing behavior. `/v1/add` may return HTTP 200 even though the memory is not immediately visible through the space-specific memory list or has not yet finished embedding.
+
+An SHL integration must therefore not interpret an immediately empty `GET /v1/memories?spaceId=...` response as a failed memory insertion.
+
+
 # MyMemory.dev – Spaces API Testing and Findings
 
 ## Purpose

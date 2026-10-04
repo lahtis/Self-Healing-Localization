@@ -1,5 +1,5 @@
 """
-File: language_validator.py
+File: shl/language_validator.py
 Author: Tuomas Lähteenmäki
 Version: 0.2.11
 License: MIT
