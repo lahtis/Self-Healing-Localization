@@ -23,6 +23,8 @@
 - Documentation: https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/docs
 - Demonstration: https://youtu.be/t5veRZtt3dU?si=ADD4yS5C2VwNKx9f
 
+- SHL Policy Editor: https://codeberg.org/lahtis/shl_policy_editor
+
 ---
 
 ## Overview
@@ -45,7 +47,7 @@ SHL follows a self‑healing principle: when the application requests a missing 
 ### Translation Providers Status
 The following translation providers have been tested and are currently operational:
 
-* MyMemory
+* MyMemory (translated.net)
 * DeepL
 * LibreTranslate
 * LibreTranslate Community
@@ -53,6 +55,13 @@ The following translation providers have been tested and are currently operation
 The other supported providers are implemented but have not yet been fully tested.
 
 > **Developer note:** SHL is a zero-budget project. Provider support is implemented first, while full provider testing is performed as resources allow. MyMemory, DeepL, LibreTranslate, and LibreTranslate Community have currently been tested successfully. Some providers may require a temporary paid subscription or other access in order to complete testing.
+
+### Memory Providers Status
+The following memory providers have been tested and are currently operational (as of v0.2.17):
+
+* MyMemory.dev
+
+> Note that `MYMEMORY_API_KEY` (translated.com) and `MYMEMORY_DEV_API_KEY` (mymemory.dev) are separate variables for separate services.
 
 ### Limitations
 SHL does not process user‑audited or user‑modified files. The library does not perform self‑healing corrections on user data files or configuration files; it operates strictly within the application’s own localization layer.
@@ -89,9 +98,9 @@ pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.17
 Create a `.env` file in your project root (optional):
 ```ini
 MYMEMORY_EMAIL=your@email.com
-MYMEMORY_DEV_API_KEY=your-api-key
 LIBRETRANSLATE_API_KEY=your-api-key
 LIBRETRANSLATE_COMMUNITY_API_KEY=your-api-key
+MYMEMORY_DEV_API_KEY=your-api-key
 DEEPL_API_KEY=your-api-key
 GOOGLE_API_KEY=your-api-key
 MICROSOFT_TRANSLATOR_KEY=your-api-key
