@@ -1,3 +1,440 @@
+# MyMemory.dev – Spaces API:n testaus ja havainnot
+
+## Tarkoitus
+
+Tässä testissä tutkitaan MyMemory.dev API:n `Spaces`-toimintoa ja sen suhdetta muistiin (`memories`).
+
+Testin tavoitteena on selvittää:
+
+* miten käyttäjän omat spacit listataan
+* miten julkiset ja yksityiset spacit erotellaan
+* mitä tietoja yksittäisestä spacesta palautetaan
+* voiko uuden spacen luoda yksityisenä tai julkisena
+* miten spacen muistot listataan
+* näkyvätkö julkiset ja yksityiset spacit samalla tavalla omistajalle.
+
+Testi käyttää MyMemory.dev:n API:a suoraan Pythonin standardikirjaston `urllib`-moduulilla. Erillisiä HTTP-riippuvuuksia, kuten `requests`-kirjastoa, ei käytetä.
+
+API-avain luetaan SHL:n ympäristölataajan kautta:
+
+```python
+from shl.utils.env_loader import get_env_value
+
+API_KEY = get_env_value("MYMEMORY_API_KEY")
+```
+
+Testi suoritetaan SHL-projektin juuresta moduulina:
+
+```bash
+python3 -m tests.test_mymemory_dev_spaces
+```
+
+## Spaces-listaus
+
+Endpoint:
+
+```text
+GET /v1/spaces
+```
+
+Palautus sisältää yhden `spaces`-listan. Julkisia ja yksityisiä spaceja ei siis palauteta erillisinä listoina.
+
+Esimerkiksi:
+
+```json
+{
+  "spaces": [
+    {
+      "id": 35,
+      "uuid": "PT8od4asev",
+      "name": "SHL Public Space Investigation",
+      "ownerId": 124,
+      "isPublic": true
+    },
+    {
+      "id": 34,
+      "uuid": "W6WEqizeba",
+      "name": "SHL Private Space Investigation",
+      "ownerId": 124,
+      "isPublic": false
+    }
+  ]
+}
+```
+
+Julkinen tai yksityinen tila tunnistetaan kentästä:
+
+```text
+isPublic
+```
+
+Arvo:
+
+```text
+true
+```
+
+tarkoittaa julkista spacea.
+
+Arvo:
+
+```text
+false
+```
+
+tarkoittaa yksityistä spacea.
+
+Näin ollen SHL:n mahdollinen oma käyttöliittymä voi saada kaikki spacit yhdellä API-kutsulla ja jakaa ne tarvittaessa käyttöliittymässä julkisiin ja yksityisiin.
+
+## Testin alkuperäinen Spaces-listaus
+
+Testin alussa käyttäjällä oli kuusi spacea.
+
+Kaikki kuusi olivat yksityisiä:
+
+```text
+Total:   6
+Public:  0
+Private: 6
+```
+
+Listassa olivat muun muassa:
+
+```text
+SHL Regression Test
+SHL Test Space
+SHL Private Memory
+```
+
+Kaikissa käyttäjän omistamissa spaceissa oli seuraavat oikeudet:
+
+```json
+{
+  "canRead": true,
+  "canEdit": true,
+  "isOwner": true
+}
+```
+
+Lisäksi listauksessa esiintyivät kentät:
+
+```text
+accessType
+favorited
+owner
+permissions
+```
+
+Testissä omistajan omien spacejen kohdalla:
+
+```text
+accessType = null
+favorited = false
+owner = null
+```
+
+`permissions`-objekti sisälsi kuitenkin varsinaiset käyttöoikeustiedot.
+
+## Yksityisen spacen luominen
+
+Endpoint:
+
+```text
+POST /v1/spaces/create
+```
+
+Pyyntö:
+
+```json
+{
+  "spaceName": "SHL Private Space Investigation",
+  "isPublic": false
+}
+```
+
+API palautti HTTP 200 -vastauksen ja loi spacen onnistuneesti.
+
+Luodun spacen UUID oli:
+
+```text
+W6WEqizeba
+```
+
+Palautuksessa olivat muun muassa:
+
+```json
+{
+  "uuid": "W6WEqizeba",
+  "name": "SHL Private Space Investigation",
+  "ownerId": 124,
+  "isPublic": false
+}
+```
+
+## Julkisen spacen luominen
+
+Myös julkinen space voitiin luoda samalla endpointilla.
+
+Pyyntö:
+
+```json
+{
+  "spaceName": "SHL Public Space Investigation",
+  "isPublic": true
+}
+```
+
+API palautti HTTP 200 -vastauksen.
+
+Luodun spacen UUID oli:
+
+```text
+PT8od4asev
+```
+
+Palautuksessa:
+
+```json
+{
+  "uuid": "PT8od4asev",
+  "name": "SHL Public Space Investigation",
+  "ownerId": 124,
+  "isPublic": true
+}
+```
+
+## Uusi Spaces-listaus
+
+Kun uudet spacit oli luotu, `/v1/spaces` palautti yhteensä kahdeksan spacea.
+
+Jakauma oli:
+
+```text
+Total:   8
+Public:  1
+Private: 7
+```
+
+Julkinen space löytyi samasta `spaces`-listasta kuin yksityisetkin.
+
+Tässä tapauksessa:
+
+```text
+SHL Public Space Investigation
+isPublic = true
+```
+
+ja:
+
+```text
+SHL Private Space Investigation
+isPublic = false
+```
+
+Tämä vahvistaa, että API ei käytä omistajan näkökulmasta erillisiä public/private-listausendpointeja, vaan palauttaa spacit yhtenä kokonaisuutena.
+
+## Yksittäisen spacen hakeminen
+
+Yksittäinen space voidaan hakea UUID:n perusteella:
+
+```text
+GET /v1/spaces/{uuid}
+```
+
+Esimerkiksi:
+
+```text
+GET /v1/spaces/W6WEqizeba
+```
+
+palautti HTTP 200 ja seuraavan kaltaisen rakenteen:
+
+```json
+{
+  "id": 34,
+  "uuid": "W6WEqizeba",
+  "name": "SHL Private Space Investigation",
+  "createdAt": "2026-10-04T09:36:38.828Z",
+  "updatedAt": "2026-10-04T09:36:38.883Z",
+  "ownerId": 124,
+  "isPublic": false,
+  "permissions": {
+    "canRead": true,
+    "canEdit": true,
+    "isOwner": true,
+    "isPublic": false
+  }
+}
+```
+
+Julkinen space palautti vastaavasti:
+
+```json
+{
+  "id": 35,
+  "uuid": "PT8od4asev",
+  "name": "SHL Public Space Investigation",
+  "ownerId": 124,
+  "isPublic": true,
+  "permissions": {
+    "canRead": true,
+    "canEdit": true,
+    "isOwner": true,
+    "isPublic": true
+  }
+}
+```
+
+Huomionarvoista on, että yksittäisen spacen vastauksessa `permissions` sisältää myös `isPublic`-kentän.
+
+## Spacen muistojen listaaminen
+
+Spacen muistit voidaan hakea endpointilla:
+
+```text
+GET /v1/memories?spaceId={uuid}
+```
+
+Esimerkiksi:
+
+```text
+GET /v1/memories?spaceId=W6WEqizeba
+```
+
+ja:
+
+```text
+GET /v1/memories?spaceId=PT8od4asev
+```
+
+palauttivat molemmat HTTP 200.
+
+Koska juuri luotuihin spaceihin ei ollut vielä lisätty muistoja, vastaukset olivat:
+
+```json
+{
+  "items": [],
+  "total": 0
+}
+```
+
+Tämä osoittaa, että `spaceId`-suodatus toimii HTTP-tasolla ja palauttaa tyhjän tuloksen, kun kyseisessä spacessa ei ole muistoja.
+
+Testi ei tämän osan perusteella osoita, että `spaceId` olisi rikki.
+
+Aikaisemmassa regressiotestissä havaittu tyhjä tulos heti muiston lisäämisen jälkeen on siten syytä käsitellä erillisenä kysymyksenä, koska uuden muiston käsittely voi olla vielä kesken.
+
+## Varmistetut havainnot
+
+Testin perusteella voidaan tällä hetkellä pitää varmistettuina seuraavia asioita:
+
+1. `GET /v1/spaces` toimii.
+2. API palauttaa julkiset ja yksityiset spacit samassa `spaces`-listassa.
+3. `isPublic` kertoo, onko space julkinen.
+4. `POST /v1/spaces/create` on oikea endpoint uuden spacen luomiseen.
+5. `isPublic: false` luo yksityisen spacen.
+6. `isPublic: true` luo julkisen spacen.
+7. Luodut spacit näkyvät myöhemmin `/v1/spaces`-listauksessa.
+8. Yksittäisen spacen voi hakea UUID:lla osoitteesta `/v1/spaces/{uuid}`.
+9. Yksittäisen spacen vastauksessa palautetaan käyttöoikeuksia kuvaava `permissions`-objekti.
+10. Spacen muistit voidaan hakea osoitteesta `/v1/memories?spaceId={uuid}`.
+11. Tyhjä space palauttaa HTTP 200 ja `total: 0`.
+12. Omistajalla on omiin spaceihinsa `canRead`, `canEdit` ja `isOwner` -oikeudet.
+
+## Mitä testi ei vielä selvitä
+
+Testiä suoritettiin yhden käyttäjän API-avaimella. Siksi se ei vielä osoita, miten julkiset ja yksityiset spacit näkyvät toiselle käyttäjälle.
+
+Erityisesti seuraavat asiat ovat edelleen testaamatta:
+
+* näkeekö toinen käyttäjä julkisen spacen `/v1/spaces`-listassa
+* näkeekö toinen käyttäjä yksityisen spacen
+* voiko toinen käyttäjä lukea julkisen spacen muistoja
+* voiko toinen käyttäjä muokata julkista spacea
+* voiko toinen käyttäjä lisätä muistoja julkiseen spaceen
+* estetäänkö yksityisen spacen käyttö toiselta käyttäjältä API-tasolla.
+
+Näiden testaamiseen tarvittaisiin käytännössä toinen MyMemory.dev-käyttäjä tai toinen API-avain.
+
+## Merkitys SHL:n kannalta
+
+MyMemory.dev:n Spaces-rakenne sopii hyvin SHL:n mahdolliseen translation memory -malliin.
+
+SHL voisi esimerkiksi käyttää omaa yksityistä spacea translation memorylle ja tallentaa sinne käännöksiä kieliparikohtaisesti esimerkiksi tageilla:
+
+```text
+en-fi
+fi-en
+en-swe
+```
+
+Spaces mahdollistaisi myöhemmin myös eri käyttötarkoitusten erottamisen. Esimerkiksi:
+
+```text
+SHL Translation Memory
+SHL Project Memory
+SHL Shared Memory
+```
+
+Yksityinen space voisi sisältää käyttäjän oman translation memoryn, kun taas julkista spacea voitaisiin mahdollisesti käyttää jaettuun muistiin.
+
+Tätä käyttötapaa ei kuitenkaan pidä vielä toteuttaa SHL:ään pelkästään tämän testin perusteella. Julkisten spacejen todelliset käyttöoikeudet eri käyttäjien välillä täytyy ensin varmistaa.
+
+## Testin jäljelle jäävät kysymykset
+
+Seuraava hyödyllinen testi olisi lisätä vähintään yksi memory sekä julkiseen että yksityiseen spaceen ja tarkistaa:
+
+```text
+POST /v1/add
+GET /v1/memories?spaceId=...
+POST /v1/search
+```
+
+Näin voidaan selvittää, miten spacen sisältö käyttäytyy käytännössä ja kuinka nopeasti lisätty memory ilmestyy `spaceId`-listaukseen.
+
+Sen jälkeen olisi hyödyllistä tehdä sama testi toisella käyttäjätilillä. Vasta silloin voidaan tehdä varma johtopäätös siitä, mitä `isPublic` tarkoittaa käyttäjien välisessä näkyvyydessä ja muokkausoikeuksissa.
+
+## Yhteenveto
+
+MyMemory.dev:n Spaces API käyttää yhtä yhteistä spaces-listaa. Julkinen ja yksityinen tila erotetaan `isPublic`-kentällä.
+
+Uusi space luodaan endpointilla:
+
+```text
+POST /v1/spaces/create
+```
+
+ja yksityisyys määritetään:
+
+```json
+{
+  "isPublic": false
+}
+```
+
+tai:
+
+```json
+{
+  "isPublic": true
+}
+```
+
+Yksittäinen space voidaan hakea UUID:n perusteella:
+
+```text
+GET /v1/spaces/{uuid}
+```
+
+ja spacen muistot:
+
+```text
+GET /v1/memories?spaceId={uuid}
+```
+
+Tähän mennessä testit vahvistavat Spaces API:n perusrakenteen ja toiminnan. Julkisen ja yksityisen spacen välinen käyttäjäkohtainen näkyvyys ja käyttöoikeus on kuitenkin vielä erikseen varmistettava.
+
+
 # MyMemory.dev – havainnot (2026-10-04)
 
 ## Yleistä
