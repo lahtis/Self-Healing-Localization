@@ -1,7 +1,7 @@
 """
 File: router.py — Policy-aware routing for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.2.15
+Version: 0.2.16
 License: MIT
 """
 
@@ -632,6 +632,19 @@ def translate_text_with_metadata(
                 source="cache",
                 request_metadata=request,
             )
+
+    memory_translation = _memory_manager.search_translation(
+        source_text=text,
+        source_lang=source_lang,
+        target_lang=target_lang,
+    )
+
+    if memory_translation is not None:
+        return TranslationResult(
+            translated_text=memory_translation,
+            source="translation_memory",
+            request_metadata=request,
+        )
 
     order = get_provider_priority(
         target_lang=target_lang,

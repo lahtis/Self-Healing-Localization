@@ -1,7 +1,7 @@
 """
 File: shl/engine/errors/codes.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.16
 License: MIT
 Description:
     Common error codes used by the SHL error handling system.
@@ -38,6 +38,7 @@ QUOTA_EXCEEDED = "QUOTA_EXCEEDED"
 
 # Resource errors
 NOT_FOUND = "NOT_FOUND"
+ALREADY_EXISTS = "ALREADY_EXISTS"
 
 # Service errors
 TIMEOUT = "TIMEOUT"

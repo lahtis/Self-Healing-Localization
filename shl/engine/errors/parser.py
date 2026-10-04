@@ -1,8 +1,7 @@
-# shl/engine/errors/parser.py
 """
 File: shl/engine/errors/parser.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.13
+Version: 0.2.16
 License: MIT
 Description:
 Provider-independent error parser for SHL translation services.
@@ -31,6 +30,7 @@ from .codes import (
     LANG_UNSUPPORTED,
     METHOD_NOT_ALLOWED,
     NOT_FOUND,
+    ALREADY_EXISTS,
     QUOTA_EXCEEDED,
     RATE_LIMIT_EXCEEDED,
     REQUEST_TOO_LONG,
@@ -48,6 +48,7 @@ DEFAULT_HTTP_CODES = {
     404: NOT_FOUND,
     405: METHOD_NOT_ALLOWED,
     408: TIMEOUT,
+    409: ALREADY_EXISTS,
     413: TEXT_TOO_LONG,
     414: REQUEST_TOO_LONG,
     429: RATE_LIMIT_EXCEEDED,
@@ -618,6 +619,9 @@ class ErrorParser:
 
         if "method" in name and "allowed" in name:
             return METHOD_NOT_ALLOWED
+
+        if "already" in name and "exist" in name:
+            return ALREADY_EXISTS
 
         if "not" in name and "found" in name:
             return NOT_FOUND

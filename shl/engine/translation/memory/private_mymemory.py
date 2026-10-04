@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/memory/private_mymemory.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.15
+Version: 0.2.16
 License: MIT
 Description:
     MyMemory.dev memory backend for SHL.
@@ -20,6 +20,8 @@ from urllib.request import Request, urlopen
 
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value
+from ...errors.parser import ErrorParser
+from ...errors.providers import MYMEMORY_DEV
 
 
 class MyMemoryError(Exception):
@@ -61,6 +63,11 @@ class PrivateMyMemoryBackend:
         self.api_key = api_key or get_env_value(api_key_env)
         self.space_uuid = space_uuid
         self.timeout = timeout
+
+        self.error_parser = ErrorParser(
+            provider="mymemory_dev",
+            config=MYMEMORY_DEV,
+        )
 
         if not self.api_key:
             raise MyMemoryAuthError(
@@ -161,7 +168,10 @@ class PrivateMyMemoryBackend:
         Perform a semantic search against MyMemory.dev memories.
 
         The deployed API uses POST /search with a 'query' field.
-        Search is semantic rather than keyword based.
+        An optional 'spaceId' restricts the search to one space.
+
+        If MyMemory.dev reports ignoredFields, the request is rejected
+        instead of silently continuing with an unexpected search scope.
         """
         payload: Dict[str, Any] = {
             "query": query,
@@ -175,7 +185,66 @@ class PrivateMyMemoryBackend:
 
         data = self._post("/search", payload)
 
-        return data.get("results", [])
+        ignored_fields = data.get("ignoredFields", [])
+
+        if ignored_fields:
+            raise MyMemoryValidationError(
+                f"MyMemory.dev ignored search fields: {ignored_fields}"
+            )
+
+        results = data.get("results", [])
+
+        if not isinstance(results, list):
+            raise MyMemoryValidationError(
+                "MyMemory.dev returned invalid search results."
+            )
+
+        return results
+
+    # ------------------------------------------------------------
+    # Error handling
+    # ------------------------------------------------------------
+
+    def _raise_normalized_error(
+        self,
+        error: Any,
+    ) -> None:
+        """
+        Convert a normalized SHL error into the existing
+        MyMemory.dev backend exception hierarchy.
+        """
+
+        if error is None:
+            raise MyMemoryHTTPError(
+                "MyMemory.dev returned an unknown error."
+            )
+
+        message = error.message or (
+            f"MyMemory.dev request failed: {error.code}"
+        )
+
+        if error.code in {
+            "AUTH_FAILED",
+            "AUTH_EXPIRED",
+            "AUTH_BLOCKED",
+        }:
+            raise MyMemoryAuthError(message)
+
+        if error.code == "NOT_FOUND":
+            raise MyMemoryNotFoundError(message)
+
+        if error.code in {
+            "INVALID_REQUEST",
+            "TEXT_TOO_LONG",
+            "REQUEST_TOO_LONG",
+            "METHOD_NOT_ALLOWED",
+        }:
+            raise MyMemoryValidationError(message)
+
+        if error.code == "ALREADY_EXISTS":
+            raise MyMemoryAlreadyExistsError(message)
+
+        raise MyMemoryHTTPError(message)
 
     # ------------------------------------------------------------
     # HTTP helpers
@@ -239,7 +308,10 @@ class PrivateMyMemoryBackend:
         self.space_uuid = uuid
         return uuid
 
-    def _get(self, endpoint: str) -> Dict[str, Any]:
+    def _get(
+        self,
+        endpoint: str,
+    ) -> Dict[str, Any]:
         """Perform an authenticated GET request."""
         return self._request("GET", endpoint)
 
@@ -283,7 +355,6 @@ class PrivateMyMemoryBackend:
                 timeout=self.timeout,
             ) as response:
                 status_code = response.status
-                response_url = response.geturl()
                 response_body = response.read()
 
         except HTTPError as error:
@@ -292,32 +363,60 @@ class PrivateMyMemoryBackend:
             except Exception:
                 response_body = b""
 
-            return self._handle_response(
-                status_code=error.code,
-                response_url=error.geturl(),
-                response_body=response_body,
+            response_data = self._decode_json(response_body)
+
+            normalized_error = self.error_parser.parse(
+                response_data,
+                http_status=error.code,
             )
 
+            self._raise_normalized_error(normalized_error)
+
         except URLError as error:
-            raise MyMemoryHTTPError(
-                f"MyMemory.dev request failed: {error.reason}"
-            ) from error
+            normalized_error = self.error_parser.parse(
+                {},
+                exception=ConnectionError(
+                    f"MyMemory.dev connection failed: {error.reason}"
+                ),
+            )
+
+            self._raise_normalized_error(normalized_error)
 
         except TimeoutError as error:
-            raise MyMemoryHTTPError(
-                f"MyMemory.dev request timed out: {error}"
-            ) from error
+            normalized_error = self.error_parser.parse(
+                {},
+                exception=error,
+            )
+
+            self._raise_normalized_error(normalized_error)
 
         except OSError as error:
-            raise MyMemoryHTTPError(
-                f"MyMemory.dev request failed: {error}"
-            ) from error
+            normalized_error = self.error_parser.parse(
+                {},
+                exception=error,
+            )
 
-        return self._handle_response(
-            status_code=status_code,
-            response_url=response_url,
-            response_body=response_body,
-        )
+            self._raise_normalized_error(normalized_error)
+
+        response_data = self._decode_json(response_body)
+
+        if status_code >= 400:
+            normalized_error = self.error_parser.parse(
+                response_data,
+                http_status=status_code,
+            )
+
+            self._raise_normalized_error(normalized_error)
+
+        if not isinstance(response_data, dict):
+            normalized_error = self.error_parser.parse(
+                response_body,
+                http_status=status_code,
+            )
+
+            self._raise_normalized_error(normalized_error)
+
+        return response_data
 
     @staticmethod
     def _decode_json(
@@ -331,70 +430,9 @@ class PrivateMyMemoryBackend:
             return json.loads(
                 response_body.decode("utf-8")
             )
-        except (UnicodeDecodeError, json.JSONDecodeError):
+        except (
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ):
             return {}
 
-    @classmethod
-    def _handle_response(
-        cls,
-        status_code: int,
-        response_url: str,
-        response_body: bytes,
-    ) -> Dict[str, Any]:
-        """Convert an HTTP response into a Python dictionary."""
-        data = cls._decode_json(response_body)
-
-        if status_code in (200, 201):
-            return data if isinstance(data, dict) else {}
-
-        if status_code == 401:
-            raise MyMemoryAuthError(
-                "MyMemory.dev authentication failed."
-            )
-
-        if status_code == 404:
-            raise MyMemoryNotFoundError(
-                f"MyMemory.dev resource not found: {response_url}"
-            )
-
-        if status_code == 400:
-            issues = (
-                data.get("issues")
-                if isinstance(data, dict)
-                else None
-            )
-
-            if issues:
-                raise MyMemoryValidationError(
-                    f"MyMemory.dev validation error: {issues}"
-                )
-
-            raise MyMemoryValidationError(
-                f"MyMemory.dev rejected the request: {data}"
-            )
-
-        if status_code == 409:
-            error_message = (
-                data.get(
-                    "error",
-                    "Memory already exists.",
-                )
-                if isinstance(data, dict)
-                else "Memory already exists."
-            )
-
-            raise MyMemoryAlreadyExistsError(
-                f"MyMemory.dev memory already exists: {error_message}"
-            )
-
-        if isinstance(data, (dict, list)):
-            error_data = data
-        else:
-            try:
-                error_data = response_body.decode("utf-8")
-            except UnicodeDecodeError:
-                error_data = repr(response_body)
-
-        raise MyMemoryHTTPError(
-            f"MyMemory.dev returned HTTP {status_code}: {error_data}"
-        )
