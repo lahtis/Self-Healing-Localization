@@ -17,5 +17,12 @@
     "Provider Capabilities": "Udbyderkapaciteter",
     "File": "Fil",
     "Language": "Sprog",
-    "Detection Priority": "Detektionsprioritet"
+    "Detection Priority": "Detektionsprioritet",
+    "Source": "Kilde",
+    "Capability": "Egenskaber",
+    "SHL": "DNA",
+    "Allow": "Tillad",
+    "Deny": "Afvis",
+    "Yes": "Ja",
+    "No": "Nej"
 }

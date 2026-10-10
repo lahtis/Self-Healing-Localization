@@ -2,7 +2,7 @@
 File: shl/engine/language_detection/provider_cache.py
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.3.0
+Version: 0.3.1
 Description:
     Language detection provider support and cache.
 
@@ -51,12 +51,16 @@ CACHE_FILE = PROJECT_DIR / ".language_detection_cache.json"
 # ---------------------------------------------------------------------------
 
 def load_cache() -> dict:
-    """Load the existing language detection cache or generate a new one."""
+    """Load the existing language detection cache or generate a new one.
+
+    A cache written before a provider was added is completed with the
+    missing providers only. Providers already in the file are kept.
+    """
 
     if CACHE_FILE.exists():
         try:
             with CACHE_FILE.open("r", encoding="utf-8") as file:
-                return json.load(file)
+                cache = json.load(file)
 
         except (json.JSONDecodeError, OSError):
             backup = CACHE_FILE.with_suffix(".json.bak")
@@ -66,7 +70,82 @@ def load_cache() -> dict:
             except OSError:
                 pass
 
+        else:
+            return _add_missing_providers(cache)
+
     return generate_cache()
+
+
+def _provider_fetchers() -> dict:
+    """Return provider name -> (fetch function, empty value on failure).
+
+    This is the single list of providers in the detection cache.
+    """
+
+    return {
+        "detectlanguage": (fetch_detectlanguage, dict),
+        "yandex": (fetch_yandex, dict),
+        "deepl": (fetch_deepl, list),
+    }
+
+
+def _fetch_provider(name: str) -> object:
+    """Fetch one provider's language data, or its empty value on failure."""
+
+    fetcher, empty = _provider_fetchers()[name]
+
+    # CHANGED: catch SafeHTTPError in addition to OSError so security
+    # and transport failures do not crash startup.
+    try:
+        return fetcher()
+    except (OSError, SafeHTTPError):
+        return empty()
+
+
+def _write_cache(cache: dict) -> None:
+    """Write the cache file."""
+
+    CACHE_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with CACHE_FILE.open("w", encoding="utf-8") as file:
+        json.dump(
+            cache,
+            file,
+            indent=4,
+            ensure_ascii=False,
+        )
+
+
+def _add_missing_providers(cache: object) -> dict:
+    """Fetch providers that are absent from an existing cache.
+
+    Existing entries are never refetched or overwritten, so a cache
+    that holds data from an earlier run keeps it.
+    """
+
+    if not isinstance(cache, dict) or not isinstance(
+        cache.get("providers"), dict
+    ):
+        return generate_cache()
+
+    providers = cache["providers"]
+
+    missing = [
+        name for name in _provider_fetchers() if name not in providers
+    ]
+
+    if not missing:
+        return cache
+
+    for name in missing:
+        providers[name] = _fetch_provider(name)
+
+    _write_cache(cache)
+
+    return cache
 
 
 def fetch_json(
@@ -118,37 +197,14 @@ def fetch_json(
 def generate_cache() -> dict:
     """Generate the language detection provider cache."""
 
-    # CHANGED: catch SafeHTTPError in addition to OSError so security
-    # and transport failures do not crash startup.
-    try:
-        detectlanguage = fetch_detectlanguage()
-    except (OSError, SafeHTTPError):
-        detectlanguage = {}
-
-    try:
-        yandex = fetch_yandex()
-    except (OSError, SafeHTTPError):
-        yandex = {}
-
     cache = {
         "providers": {
-            "detectlanguage": detectlanguage,
-            "yandex": yandex,
+            name: _fetch_provider(name)
+            for name in _provider_fetchers()
         }
     }
 
-    CACHE_FILE.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    with CACHE_FILE.open("w", encoding="utf-8") as file:
-        json.dump(
-            cache,
-            file,
-            indent=4,
-            ensure_ascii=False,
-        )
+    _write_cache(cache)
 
     return cache
 
@@ -275,3 +331,70 @@ def fetch_yandex() -> dict:
             exc,
         )
         return {}
+
+def fetch_deepl() -> list:
+    """Fetch supported language codes from DeepL."""
+
+    api_key = get_env_value("DEEPL_API_KEY")
+
+    if not api_key:
+        logger.info("DeepL: API key not found")
+        return []
+
+    api_key = api_key.strip()
+
+    if api_key.endswith(":fx"):
+        base_url = "https://api-free.deepl.com"
+    else:
+        base_url = "https://api.deepl.com"
+
+    try:
+        request = Request(
+            f"{base_url}/v3/languages?resource=translate_text",
+            headers={
+                "Authorization": f"DeepL-Auth-Key {api_key}",
+                "User-Agent": "SHL-Client",
+                "Accept": "application/json",
+            },
+            method="GET",
+        )
+
+        with urlopen(request, timeout=10) as response:
+            raw = read_limited_response(
+                response,
+                MAX_RESPONSE_BYTES,
+            )
+
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            logger.error(
+                "DeepL language fetch failed: response is not JSON"
+            )
+            return []
+
+        if not isinstance(data, list):
+            logger.error(
+                "DeepL language fetch failed: unexpected response shape"
+            )
+            return []
+
+        languages = sorted(
+            lang["lang"].lower()
+            for lang in data
+            if isinstance(lang, dict) and lang.get("lang")
+        )
+
+        logger.info(
+            "DeepL: received %d languages",
+            len(languages),
+        )
+
+        return languages
+
+    except (OSError, SafeHTTPError) as exc:
+        logger.error(
+            "DeepL language fetch failed: %s",
+            exc,
+        )
+        return []

@@ -2,7 +2,7 @@
 File: shl/language_parser.py
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.2.16
+Version: 0.3.1
 Description:
 Language parser for SHL.
 
@@ -440,12 +440,26 @@ class LanguageParser:
         # --------------------------------------------------------------
 
         if language.script or language.region:
+            # The script is either explicit in the input or implied by
+            # the region (e.g. zh-TW -> Hant). The implied script is
+            # only used in the last step below, after the provider's
+            # own region codes have been tried.
+            script = language.script or self._infer_script(language)
+
+            # Every candidate below must belong to the same language as
+            # the input. Matching only the last subtag would let "uz-Latn"
+            # pick "iu-latn" or "fr-CA" pick the bare code "ca".
+            language_codes = self._language_base_codes(language)
+
             # First prefer an exact script + region match.
             if language.script and language.region:
                 for code in codes:
                     code_parts = code.split("-")
 
-                    if len(code_parts) >= 2:
+                    if (
+                        len(code_parts) >= 2
+                        and code_parts[0].casefold() in language_codes
+                    ):
                         if (
                             code_parts[-2].casefold()
                             == language.script.casefold()
@@ -459,22 +473,28 @@ class LanguageParser:
                 for code in codes:
                     code_parts = code.split("-")
 
-                    if code_parts:
+                    if (
+                        len(code_parts) >= 2
+                        and code_parts[0].casefold() in language_codes
+                    ):
                         if (
                             code_parts[-1].casefold()
                             == language.region.casefold()
                         ):
                             return code
 
-            # Finally try a provider code matching the explicit script.
-            if language.script:
+            # Finally try a provider code matching the script.
+            if script:
                 for code in codes:
                     code_parts = code.split("-")
 
-                    if len(code_parts) >= 2:
+                    if (
+                        len(code_parts) >= 2
+                        and code_parts[0].casefold() in language_codes
+                    ):
                         if (
                             code_parts[-1].casefold()
-                            == language.script.casefold()
+                            == script.casefold()
                         ):
                             return code
 
@@ -564,6 +584,71 @@ class LanguageParser:
         return None
 
     @staticmethod
+    def _language_base_codes(language: ParsedLanguage) -> set[str]:
+        """
+        Return the language codes GLFM knows for this language, folded
+        for comparison: ISO 639-1, ISO 639-3 and the BCP-47 base.
+
+        Used to make sure a provider code with a script or region
+        suffix belongs to the same language as the input.
+        """
+        codes: set[str] = set()
+
+        iso639_1 = language.glfm_info.get("iso639_1")
+
+        if isinstance(iso639_1, str) and iso639_1:
+            codes.add(iso639_1.casefold())
+
+        if language.iso639_3:
+            codes.add(language.iso639_3.casefold())
+
+        if language.bcp47:
+            codes.add(language.bcp47.split("-", 1)[0].casefold())
+
+        return codes
+
+    @staticmethod
+    def _infer_script(language: ParsedLanguage) -> Optional[str]:
+        """
+        Return the script implied by the input's region, if any.
+
+        The script comes from the GLFM record the input resolved to,
+        never from parser-side tables. It is used only when the input
+        has a region but no explicit script, and only when that region
+        is the one the GLFM record describes, either through its
+        BCP-47 tag (e.g. "zh-Hant-TW") or through its default_region
+        and default_script fields. If the record describes a different
+        region, nothing is inferred.
+        """
+        if language.script or not language.region:
+            return None
+
+        region = language.region.upper()
+
+        if language.bcp47:
+            _, tag_script, tag_region = parse_bcp47(language.bcp47)
+
+            if (
+                tag_script
+                and tag_region
+                and tag_region.upper() == region
+            ):
+                return tag_script.title()
+
+        default_region = language.glfm_info.get("default_region")
+        default_script = language.glfm_info.get("default_script")
+
+        if (
+            isinstance(default_region, str)
+            and isinstance(default_script, str)
+            and default_script
+            and default_region.upper() == region
+        ):
+            return default_script.title()
+
+        return None
+
+    @staticmethod
     def _find_case_insensitive(
         value: str,
         candidates: list[str],
@@ -578,4 +663,3 @@ class LanguageParser:
                 return candidate
 
         return None
-
