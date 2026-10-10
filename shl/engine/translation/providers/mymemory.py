@@ -1,22 +1,29 @@
 """
-File: mymemory.py — module for MyMemory translation adapter.
+File: shl/engine/translation/providers/mymemory.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.12
+Version: 0.3.0
 License: MIT
-Description: Robust translation provider adapter for the MyMemory API.
-Handles optional email-based quota enhancement, optional private
+Description: Robust translation provider adapter for the MyMemory
+API. Handles optional email-based quota enhancement, optional private
 translation memory access, registry validation, and security checks
-for suspicious output. (max allowed query : 500 chars)
+for suspicious output. Max allowed query: 500 chars.
+
+All outbound HTTP goes through safe_urlopen for SSRF prevention,
+redirect validation, and response size limits.
 """
 
 import json
 import logging
-import socket
-from typing import Any, Dict, Optional
-from urllib.error import HTTPError, URLError
+from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request
+
 from shl.utils.safe_http import safe_urlopen as urlopen
+from shl.utils.safe_http_common import (
+    MAX_RESPONSE_BYTES,
+    SafeHTTPError,
+    read_limited_response,
+)
 
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value, mask_api_key
@@ -43,13 +50,13 @@ MYMEMORY_TIMEOUT = 10
 MYMEMORY_DEFAULT_URL = "https://api.mymemory.translated.net/get"
 
 
-# Shared registry instance.
+# Shared registry instance, so runtime pair blacklist survives adapter
+# recreation.
 _registry = MyMemoryRegistry()
 
 
 class MyMemoryAdapter(TranslationProvider):
-    """
-    MyMemory translation adapter.
+    """MyMemory translation adapter.
 
     Supports:
     - source and target language selection
@@ -62,25 +69,17 @@ class MyMemoryAdapter(TranslationProvider):
 
     def __init__(
         self,
-        email: Optional[str] = None,
-        api_key: Optional[str] = None,
-        cache_ttl: Optional[float] = None,
+        email: str | None = None,
+        api_key: str | None = None,
+        cache_ttl: float | None = None,
     ):
-        """
-        Initialize the MyMemory adapter.
+        """Initialize the MyMemory adapter.
 
-        Email and API key are both optional. If omitted, they are read
-        from the SHL environment configuration.
+        Email and API key are both optional. If omitted, they are
+        read from the SHL environment configuration.
         """
-        self.email = email or get_env_value(
-            "MYMEMORY_EMAIL",
-            "",
-        )
-
-        self.api_key = api_key or get_env_value(
-            "MYMEMORY_API_KEY",
-            "",
-        )
+        self.email = email or get_env_value("MYMEMORY_EMAIL", "")
+        self.api_key = api_key or get_env_value("MYMEMORY_API_KEY", "")
 
         if self.email:
             self.email = self.email.strip()
@@ -108,30 +107,20 @@ class MyMemoryAdapter(TranslationProvider):
         return "mymemory"
 
     @property
-    def supported_features(self) -> list:
+    def supported_features(self) -> list[str]:
         return []
 
-    def translate(
-        self,
-        request: TranslationRequest,
-    ) -> str:
-        """
-        Translate text using the MyMemory API.
-        """
-        source = (
-            request.source_lang or ""
-        ).lower().strip()
+    def translate(self, request: TranslationRequest) -> str:
+        """Translate text using the MyMemory API."""
 
+        source = (request.source_lang or "").lower().strip()
         target = request.target_lang.lower().strip()
 
         # Fast-fail using the local registry.
-        if not _registry.is_pair_supported(
-            source,
-            target,
-        ):
+        if not _registry.is_pair_supported(source, target):
             raise LanguageNotSupportedError(
-                f"MyMemory: language pair '{source}|{target}' "
-                "is not supported or is temporarily blocked."
+                f"MyMemory: language pair '{source}|{target}' is not "
+                "supported or is temporarily blocked."
             )
 
         payload = self.build_request(request)
@@ -140,51 +129,43 @@ class MyMemoryAdapter(TranslationProvider):
             return self._call_api(payload)
 
         except LanguageNotSupportedError:
-            _registry.mark_pair_unsupported(
-                source,
-                target,
-            )
+            _registry.mark_pair_unsupported(source, target)
             raise
 
     def build_request(
         self,
         request: TranslationRequest,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build the MyMemory API request."""
-        source = (
-            request.source_lang or ""
-        ).lower().strip()
 
+        source = (request.source_lang or "").lower().strip()
         target = request.target_lang.lower().strip()
 
-        payload: Dict[str, Any] = {
+        # Explicit annotation is required because the payload mixes
+        # str values with optional fields.
+        payload: dict[str, Any] = {
             "q": request.text,
             "langpair": f"{source}|{target}",
         }
 
-        # Optional email. MyMemory can use this to provide
-        # a higher request quota.
+        # Optional email. MyMemory can use this to provide a higher
+        # request quota.
         if self.email:
             payload["de"] = self.email
 
-        # Optional API key. The key is used for private
-        # translation memory access and is sent through
-        # the Authorization header.
+        # Optional API key. The key is used for private translation
+        # memory access and is sent through the Authorization header.
         if self.api_key:
             payload["key"] = self.api_key
 
         return payload
 
-    def _call_api(
-        self,
-        payload: Dict[str, Any],
-    ) -> str:
-        """
-        Call the MyMemory API with the built GET request.
+    def _call_api(self, payload: dict[str, Any]) -> str:
+        """Call the MyMemory API with the built GET request.
 
-        The optional email is sent as the `de` query parameter.
-        The optional API key is sent using Bearer authentication
-        and is never included in the URL.
+        The optional email is sent as the ``de`` query parameter.
+        The optional API key is sent using Bearer authentication and
+        is never included in the URL.
         """
         try:
             query_params = {
@@ -205,8 +186,8 @@ class MyMemoryAdapter(TranslationProvider):
                 "Accept": "application/json",
             }
 
-            # Use Bearer authentication for private
-            # translation memory access.
+            # Use Bearer authentication for private translation
+            # memory access.
             if payload.get("key"):
                 headers["Authorization"] = (
                     f"Bearer {payload['key']}"
@@ -228,74 +209,44 @@ class MyMemoryAdapter(TranslationProvider):
                 method="GET",
             )
 
-            logger.debug(
-                "MYMEMORY DEBUG: calling API langpair=%s",
-                payload["langpair"],
-            )
-
             with urlopen(
                 request,
                 timeout=MYMEMORY_TIMEOUT,
             ) as response:
-                response_data = json.loads(
-                    response.read().decode("utf-8")
+                raw = read_limited_response(
+                    response,
+                    MAX_RESPONSE_BYTES,
                 )
-
-            logger.debug(
-                "MYMEMORY DEBUG response: %r",
-                response_data,
-            )
+                response_data = json.loads(raw.decode("utf-8"))
 
             if not isinstance(response_data, dict):
                 raise TranslationError(
                     "MyMemory returned an invalid response payload."
                 )
 
-            response_status = response_data.get(
-                "responseStatus"
-            )
-
-            logger.debug("MyMemory raw responseStatus=%r type=%s", response_status, type(response_status).__name__,)
-
-            response_details = response_data.get(
-                "responseData",
-                {},
-            )
-
-            logger.debug(
-                "MyMemory responseData keys=%s",
-                list(response_details.keys())
-                if isinstance(response_details, dict)
-                else type(response_details).__name__,
-                )
+            response_status = response_data.get("responseStatus")
+            response_details = response_data.get("responseData", {})
 
             if not isinstance(response_details, dict):
                 raise TranslationError(
-                    "MyMemory returned an invalid "
-                    "responseData payload."
+                    "MyMemory returned an invalid responseData "
+                    "payload."
                 )
 
             quota_reached = response_data.get(
                 "quotaReached",
                 False,
             )
-
-            response_warning = response_details.get(
-                "warning",
-                "",
-            )
+            response_warning = response_details.get("warning", "")
 
             # --- QUOTA / RATE LIMIT ---
 
             if (
                 quota_reached
-                or "quota" in str(
-                    response_warning
-                ).lower()
+                or "quota" in str(response_warning).lower()
             ):
                 raise RateLimitExceededError(
-                    "MyMemory: quota reached: "
-                    f"{response_warning}"
+                    f"MyMemory: quota reached: {response_warning}"
                 )
 
             # --- STATUS HANDLING ---
@@ -307,25 +258,17 @@ class MyMemoryAdapter(TranslationProvider):
                 )
 
                 if normalized is not None:
-                    raise self._map_normalized_error(
-                        normalized
-                    )
+                    raise self._map_normalized_error(normalized)
 
                 raise TranslationError(
-                    "MyMemory: unexpected status "
-                    f"{response_status}"
+                    f"MyMemory: unexpected status {response_status}"
                 )
 
-            translated = response_details.get(
-                "translatedText"
-            )
+            translated = response_details.get("translatedText")
 
             try:
                 match_quality = float(
-                    response_details.get(
-                        "match",
-                        0,
-                    )
+                    response_details.get("match", 0)
                 )
             except (TypeError, ValueError):
                 match_quality = 0.0
@@ -341,10 +284,7 @@ class MyMemoryAdapter(TranslationProvider):
                     "MyMemory returned empty text."
                 )
 
-            if (
-                translated.strip()
-                == payload["q"].strip()
-            ):
+            if translated.strip() == payload["q"].strip():
                 raise TranslationError(
                     "MyMemory returned unchanged text."
                 )
@@ -352,18 +292,14 @@ class MyMemoryAdapter(TranslationProvider):
             # 2. Weak match quality.
             if match_quality < 0.1:
                 raise TranslationError(
-                    "MyMemory returned suspiciously weak "
-                    f"match quality ({match_quality})."
+                    "MyMemory returned suspiciously weak match "
+                    f"quality ({match_quality})."
                 )
 
             # 3. Suspiciously short output.
-            if (
-                len(translated) < 3
-                and len(payload["q"]) > 20
-            ):
+            if len(translated) < 3 and len(payload["q"]) > 20:
                 raise TranslationError(
-                    "MyMemory returned suspiciously "
-                    "short output."
+                    "MyMemory returned suspiciously short output."
                 )
 
             logger.debug(
@@ -372,68 +308,45 @@ class MyMemoryAdapter(TranslationProvider):
                 match_quality,
                 bool(payload.get("key")),
             )
-
             return translated
 
-        except HTTPError as error:
-            logger.debug(
-                "MYMEMORY DEBUG: HTTP ERROR: %s",
-                error.code,
-            )
-            response_body = None
-
-            try:
-                response_body = error.read().decode(
-                    "utf-8",
-                    errors="replace",
+        # safe_urlopen converts urllib's HTTPError and URLError into
+        # SafeHTTPError before they leave the safe layer. The HTTP
+        # status and response body are preserved on the error object.
+        except SafeHTTPError as error:
+            if error.status_code is None:
+                # Transport-level failure, no HTTP status.
+                normalized = self.error_parser.parse(
+                    {},
+                    exception=error,
                 )
-            except Exception:
-                response_body = None
+                raise self._map_normalized_error(normalized) from error
 
             normalized = self.error_parser.parse(
-                response_body,
-                http_status=error.code,
+                error.response_body,
+                http_status=error.status_code,
             )
 
             if normalized is None:
                 raise TranslationError(
-                    f"MyMemory HTTP {error.code}"
+                    f"MyMemory HTTP {error.status_code}"
                 ) from error
 
-            raise self._map_normalized_error(
-                normalized
-            ) from error
+            raise self._map_normalized_error(normalized) from error
 
-        except URLError as error:
-            logger.debug(
-                "MYMEMORY DEBUG: URLError: %r",
-                error,
-            )
-
+        except TimeoutError as error:
             normalized = self.error_parser.parse(
+                {},
                 exception=error,
             )
+            raise self._map_normalized_error(normalized) from error
 
-            raise self._map_normalized_error(
-                normalized
-            ) from error
-
-        except (
-            socket.timeout,
-            TimeoutError,
-        ) as error:
-            logger.debug(
-                "MYMEMORY DEBUG: TIMEOUT: %r",
-                error,
-            )
-
+        except OSError as error:
             normalized = self.error_parser.parse(
+                {},
                 exception=error,
             )
-
-            raise self._map_normalized_error(
-                normalized
-            ) from error
+            raise self._map_normalized_error(normalized) from error
 
         except (
             RateLimitExceededError,
@@ -452,14 +365,17 @@ class MyMemoryAdapter(TranslationProvider):
 
         except Exception as error:
             raise TranslationError(
-                "MyMemory unexpected error: "
+                f"MyMemory unexpected error: "
                 f"{type(error).__name__}: {error}"
             ) from error
 
     @staticmethod
     def _map_normalized_error(error) -> Exception:
-        """Map a normalized SHL error to existing adapter exceptions."""
+        """Map a normalized SHL error to existing adapter exceptions.
 
+        Unlike most adapters, this returns an exception instead of
+        raising it. The caller decides when to raise.
+        """
         if error.code == "RATE_LIMIT_EXCEEDED":
             return RateLimitExceededError(
                 error.message or "MyMemory rate limit exceeded."

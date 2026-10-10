@@ -1,20 +1,27 @@
 """
-File: libretranslate_community.py — LibreTranslate Community translation adapter.
+File: shl/engine/translation/providers/libretranslate_community/libretranslate_community.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.13
+Version: 0.3.0
 License: MIT
 Description: Translation provider adapter for LibreTranslate Community
-             endpoints. Tries configured Community endpoints in order
-             and returns the first successful translation.
+endpoints. Tries configured Community endpoints in order and returns
+the first successful translation.
+
+All outbound HTTP goes through safe_urlopen for SSRF prevention,
+redirect validation, and response size limits.
 """
 
 import json
 import logging
-import socket
-from typing import Any, Dict, List, Optional
-from urllib.error import HTTPError, URLError
+from typing import Any, NoReturn
 from urllib.request import Request
+
 from shl.utils.safe_http import safe_urlopen as urlopen
+from shl.utils.safe_http_common import (
+    MAX_RESPONSE_BYTES,
+    SafeHTTPError,
+    read_limited_response,
+)
 
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value, mask_api_key
@@ -32,10 +39,11 @@ from ....errors.parser import ErrorParser
 from ....errors.providers import LIBRETRANSLATE
 from ..base import TranslationProvider
 
-from .endpoints import LIBRETRANSLATE_COMMUNITY_ENDPOINTS
+from .endpoints import load_endpoints
 from .libretranslate_community_registry import (
     LibreTranslateCommunityRegistry,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,30 +51,28 @@ LIBRETRANSLATE_COMMUNITY_TIMEOUT = 15
 
 
 class LibreTranslateCommunityAdapter(TranslationProvider):
-    """
-    LibreTranslate Community translation provider.
+    """LibreTranslate Community translation provider.
 
-    The provider uses a static list of LibreTranslate-compatible
-    Community endpoints and tries them in order until one succeeds.
+    Endpoints are resolved by load_endpoints(), which honours the
+    user override file (<cwd>/libretranslate_endpoints.json) and
+    falls back to library defaults when the file is absent. Endpoints
+    are tried in order until one succeeds.
     """
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
     ):
         self.api_key = (
             api_key
-            or get_env_value(
-                "LIBRETRANSLATE_COMMUNITY_API_KEY"
-            )
+            or get_env_value("LIBRETRANSLATE_COMMUNITY_API_KEY")
             or ""
         )
 
-        self.endpoints = [
-            str(endpoint).rstrip("/")
-            for endpoint in LIBRETRANSLATE_COMMUNITY_ENDPOINTS
-            if endpoint
-        ]
+        # Load endpoints via the resolver so the user override file
+        # (<cwd>/libretranslate_endpoints.json) is honoured, and the
+        # file is created from defaults on first call.
+        self.endpoints = load_endpoints()
 
         self.registry = LibreTranslateCommunityRegistry()
 
@@ -87,25 +93,18 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
         return "libretranslate_community"
 
     @property
-    def supported_features(self) -> List[str]:
+    def supported_features(self) -> list[str]:
         return []
 
-    def supports_feature(
-        self,
-        feature: str,
-    ) -> bool:
+    def supports_feature(self, feature: str) -> bool:
         return feature.lower() in self.supported_features
 
-    def translate(
-        self,
-        request: TranslationRequest,
-    ) -> str:
+    def translate(self, request: TranslationRequest) -> str:
         """Translate text using LibreTranslate Community endpoints."""
 
         if not self.endpoints:
             raise ServiceUnavailableError(
-                "LibreTranslate Community: "
-                "no endpoints configured"
+                "LibreTranslate Community: no endpoints configured"
             )
 
         if not self.registry.is_pair_supported(
@@ -126,7 +125,7 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
 
         payload = self.build_request(request)
 
-        last_error = None
+        last_error: Exception | None = None
 
         for endpoint in self.endpoints:
             try:
@@ -134,12 +133,7 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
                     "LibreTranslate Community trying endpoint: %s",
                     endpoint,
                 )
-
-                return self._call_api(
-                    endpoint,
-                    payload,
-                    request,
-                )
+                return self._call_api(endpoint, payload, request)
 
             except LanguageNotSupportedError as error:
                 logger.debug(
@@ -149,7 +143,6 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
                     request.target_lang,
                     error,
                 )
-
                 last_error = error
                 continue
 
@@ -163,7 +156,6 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
                     endpoint,
                     error,
                 )
-
                 last_error = error
                 continue
 
@@ -174,7 +166,6 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
                     endpoint,
                     error,
                 )
-
                 last_error = error
                 continue
 
@@ -185,7 +176,6 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
                     endpoint,
                     error,
                 )
-
                 last_error = error
                 continue
 
@@ -193,17 +183,18 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
             raise last_error
 
         raise ServiceUnavailableError(
-            "LibreTranslate Community: "
-            "all endpoints failed"
+            "LibreTranslate Community: all endpoints failed"
         )
 
     def build_request(
         self,
         request: TranslationRequest,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build LibreTranslate Community API request."""
 
-        payload: Dict[str, Any] = {
+        # Explicit annotation is required because the payload holds
+        # a mix of str values and an optional api_key.
+        payload: dict[str, Any] = {
             "q": request.text,
             "source": request.source_lang,
             "target": request.target_lang,
@@ -218,16 +209,14 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
     def _raise_normalized_error(
         self,
         error,
-        request: Optional[TranslationRequest] = None,
-    ) -> None:
-        """
-        Convert a normalized SHL error into the existing adapter
-        exception hierarchy.
+        request: TranslationRequest | None = None,
+    ) -> NoReturn:
+        """Convert a normalized SHL error into the adapter's exception
+        hierarchy. Always raises.
         """
 
         message = error.message or (
-            f"LibreTranslate Community request failed: "
-            f"{error.code}"
+            f"LibreTranslate Community request failed: {error.code}"
         )
 
         if error.code == "RATE_LIMIT_EXCEEDED":
@@ -278,10 +267,12 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
     def _call_api(
         self,
         endpoint: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         request: TranslationRequest,
     ) -> str:
-        """Execute request against one LibreTranslate Community endpoint."""
+        """Execute request against one LibreTranslate Community
+        endpoint.
+        """
 
         try:
             url = f"{endpoint}/translate"
@@ -310,144 +301,103 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
                 req,
                 timeout=LIBRETRANSLATE_COMMUNITY_TIMEOUT,
             ) as response:
-
-                raw_response = response.read().decode(
-                    "utf-8"
+                raw = read_limited_response(
+                    response,
+                    MAX_RESPONSE_BYTES,
                 )
-
-                response_data = self.error_parser._decode_payload(
-                    raw_response
-                )
-
-                if response_data is None:
-                    error = self.error_parser.parse(
-                        raw_response,
-                        http_status=response.status,
-                    )
-                    self._raise_normalized_error(
-                        error,
-                        request,
-                    )
-
-                translated = response_data.get(
-                    "translatedText"
-                )
-
-                # Empty output is a provider error.
-                # Unchanged output is NOT an error here.
-                # The translation router must validate it using
-                # SHL language detection.
-                if not isinstance(translated, str):
-                    error = self.error_parser.parse(
-                        {
-                            "message": (
-                                "LibreTranslate Community returned "
-                                "an invalid translation payload."
-                            )
-                        },
-                        http_status=response.status,
-                    )
-                    self._raise_normalized_error(
-                        error,
-                        request,
-                    )
-
-                if not translated.strip():
-                    error = self.error_parser.parse(
-                        {
-                            "message": (
-                                "LibreTranslate Community returned "
-                                "empty text."
-                            )
-                        },
-                        http_status=response.status,
-                    )
-                    self._raise_normalized_error(
-                        error,
-                        request,
-                    )
-
-                logger.debug(
-                    "LibreTranslate Community translation successful "
-                    "(endpoint=%s)",
-                    endpoint,
-                )
-
-                return translated
-
-        except HTTPError as e:
-            response_data = None
+                raw_response = raw.decode("utf-8")
+                status_code = response.status
 
             try:
-                raw_body = e.read().decode("utf-8")
+                response_data = json.loads(raw_response)
+            except json.JSONDecodeError:
+                error = self.error_parser.parse(
+                    raw_response,
+                    http_status=status_code,
+                )
+                self._raise_normalized_error(error, request)
 
-                if raw_body:
-                    response_data = json.loads(raw_body)
+            if not isinstance(response_data, dict):
+                error = self.error_parser.parse(
+                    raw_response,
+                    http_status=status_code,
+                )
+                self._raise_normalized_error(error, request)
 
-            except (
-                UnicodeDecodeError,
-                json.JSONDecodeError,
-            ):
-                response_data = None
+            translated = response_data.get("translatedText")
 
-            if response_data is None:
+            # Empty output is a provider error.
+            # Unchanged output is NOT an error here — the translation
+            # router validates unchanged results using SHL language
+            # detection.
+            if not isinstance(translated, str):
+                error = self.error_parser.parse(
+                    {
+                        "message": (
+                            "LibreTranslate Community returned an "
+                            "invalid translation payload."
+                        )
+                    },
+                    http_status=status_code,
+                )
+                self._raise_normalized_error(error, request)
+
+            if not translated.strip():
+                error = self.error_parser.parse(
+                    {
+                        "message": (
+                            "LibreTranslate Community returned empty "
+                            "text."
+                        )
+                    },
+                    http_status=status_code,
+                )
+                self._raise_normalized_error(error, request)
+
+            logger.debug(
+                "LibreTranslate Community translation successful "
+                "(endpoint=%s)",
+                endpoint,
+            )
+            return translated
+
+        # safe_urlopen converts urllib's HTTPError and URLError into
+        # SafeHTTPError before they leave the safe layer. The HTTP
+        # status and response body are preserved on the error object.
+        except SafeHTTPError as e:
+            if e.status_code is None:
+                # Transport-level failure, no HTTP status.
+                error = self.error_parser.parse({}, exception=e)
+                self._raise_normalized_error(error, request)
+
+            try:
+                response_data = json.loads(e.response_body or "")
+            except (json.JSONDecodeError, TypeError):
+                response_data = {}
+
+            if not isinstance(response_data, dict):
                 response_data = {}
 
             error = self.error_parser.parse(
                 response_data,
-                http_status=e.code,
+                http_status=e.status_code,
             )
 
             if error is None:
                 error = self.error_parser.parse(
                     {},
-                    http_status=e.code,
+                    http_status=e.status_code,
                 )
 
-            self._raise_normalized_error(
-                error,
-                request,
-            )
+            self._raise_normalized_error(error, request)
 
-        except URLError as e:
-            if isinstance(
-                e.reason,
-                (socket.timeout, TimeoutError),
-            ):
-                error = self.error_parser.parse(
-                    {},
-                    exception=TimeoutError(
-                        "LibreTranslate Community "
-                        "network timeout reached"
-                    ),
-                )
-            else:
-                error = self.error_parser.parse(
-                    {},
-                    exception=ConnectionError(
-                        "LibreTranslate Community socket "
-                        f"pipeline failure: {e.reason}"
-                    ),
-                )
+        except TimeoutError as e:
+            error = self.error_parser.parse({}, exception=e)
+            self._raise_normalized_error(error, request)
 
-            self._raise_normalized_error(
-                error,
-                request,
-            )
-
-        except (
-            socket.timeout,
-            TimeoutError,
-        ) as e:
-            error = self.error_parser.parse(
-                {},
-                exception=e,
-            )
-
-            self._raise_normalized_error(
-                error,
-                request,
-            )
+        except OSError as e:
+            error = self.error_parser.parse({}, exception=e)
+            self._raise_normalized_error(error, request)
 
         except (
             RateLimitExceededError,
@@ -460,12 +410,5 @@ class LibreTranslateCommunityAdapter(TranslationProvider):
             raise
 
         except Exception as e:
-            error = self.error_parser.parse(
-                {},
-                exception=e,
-            )
-
-            self._raise_normalized_error(
-                error,
-                request,
-            )
+            error = self.error_parser.parse({}, exception=e)
+            self._raise_normalized_error(error, request)

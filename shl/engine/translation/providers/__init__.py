@@ -1,11 +1,12 @@
 """
-File: __init__.py — Translation providers package.
+File: shl/engine/translation/providers/__init__.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.3.0
 License: MIT
-Description: Central export manifest for the SHL translation providers package.
-             Exposes routing interfaces, provider adapters, caching mechanics,
-             and exception taxonomy under a unified public API namespace.
+Description: Central export manifest for the SHL translation providers
+package. Exposes routing interfaces, provider adapters, caching
+mechanics, and exception taxonomy under a unified public API
+namespace.
 """
 
 from .base import TranslationProvider

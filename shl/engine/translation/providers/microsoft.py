@@ -1,21 +1,28 @@
 """
-File: microsoft_translator.py — module for Microsoft Translator adapter.
+File: shl/engine/translation/providers/microsoft.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.3.0
 License: MIT
-Description: Robust translation provider adapter for the Microsoft Translator API.
-Handles advanced features including context matching,
-formality adjustment, HTML handling, service availability registry (TTL),
-and security checks for suspicious output.
+Description: Robust translation provider adapter for the Microsoft
+Translator API. Handles advanced features including context matching,
+formality adjustment, HTML handling, service availability registry
+(TTL), and security checks for suspicious output.
+
+All outbound HTTP goes through safe_urlopen for SSRF prevention,
+redirect validation, and response size limits.
 """
 
 import json
 import logging
-import socket
-from typing import Dict, Any, Optional
+from typing import Any
 from urllib.request import Request
+
 from shl.utils.safe_http import safe_urlopen as urlopen
-from urllib.error import URLError, HTTPError
+from shl.utils.safe_http_common import (
+    MAX_RESPONSE_BYTES,
+    SafeHTTPError,
+    read_limited_response,
+)
 
 from shl._version import __version__ as SHL_VERSION
 from shl.config import get_config_value
@@ -34,41 +41,53 @@ from .microsoft_registry import MicrosoftServiceRegistry
 from ...errors.parser import ErrorParser
 from ...errors.providers import MICROSOFT
 
+
 logger = logging.getLogger(__name__)
 
 MS_TIMEOUT = 15
 
 
 class MicrosoftTranslatorAdapter(TranslationProvider):
-    """
-    Microsoft Translator adapter.
+    """Microsoft Translator adapter.
+
     Supports:
     - text, source_lang, target_lang
     - context (built from SHL metadata)
     - formality (where supported)
     - html_format
     - service availability registry (TTL)
-    - security checks
+    - security checks for suspicious output
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
 
-        # Käytä annettua avainta tai lue ympäristömuuttujasta
-        self.api_key = api_key or get_env_value("MICROSOFT_TRANSLATOR_KEY")
+        # Use the supplied key or read from environment.
+        self.api_key = api_key or get_env_value(
+            "MICROSOFT_TRANSLATOR_KEY"
+        )
 
         if not self.api_key:
             raise ValueError(
-                "Microsoft Translator API key must be provided as parameter or "
-                "set as MICROSOFT_TRANSLATOR_KEY in ./.env/shl/.env"
+                "Microsoft Translator API key must be provided as "
+                "parameter or set as MICROSOFT_TRANSLATOR_KEY in "
+                "./.env/shl/.env"
             )
 
         self.api_key = self.api_key.strip()
 
-        # Perus-API endpoint (v3)
-        self.base_url = "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0"
+        # Base API endpoint (v3).
+        self.base_url = (
+            "https://api.cognitive.microsofttranslator.com/"
+            "translate?api-version=3.0"
+        )
 
-        # Service-level TTL registry (ei kieliparirekisteriä)
-        ttl_env = float(get_config_value("ttl.microsoft_translator", "86400"))
+        # Service-level TTL registry (not a language-pair registry).
+        ttl_env = float(
+            get_config_value(
+                "ttl.microsoft_translator",
+                "86400",
+            )
+        )
 
         self.registry = MicrosoftServiceRegistry(ttl_seconds=ttl_env)
 
@@ -78,8 +97,10 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
         )
 
         logger.debug(
-            f"MicrosoftTranslatorAdapter initialized "
-            f"(api_key={mask_api_key(self.api_key)}, ttl={ttl_env}s)"
+            "MicrosoftTranslatorAdapter initialized "
+            "(api_key=%s, ttl=%ss)",
+            mask_api_key(self.api_key),
+            ttl_env,
         )
 
     @property
@@ -87,22 +108,26 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
         return "microsoft_translator"
 
     @property
-    def supported_features(self) -> list:
+    def supported_features(self) -> list[str]:
         return ["formality", "context", "html_format"]
 
     def translate(self, request: TranslationRequest) -> str:
         """Translate text using Microsoft Translator API."""
 
-        # Service-level availability check (TTL)
+        # Service-level availability check (TTL).
         if not self.registry.is_available():
             raise ServiceUnavailableError(
-                "Microsoft Translator marked temporarily unavailable by TTL registry"
+                "Microsoft Translator marked temporarily unavailable "
+                "by TTL registry"
             )
 
         payload = self.build_request(request)
         return self._call_api(payload, request)
 
-    def build_request(self, request: TranslationRequest) -> Dict[str, Any]:
+    def build_request(
+        self,
+        request: TranslationRequest,
+    ) -> dict[str, Any]:
         """Build Microsoft Translator API payload and query params."""
 
         body = [
@@ -111,26 +136,30 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
             }
         ]
 
-        params: Dict[str, Any] = {
+        # Explicit annotation is required because params holds a mix
+        # of str values and possibly None for optional fields.
+        params: dict[str, Any] = {
             "to": request.target_lang,
         }
 
         if request.source_lang:
             params["from"] = request.source_lang
 
-        # Formality (where supported)
+        # Formality (where supported).
         if request.formality:
             params["formality"] = (
-                "informal" if request.formality == "informal" else "formal"
+                "informal"
+                if request.formality == "informal"
+                else "formal"
             )
 
-        # HTML vs plain text
+        # HTML vs plain text.
         if request.html_format:
             params["textType"] = "html"
         else:
             params["textType"] = "plain"
 
-        # Context metadata
+        # Context metadata.
         context_parts = []
         if request.domain:
             context_parts.append(f"Domain: {request.domain}")
@@ -146,16 +175,22 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
         if context_parts:
             body[0]["context"] = " | ".join(context_parts)
 
-        return {"params": params, "body": body}
+        # Explicit annotation: params is dict[str, Any], body is
+        # list[dict[str, str]]. The return value mixes both.
+        payload: dict[str, Any] = {
+            "params": params,
+            "body": body,
+        }
+        return payload
 
     def _call_api(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         request: TranslationRequest,
     ) -> str:
         """Execute request against Microsoft Translator API."""
         try:
-            # Build query string
+            # Build query string.
             params = "&".join(
                 f"{k}={v}"
                 for k, v in payload["params"].items()
@@ -167,9 +202,11 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
             ).encode("utf-8")
 
             logger.debug(
-                f"Microsoft Translator request to {url} "
-                f"(api_key={mask_api_key(self.api_key)}, "
-                f"text length={len(payload['body'][0]['text'])})"
+                "Microsoft Translator request to %s "
+                "(api_key=%s, text length=%d)",
+                url,
+                mask_api_key(self.api_key),
+                len(payload["body"][0]["text"]),
             )
 
             req = Request(
@@ -185,84 +222,89 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
             )
 
             with urlopen(req, timeout=MS_TIMEOUT) as response:
-                response_data = json.loads(
-                    response.read().decode("utf-8")
+                raw = read_limited_response(
+                    response,
+                    MAX_RESPONSE_BYTES,
+                )
+                response_data = json.loads(raw.decode("utf-8"))
+
+            if not response_data or not isinstance(
+                response_data,
+                list,
+            ):
+                raise TranslationError(
+                    "Microsoft Translator returned an empty or "
+                    "invalid payload"
                 )
 
-                if not response_data or not isinstance(
-                    response_data,
-                    list,
-                ):
-                    raise TranslationError(
-                        "Microsoft Translator returned an empty or invalid payload"
-                    )
+            translations = response_data[0].get(
+                "translations",
+                [],
+            )
 
-                translations = response_data[0].get(
-                    "translations",
-                    [],
+            if not translations:
+                raise TranslationError(
+                    "Microsoft Translator returned no translations "
+                    "array"
                 )
 
-                if not translations:
-                    raise TranslationError(
-                        "Microsoft Translator returned no translations array"
-                    )
+            translated = translations[0].get("text", "")
 
-                translated = translations[0].get(
-                    "text",
-                    "",
+            # --- SECURITY CHECKS ---
+
+            # 1. Empty or unchanged output
+            if not translated or translated.strip() == "":
+                raise TranslationError(
+                    "Microsoft Translator returned empty text."
                 )
 
-                # --- SECURITY CHECKS ---
-
-                # 1. Empty or unchanged output
-                if not translated or translated.strip() == "":
-                    raise TranslationError(
-                        "Microsoft Translator returned empty text."
-                    )
-
-                if translated.strip() == request.text.strip():
-                    raise TranslationError(
-                        "Microsoft Translator returned unchanged text."
-                    )
-
-                # 2. Unexpected HTML markup when html_format=False
-                if not request.html_format:
-                    if "<" in translated and ">" in translated:
-                        raise TranslationError(
-                            "Microsoft Translator returned unexpected HTML markup."
-                        )
-
-                # 3. Suspiciously short output
-                if len(translated) < 3 and len(request.text) > 20:
-                    raise TranslationError(
-                        "Microsoft Translator returned suspiciously short output."
-                    )
-
-                logger.debug(
-                    "Microsoft Translator translation successful"
+            if translated.strip() == request.text.strip():
+                raise TranslationError(
+                    "Microsoft Translator returned unchanged text."
                 )
 
-                return translated
+            # 2. Unexpected HTML markup when html_format=False
+            if not request.html_format:
+                if "<" in translated and ">" in translated:
+                    raise TranslationError(
+                        "Microsoft Translator returned unexpected "
+                        "HTML markup."
+                    )
 
-        except HTTPError as e:
-            response_body = None
-
-            try:
-                response_body = e.read().decode(
-                    "utf-8",
-                    errors="replace",
+            # 3. Suspiciously short output
+            if len(translated) < 3 and len(request.text) > 20:
+                raise TranslationError(
+                    "Microsoft Translator returned suspiciously "
+                    "short output."
                 )
-            except Exception:
-                response_body = None
+
+            logger.debug(
+                "Microsoft Translator translation successful"
+            )
+            return translated
+
+        # safe_urlopen converts urllib's HTTPError and URLError into
+        # SafeHTTPError before they leave the safe layer. The HTTP
+        # status and response body are preserved on the error object.
+        except SafeHTTPError as e:
+            if e.status_code is None:
+                # Transport-level failure, no HTTP status.
+                self.registry.mark_unavailable()
+                normalized = self.error_parser.parse(
+                    {},
+                    exception=e,
+                )
+                raise self._map_normalized_error(normalized)
 
             normalized = self.error_parser.parse(
-                response_body,
-                http_status=e.code,
+                e.response_body,
+                http_status=e.status_code,
             )
 
             if normalized is None:
                 raise TranslationError(
-                    f"Microsoft Translator HTTP error status code: {e.code}"
+                    f"Microsoft Translator HTTP error status code: "
+                    f"{e.status_code}"
                 )
 
             if normalized.code in {
@@ -273,8 +315,9 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
 
             raise self._map_normalized_error(normalized)
 
-        except URLError as e:
+        except TimeoutError as e:
             normalized = self.error_parser.parse(
+                {},
                 exception=e,
             )
 
@@ -282,8 +325,9 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
 
             raise self._map_normalized_error(normalized)
 
-        except (socket.timeout, TimeoutError) as e:
+        except OSError as e:
             normalized = self.error_parser.parse(
+                {},
                 exception=e,
             )
 
@@ -308,22 +352,27 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
             self.registry.mark_unavailable()
 
             raise TranslationError(
-                f"Microsoft Translator unexpected execution layer failure: "
-                f"{type(e).__name__}: {e}"
+                f"Microsoft Translator unexpected execution layer "
+                f"failure: {type(e).__name__}: {e}"
             )
 
     @staticmethod
     def _map_normalized_error(error) -> Exception:
-        """Map a normalized SHL error to existing adapter exceptions."""
+        """Map a normalized SHL error to existing adapter exceptions.
 
+        Note: unlike most adapters, this method returns an exception
+        instead of raising it. The caller decides when to raise.
+        """
         if error.code == "RATE_LIMIT_EXCEEDED":
             return RateLimitExceededError(
-                error.message or "Microsoft Translator rate limit exceeded."
+                error.message
+                or "Microsoft Translator rate limit exceeded."
             )
 
         if error.code == "QUOTA_EXCEEDED":
             return RateLimitExceededError(
-                error.message or "Microsoft Translator quota exceeded."
+                error.message
+                or "Microsoft Translator quota exceeded."
             )
 
         if error.code in {
@@ -331,7 +380,8 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
             "SERVICE_UNAVAILABLE",
         }:
             return ServiceUnavailableError(
-                error.message or "Microsoft Translator service unavailable."
+                error.message
+                or "Microsoft Translator service unavailable."
             )
 
         if error.code in {
@@ -341,7 +391,8 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
             "ACCESS_DENIED",
         }:
             return ProviderAccessError(
-                error.message or "Microsoft Translator access denied."
+                error.message
+                or "Microsoft Translator access denied."
             )
 
         if error.code in {
@@ -365,5 +416,6 @@ class MicrosoftTranslatorAdapter(TranslationProvider):
             )
 
         return TranslationError(
-            error.message or "Microsoft Translator translation failed."
+            error.message
+            or "Microsoft Translator translation failed."
         )

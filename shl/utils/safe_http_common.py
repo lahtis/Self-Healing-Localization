@@ -17,7 +17,27 @@ from shl._version import __version__
 
 
 class SafeHTTPError(Exception):
-    """SHL exception for HTTP, transport, and security errors."""
+    """SHL exception for HTTP, transport, and security errors.
+
+    The `kind` attribute uses stable string values that
+    shl.engine.errors.parser maps to SHL error codes via its
+    HTTP_EXCEPTION_CODES table (see parser.py). Update both sides
+    together when adding a new kind — a mismatch means the parser
+    falls through to UNKNOWN_ERROR.
+
+    Known kinds and their SHL code mappings:
+        "http_error"           → NETWORK_ERROR (default)
+        "transport"            → NETWORK_ERROR
+        "timeout"              → TIMEOUT
+        "security"             → SECURITY_VIOLATION
+        "invalid_response"     → INVALID_RESPONSE
+        "invalid_content_type" → INVALID_CONTENT_TYPE
+        "response_too_large"   → RESPONSE_TOO_LARGE
+        "http_status"          → resolved from `status_code` at parse time
+
+    `status_code` and `response_body` are optional; the parser reads
+    them when present and does not require them.
+    """
 
     def __init__(
         self,

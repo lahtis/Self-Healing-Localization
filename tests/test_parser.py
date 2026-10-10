@@ -2,7 +2,7 @@
 """
 File: tests/test_parser.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.9
+Version: 0.3.0
 License: MIT
 Description:
 Tests for the provider-independent SHL error parser.
@@ -21,6 +21,7 @@ from shl.engine.errors.codes import (
     INVALID_RESPONSE,
     LANG_UNSUPPORTED,
     METHOD_NOT_ALLOWED,
+    NETWORK_ERROR,
     NOT_FOUND,
     QUOTA_EXCEEDED,
     RATE_LIMIT_EXCEEDED,
@@ -109,6 +110,7 @@ def test_http_404_maps_to_not_found():
     assert result is not None
     assert result.code == NOT_FOUND
 
+
 def test_http_405_maps_to_method_not_allowed():
     """HTTP 405 must map to METHOD_NOT_ALLOWED."""
     parser = ErrorParser("test_provider")
@@ -120,6 +122,7 @@ def test_http_405_maps_to_method_not_allowed():
 
     assert result is not None
     assert result.code == METHOD_NOT_ALLOWED
+
 
 def test_http_408_maps_to_timeout():
     """HTTP 408 must map to TIMEOUT."""
@@ -257,13 +260,32 @@ def test_broken_json_returns_invalid_response():
     assert result.code == INVALID_RESPONSE
 
 
-def test_empty_response_returns_invalid_response():
-    """An empty response must produce INVALID_RESPONSE."""
+# CHANGED: split into two tests. A 2xx response with an empty body is a
+# valid successful response (e.g. DELETE), not an error. Only a response
+# with neither body nor status is invalid.
+def test_empty_response_with_2xx_status_is_accepted():
+    """A 2xx response without a body is a valid successful response.
+
+    Endpoints such as DELETE return 200 or 204 with no body; the
+    parser must not treat that as an error.
+    """
     parser = ErrorParser("test_provider")
 
     result = parser.parse(
         response=None,
         http_status=200,
+    )
+
+    assert result is None
+
+
+def test_empty_response_without_status_is_invalid():
+    """A response with no body and no status cannot be validated."""
+    parser = ErrorParser("test_provider")
+
+    result = parser.parse(
+        response=None,
+        http_status=None,
     )
 
     assert result is not None
@@ -537,8 +559,17 @@ def test_timeout_exception_is_normalized():
     assert result.retryable is True
 
 
+# CHANGED: ConnectionError maps to NETWORK_ERROR, not SERVICE_UNAVAILABLE.
+# The distinction matters: NETWORK_ERROR means the connection could not
+# be established (DNS, refused, unreachable), while SERVICE_UNAVAILABLE
+# means an HTTP 5xx response was actually received.
 def test_connection_exception_is_normalized():
-    """Connection exceptions must map to SERVICE_UNAVAILABLE."""
+    """ConnectionError is a network-level failure, not a server outage.
+
+    It covers DNS failures, connection refused, and network unreachable
+    conditions. These are distinct from SERVICE_UNAVAILABLE (HTTP 5xx),
+    which means the server was reached but could not serve the request.
+    """
     parser = ErrorParser("test_provider")
 
     result = parser.parse(
@@ -548,7 +579,7 @@ def test_connection_exception_is_normalized():
     )
 
     assert result is not None
-    assert result.code == SERVICE_UNAVAILABLE
+    assert result.code == NETWORK_ERROR
     assert result.temporary is True
     assert result.retryable is True
 
@@ -602,6 +633,7 @@ def test_parser_preserves_error_message():
 
     assert result is not None
     assert result.message == "Something went wrong."
+
 
 # ---------------------------------------------------------------------------
 # Run tests

@@ -1,23 +1,30 @@
 """
-File: libretranslater.py — LibreTranslate translation adapter.
+File: shl/engine/translation/providers/libretranslate.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.13
+Version: 0.3.0
 License: MIT
-Description: Robust translation provider adapter for the LibreTranslate API.
-             Handles translation requests, supported-language discovery,
-             language-pair registry validation, configurable API endpoints,
-             API authentication, error classification,
-             and security checks for suspicious translation results.
+Description: Robust translation provider adapter for the LibreTranslate
+API. Handles translation requests, supported-language discovery,
+language-pair registry validation, configurable API endpoints, API
+authentication, error classification, and security checks for
+suspicious translation results.
+
+All outbound HTTP goes through safe_urlopen for SSRF prevention,
+redirect validation, and response size limits.
 """
 
 import json
 import logging
-import socket
-from typing import Any, Dict, List, Optional
-from urllib.error import HTTPError, URLError
+from typing import Any, NoReturn
 from urllib.parse import urlencode
 from urllib.request import Request
+
 from shl.utils.safe_http import safe_urlopen as urlopen
+from shl.utils.safe_http_common import (
+    MAX_RESPONSE_BYTES,
+    SafeHTTPError,
+    read_limited_response,
+)
 
 from shl._version import __version__ as SHL_VERSION
 from shl.config import get_config_value
@@ -38,6 +45,7 @@ from ...errors.providers import LIBRETRANSLATE
 from ..providers.base import TranslationProvider
 from .libretranslate_registry import LibreTranslateRegistry
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,10 +55,9 @@ LIBRETRANSLATE_DEFAULT_URL = "https://libretranslate.com"
 LIBRETRANSLATE_DEFAULT_API_KEY = ""
 
 
-def _raise_normalized_error(error) -> None:
-    """
-    Convert a normalized SHL error into the existing
-    LibreTranslate adapter exception hierarchy.
+def _raise_normalized_error(error) -> NoReturn:
+    """Convert a normalized SHL error into the LibreTranslate adapter
+    exception hierarchy. Always raises.
     """
 
     message = error.message or (
@@ -95,15 +102,18 @@ def _raise_normalized_error(error) -> None:
 
 
 def get_supported_languages(
-    base_url: Optional[str] = None,
-    api_key: Optional[str] = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
     timeout: float = LIBRETRANSLATE_LANGUAGES_TIMEOUT,
-) -> List[Dict[str, Any]]:
-    """
-    Fetch supported languages from the LibreTranslate /languages endpoint.
+) -> list[dict[str, Any]]:
+    """Fetch supported languages from the LibreTranslate /languages
+    endpoint.
 
     Returns:
         A list of dictionaries returned by LibreTranslate.
+
+    Raises:
+        Adapter-specific exceptions on any failure.
     """
 
     resolved_base_url = (
@@ -123,7 +133,10 @@ def get_supported_languages(
     url = f"{resolved_base_url}/languages"
 
     if resolved_api_key:
-        url = f"{url}?{urlencode({'api_key': resolved_api_key})}"
+        url = (
+            f"{url}?"
+            f"{urlencode({'api_key': resolved_api_key})}"
+        )
 
     request = Request(
         url=url,
@@ -140,66 +153,55 @@ def get_supported_languages(
     )
 
     try:
-        with urlopen(
-            request,
-            timeout=timeout,
-        ) as response:
-            raw_response = response.read().decode("utf-8")
-
-            try:
-                payload = json.loads(raw_response)
-            except json.JSONDecodeError:
-                error = error_parser.parse(
-                    raw_response,
-                    http_status=response.status,
-                )
-                _raise_normalized_error(error)
-
-    except HTTPError as error:
-        try:
-            error_body = error.read().decode(
-                "utf-8",
-                errors="replace",
-            )
-        except Exception:
-            error_body = ""
+        with urlopen(request, timeout=timeout) as response:
+            raw = read_limited_response(response, MAX_RESPONSE_BYTES)
+            raw_response = raw.decode("utf-8")
+            status_code = response.status
 
         try:
-            response_data = json.loads(error_body)
+            payload = json.loads(raw_response)
         except json.JSONDecodeError:
+            error = error_parser.parse(
+                raw_response,
+                http_status=status_code,
+            )
+            _raise_normalized_error(error)
+
+    # safe_urlopen converts urllib's HTTPError and URLError into
+    # SafeHTTPError before they leave the safe layer. The HTTP status
+    # and response body are preserved on the error object.
+    except SafeHTTPError as error:
+        if error.status_code is None:
+            # Transport-level failure with no HTTP status.
+            normalized_error = error_parser.parse(
+                {},
+                exception=error,
+            )
+            _raise_normalized_error(normalized_error)
+
+        try:
+            response_data = json.loads(error.response_body or "")
+        except (json.JSONDecodeError, TypeError):
+            response_data = {}
+
+        if not isinstance(response_data, dict):
             response_data = {}
 
         normalized_error = error_parser.parse(
             response_data,
-            http_status=error.code,
+            http_status=error.status_code,
         )
 
         _raise_normalized_error(normalized_error)
 
-    except URLError as error:
-        if isinstance(
-            error.reason,
-            (socket.timeout, TimeoutError),
-        ):
-            normalized_error = error_parser.parse(
-                {},
-                exception=TimeoutError(
-                    "LibreTranslate: timeout "
-                    "when retrieving supported languages"
-                ),
-            )
-        else:
-            normalized_error = error_parser.parse(
-                {},
-                exception=ConnectionError(
-                    "LibreTranslate: network error "
-                    f"when retrieving supported languages: {error.reason}"
-                ),
-            )
-
+    except TimeoutError as error:
+        normalized_error = error_parser.parse(
+            {},
+            exception=error,
+        )
         _raise_normalized_error(normalized_error)
 
-    except (socket.timeout, TimeoutError) as error:
+    except OSError as error:
         normalized_error = error_parser.parse(
             {},
             exception=error,
@@ -218,8 +220,8 @@ def get_supported_languages(
 
     if not isinstance(payload, list):
         raise TranslationError(
-            "LibreTranslate: /languages returned "
-            "an unexpected response format"
+            "LibreTranslate: /languages returned an unexpected "
+            "response format"
         )
 
     return payload
@@ -230,8 +232,8 @@ class LibreTranslateAdapter(TranslationProvider):
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        api_key: Optional[str] = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
         cache_ttl: float = 86400.0,
     ):
         self.base_url = (
@@ -248,9 +250,7 @@ class LibreTranslateAdapter(TranslationProvider):
             or LIBRETRANSLATE_DEFAULT_API_KEY
         )
 
-        self.registry = LibreTranslateRegistry(
-            cache_ttl=cache_ttl
-        )
+        self.registry = LibreTranslateRegistry(cache_ttl=cache_ttl)
 
         self.error_parser = ErrorParser(
             provider=self.name,
@@ -269,32 +269,21 @@ class LibreTranslateAdapter(TranslationProvider):
         return "libretranslate"
 
     @property
-    def supported_features(self) -> List[str]:
+    def supported_features(self) -> list[str]:
         return []
 
-    def supports_feature(
-        self,
-        feature: str,
-    ) -> bool:
+    def supports_feature(self, feature: str) -> bool:
         return feature.lower() in self.supported_features
 
-    def translate(
-        self,
-        request: TranslationRequest,
-    ) -> str:
-        """
-        Translate text using LibreTranslate API.
-        """
+    def translate(self, request: TranslationRequest) -> str:
+        """Translate text using LibreTranslate API."""
 
         source = request.source_lang
         target = request.target_lang
 
-        if not self.registry.is_pair_supported(
-            source,
-            target,
-        ):
+        if not self.registry.is_pair_supported(source, target):
             raise LanguageNotSupportedError(
-                "LibreTranslate: language pair "
+                f"LibreTranslate: language pair "
                 f"'{source}' -> '{target}' is not supported "
                 "according to the local registry"
             )
@@ -305,19 +294,19 @@ class LibreTranslateAdapter(TranslationProvider):
             return self._call_api(payload)
 
         except LanguageNotSupportedError:
-            self.registry.mark_pair_unsupported(
-                source,
-                target,
-            )
+            self.registry.mark_pair_unsupported(source, target)
             raise
 
     def build_request(
         self,
         request: TranslationRequest,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build LibreTranslate API request."""
 
-        payload: Dict[str, Any] = {
+        # Explicit annotation is required because the payload holds
+        # heterogeneous value types (str, and possibly None for
+        # source_lang).
+        payload: dict[str, Any] = {
             "q": request.text,
             "source": request.source_lang,
             "target": request.target_lang,
@@ -329,10 +318,7 @@ class LibreTranslateAdapter(TranslationProvider):
 
         return payload
 
-    def _call_api(
-        self,
-        payload: Dict[str, Any],
-    ) -> str:
+    def _call_api(self, payload: dict[str, Any]) -> str:
         """Call LibreTranslate /translate."""
 
         source = payload.get("source", "")
@@ -342,13 +328,10 @@ class LibreTranslateAdapter(TranslationProvider):
         try:
             url = f"{base_url}/translate"
 
-            request_data = json.dumps(
-                payload
-            ).encode("utf-8")
+            request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                "LibreTranslate request: %s->%s "
-                "(api_key=%s)",
+                "LibreTranslate request: %s->%s (api_key=%s)",
                 source,
                 target,
                 mask_api_key(self.api_key),
@@ -369,20 +352,28 @@ class LibreTranslateAdapter(TranslationProvider):
                 request,
                 timeout=LIBRETRANSLATE_TIMEOUT,
             ) as response:
-                raw_response = response.read().decode("utf-8")
+                raw = read_limited_response(
+                    response,
+                    MAX_RESPONSE_BYTES,
+                )
+                raw_response = raw.decode("utf-8")
+                status_code = response.status
 
-                try:
-                    response_data = json.loads(raw_response)
-                except json.JSONDecodeError:
-                    normalized_error = self.error_parser.parse(
-                        raw_response,
-                        http_status=response.status,
-                    )
-                    _raise_normalized_error(normalized_error)
+            try:
+                response_data = json.loads(raw_response)
+            except json.JSONDecodeError:
+                normalized_error = self.error_parser.parse(
+                    raw_response,
+                    http_status=status_code,
+                )
+                _raise_normalized_error(normalized_error)
 
-            translated = response_data.get(
-                "translatedText"
-            )
+            if not isinstance(response_data, dict):
+                raise TranslationError(
+                    "LibreTranslate: unexpected response format"
+                )
+
+            translated = response_data.get("translatedText")
 
             if (
                 isinstance(translated, str)
@@ -396,59 +387,49 @@ class LibreTranslateAdapter(TranslationProvider):
                 return translated
 
             raise TranslationError(
-                "LibreTranslate returned empty "
-                "or unmodified text"
+                "LibreTranslate returned empty or unmodified text"
             )
 
-        except HTTPError as error:
-            try:
-                error_body = error.read().decode(
-                    "utf-8",
-                    errors="replace",
+        # safe_urlopen converts urllib's HTTPError and URLError into
+        # SafeHTTPError before they leave the safe layer.
+        except SafeHTTPError as error:
+            if error.status_code is None:
+                normalized_error = self.error_parser.parse(
+                    {},
+                    exception=error,
                 )
-            except Exception:
-                error_body = ""
+                _raise_normalized_error(normalized_error)
 
             logger.debug(
                 "LibreTranslate error details: %s",
-                error_body,
+                error.response_body or "",
             )
 
             try:
-                response_data = json.loads(error_body)
-            except json.JSONDecodeError:
+                response_data = json.loads(
+                    error.response_body or ""
+                )
+            except (json.JSONDecodeError, TypeError):
+                response_data = {}
+
+            if not isinstance(response_data, dict):
                 response_data = {}
 
             normalized_error = self.error_parser.parse(
                 response_data,
-                http_status=error.code,
+                http_status=error.status_code,
             )
 
             _raise_normalized_error(normalized_error)
 
-        except URLError as error:
-            if isinstance(
-                error.reason,
-                (socket.timeout, TimeoutError),
-            ):
-                normalized_error = self.error_parser.parse(
-                    {},
-                    exception=TimeoutError(
-                        "LibreTranslate: request timeout"
-                    ),
-                )
-            else:
-                normalized_error = self.error_parser.parse(
-                    {},
-                    exception=ConnectionError(
-                        "LibreTranslate: network error "
-                        f"{error.reason}"
-                    ),
-                )
-
+        except TimeoutError as error:
+            normalized_error = self.error_parser.parse(
+                {},
+                exception=error,
+            )
             _raise_normalized_error(normalized_error)
 
-        except (socket.timeout, TimeoutError) as error:
+        except OSError as error:
             normalized_error = self.error_parser.parse(
                 {},
                 exception=error,

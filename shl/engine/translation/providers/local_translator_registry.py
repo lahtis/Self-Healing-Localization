@@ -1,28 +1,41 @@
 """
-File: local_translator_registry.py — Engine pair-support registry for the local_translator server.
+File: shl/engine/translation/providers/local_translator_registry.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.3.0
 License: MIT
 Description:
     Runtime registry of (source_lang, target_lang) support status.
+
     Registry state is shared between LocalRegistry instances so that
     runtime language-pair knowledge survives adapter recreation.
+
+    This module performs no HTTP calls. It only tracks which pairs the
+    caller has observed to work or fail.
 """
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple
 
 
 @dataclass
 class PairStatus:
+    """Support status for a single (source, target) language pair."""
+
     supported: bool = True
     last_checked: float = field(default_factory=time.time)
     failure_count: int = 0
 
 
 class LocalRegistry:
-    _shared_status: Dict[str, Dict[Tuple[str, str], PairStatus]] = {}
+    """Shared runtime registry of language-pair support per engine.
+
+    All instances share the same underlying state, so adapters can be
+    recreated without losing runtime knowledge about which pairs work.
+    """
+
+    _shared_status: dict[
+        str, dict[tuple[str, str], PairStatus]
+    ] = {}
 
     def __init__(
         self,
@@ -47,9 +60,10 @@ class LocalRegistry:
 
     def _pair_key(
         self,
-        source_lang: Optional[str],
+        source_lang: str | None,
         target_lang: str,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
+        """Normalize a language pair into a stable key."""
         return (
             (source_lang or "auto").strip().lower(),
             target_lang.strip().lower(),
@@ -58,9 +72,15 @@ class LocalRegistry:
     def is_supported(
         self,
         engine: str,
-        source_lang: Optional[str],
+        source_lang: str | None,
         target_lang: str,
     ) -> bool:
+        """Return whether the engine is believed to support the pair.
+
+        An unknown pair is treated as supported (optimistic). A pair
+        blacklisted by repeated failures is re-enabled after the
+        retry window elapses.
+        """
         pair = self._pair_key(source_lang, target_lang)
         status = self._status.get(engine, {}).get(pair)
 
@@ -68,7 +88,10 @@ class LocalRegistry:
             return True
 
         if not status.supported:
-            if time.time() - status.last_checked > self._retry_after_seconds:
+            if (
+                time.time() - status.last_checked
+                > self._retry_after_seconds
+            ):
                 status.supported = True
                 status.failure_count = 0
                 status.last_checked = time.time()
@@ -79,9 +102,10 @@ class LocalRegistry:
     def mark_failure(
         self,
         engine: str,
-        source_lang: Optional[str],
+        source_lang: str | None,
         target_lang: str,
     ) -> None:
+        """Record a failure; blacklist after the threshold."""
         pair = self._pair_key(source_lang, target_lang)
         engine_map = self._status.setdefault(engine, {})
         status = engine_map.setdefault(pair, PairStatus())
@@ -95,9 +119,10 @@ class LocalRegistry:
     def mark_success(
         self,
         engine: str,
-        source_lang: Optional[str],
+        source_lang: str | None,
         target_lang: str,
     ) -> None:
+        """Reset failure state and mark the pair as supported."""
         pair = self._pair_key(source_lang, target_lang)
         engine_map = self._status.setdefault(engine, {})
 
@@ -107,7 +132,7 @@ class LocalRegistry:
             failure_count=0,
         )
 
-    def clear(self, engine: Optional[str] = None) -> None:
+    def clear(self, engine: str | None = None) -> None:
         """Clear runtime registry state for one engine or all engines."""
         if engine is None:
             self._status.clear()

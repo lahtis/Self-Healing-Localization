@@ -8,29 +8,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.3.0] - 2026-10-10
 
 ### Added
-- `shl/utils/safe_http_common.py`: shared constants, `SafeHTTPError`,
-  and DNS/response helpers used by both HTTP paths.
-- `shl/utils/safe_local_http.py`: dedicated safety layer for localhost
-  and internal network calls. Uses an explicit hostname and port
+- **`shl/utils/safe_http_common.py`** — shared constants,
+  `SafeHTTPError`, and DNS/response helpers used by both HTTP paths.
+- **`shl/utils/safe_http.py`** — safe outbound HTTP for public
+  internet endpoints. Enforces HTTPS, validates every resolved IP
+  against `is_global`, follows validated redirects only, and caps
+  response size.
+- **`shl/utils/safe_local_http.py`** — safe HTTP for localhost and
+  internal network endpoints. Uses an explicit hostname and port
   allowlist, rejects any hostname that resolves to a public IP, and
   refuses to follow redirects.
-- `shl/_version.py`: single source of truth for the package version.
-- Tests covering URL validation, DNS failures, and response handling
-  for both HTTP paths.
+- **`shl/_version.py`** — single source of truth for the package
+  version.
+- **`ConfigManager.validate_config()`** — returns warnings about
+  missing provider configuration. Intended to be logged at startup so
+  the user sees what to enable before the first call fails.
+- **`libretranslate_endpoints.json`** — user-editable endpoint list
+  for LibreTranslate Community, auto-created from library defaults on
+  first run.
+- **Tests** — 67 unit tests for the safe HTTP layer, plus a
+  `SafeHTTPError.kind` protocol guard in
+  `tests/engine/errors/test_kind_protocol.py`.
 
 ### Changed
-- `shl/utils/safe_http.py` refactored to import shared constants and
-  helpers from `safe_http_common.py`. Behavior unchanged; the refactor
-  keeps the two HTTP paths consistent.
-- `pyproject.toml` now reads the version dynamically from
-  `shl/_version.py`.
-- Minimum supported Python is now 3.10.
+- **All translation and language detection providers now route
+  outbound HTTP through `safe_urlopen`** or `safe_local_urlopen`:
+  `deepl`, `googlev2`, `googlev3` (parked), `libretranslate`,
+  `libretranslate_mirrors`, `libretranslate_community`, `microsoft`,
+  `mymemory`, `papago`, `yandex`, `local_translator`,
+  `provider_cache`, `private_mymemory`.
+- **`Detection router`** now:
+  - reads `status_code` from `SafeHTTPError` (falls back to `code`);
+  - honors policy `retry_delay` before retrying;
+  - treats an empty result as definitive, not retryable;
+  - raises a clear error when no detection providers are enabled.
+- **`LocalTranslatorAdapter`** uses `safe_local_urlopen` instead of
+  the outbound path, so the local endpoint passes the allowlist
+  rather than being rejected by `is_global`.
+- **`pyproject.toml`** reads the version dynamically from
+  `shl/_version.py` and requires Python 3.10+.
+- **Provider base classes** (translation and detection) use Python
+  3.10+ type syntax and `@staticmethod _mask_credential`.
+- **Provider defaults** — all translation and detection providers
+  default to `enabled: false`. First run creates a config with
+  everything off; the user opts in explicitly.
 
 ### Security
 - Two distinct HTTP paths with distinct security models:
-  - Outbound: HTTPS-only, public-IP-only resolution, redirect validation.
-  - Local: explicit allowlist, no public IPs, no redirects.
-  This makes the trust boundary explicit at the call site.
+  - **Outbound**: HTTPS only, public-IP-only resolution, redirect
+    validation, response size limits.
+  - **Local**: explicit hostname and port allowlist, no public IPs,
+    no redirects.
+- `SafeHTTPError.kind` values are documented and guarded by a test
+  against drift with `HTTP_EXCEPTION_CODES` in the error parser.
+
+### Fixed
+- `tests/test_parser.py` — two outdated tests corrected:
+  - an empty body with a 2xx status is now accepted as valid;
+  - `ConnectionError` maps to `NETWORK_ERROR`, not
+    `SERVICE_UNAVAILABLE`.
+- `provider_cache.py` — a single unreachable or misbehaving provider
+  no longer breaks the whole cache generation. Each provider fetch is
+  isolated and returns a safe empty result on failure.
+- Removed dead public endpoints (`translate.mentality.rip`,
+  `translate.astian.org`) from LibreTranslate Community defaults.
+- `libretranslate_community.py` — endpoint list is loaded at
+  construction time via `load_endpoints()`, honouring the user
+  override file.
+
+### Known limitations
+- Translation providers still call `urllib.request.Request` directly
+  to construct requests; only the transport (opening the connection)
+  is routed through `safe_urlopen`. This is intentional: `Request`
+  construction is not a security boundary.
+- DNS rebinding is accepted as a non-issue for hard-coded endpoints.
+  See `docs/reference/pinned_https.py` for a reference implementation
+  if endpoints ever become configurable.
 
 ---
 

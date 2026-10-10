@@ -5,17 +5,22 @@ Tests:
   1. Create a private space.
   2. Create a public space.
   3. Add one memory to each space.
-  4. Poll the space memory lists until processing completes.
-  5. Search each space using the search API.
-  6. Print the observed results.
+  4. Poll the space memory lists until the memory is visible.
+  5. Poll until the memory has finished processing (embedding).
+  6. Search each space using the search API.
+  7. Delete the test memory from each space.
+  8. Print the observed results.
 
 Run from the SHL project root:
 
-    python3 -m tests.test_mymemory_dev_spaces_memory
+    python3 -m tools.test_mymemory_dev_spaces_memory
+
+Not a pytest test — this is a manual integration script.
 """
 
 import json
 import time
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -33,6 +38,17 @@ HEADERS = {
     "Accept": "application/json",
     "User-Agent": "SHL-MyMemory-Spaces-Test",
 }
+
+
+def make_test_text(prefix):
+    """Return a unique test string for this run.
+
+    MyMemory.dev deduplicates content globally per user account, so
+    re-running the test with identical text fails with HTTP 409.
+    The short UUID suffix makes every run unique without changing
+    the semantics of the test.
+    """
+    return f"{prefix} [{uuid.uuid4().hex[:8]}]"
 
 
 def request(
@@ -129,7 +145,11 @@ def add_memory(
     source_text,
     target_text,
 ):
-    """Add a memory to a specific space."""
+    """Add a memory to a specific space.
+
+    Returns:
+        tuple: (status, memory_uuid_or_None, raw_result)
+    """
 
     payload = {
         "content": f"{source_text} -> {target_text}",
@@ -153,7 +173,38 @@ def add_memory(
         result,
     )
 
-    return status, result
+    memory_uuid = None
+    if status == 200 and isinstance(result, dict):
+        memory_uuid = result.get("id")
+
+    return status, memory_uuid, result
+
+
+def delete_memory(memory_uuid):
+    """Delete a memory by UUID.
+
+    Returns True on success (HTTP 200 or 204) or if the memory was
+    already gone (HTTP 404). Returns False on any other failure.
+    """
+
+    print()
+    print(f"Deleting memory: {memory_uuid}")
+
+    status, result = request(
+        "DELETE",
+        f"/memories/{memory_uuid}",
+    )
+
+    if status in (200, 204, 404):
+        print(f"  OK (HTTP {status}).")
+        return True
+
+    print_result(
+        f"DELETE MEMORY FAILED: {memory_uuid}",
+        status,
+        result,
+    )
+    return False
 
 
 def get_space_memories(space_uuid):
@@ -174,11 +225,10 @@ def wait_for_memory(
     timeout=30,
     interval=2,
 ):
-    """
-    Poll a space until the expected memory becomes visible.
+    """Poll a space until the expected memory becomes visible.
 
     Returns:
-        tuple: (found, last_response)
+        tuple: (found, last_response, elapsed_seconds)
     """
 
     print()
@@ -187,7 +237,8 @@ def wait_for_memory(
         f"{space_uuid}..."
     )
 
-    deadline = time.time() + timeout
+    started = time.time()
+    deadline = started + timeout
     last_status = None
     last_result = None
 
@@ -197,9 +248,12 @@ def wait_for_memory(
         last_status = status
         last_result = result
 
+        elapsed = time.time() - started
+
         print(
             f"  GET /memories?spaceId={space_uuid} "
-            f"-> HTTP {status}"
+            f"-> HTTP {status} "
+            f"({elapsed:.1f}s)"
         )
 
         if status == 200:
@@ -212,8 +266,12 @@ def wait_for_memory(
                 )
 
                 if expected_text in serialized:
-                    print("  Memory found.")
-                    return True, result
+                    elapsed = time.time() - started
+                    print(
+                        f"  Memory found after "
+                        f"{elapsed:.1f}s."
+                    )
+                    return True, result, elapsed
 
             print(
                 f"  Memory not visible yet "
@@ -223,12 +281,89 @@ def wait_for_memory(
 
         time.sleep(interval)
 
-    print("  Timeout reached; memory was not found.")
+    elapsed = time.time() - started
+    print(
+        f"  Timeout reached after {elapsed:.1f}s; "
+        f"memory was not found."
+    )
 
     return False, {
         "status": last_status,
         "result": last_result,
-    }
+    }, elapsed
+
+
+def wait_for_processed(
+    space_uuid,
+    timeout=60,
+    interval=2,
+):
+    """Poll a space until every memory is fully processed.
+
+    Search is unreliable until the embedding stage has completed,
+    so callers should wait for this before running search queries.
+
+    Returns:
+        tuple: (processed, elapsed_seconds)
+    """
+
+    print()
+    print(
+        f"Waiting for memories in space {space_uuid} "
+        f"to finish processing..."
+    )
+
+    started = time.time()
+    deadline = started + timeout
+
+    while time.time() < deadline:
+        status, result = get_space_memories(space_uuid)
+
+        elapsed = time.time() - started
+
+        if status == 200:
+            items = result.get("items", [])
+
+            if not items:
+                print(
+                    f"  No items yet ({elapsed:.1f}s)."
+                )
+                time.sleep(interval)
+                continue
+
+            pending = [
+                item for item in items
+                if not item.get("isSuccessfullyProcessed")
+            ]
+
+            if not pending:
+                print(
+                    f"  All {len(items)} memories processed "
+                    f"after {elapsed:.1f}s."
+                )
+                return True, elapsed
+
+            stages = {
+                item.get("processingStage")
+                for item in pending
+            }
+            stages.discard(None)
+
+            print(
+                f"  {len(pending)}/{len(items)} still "
+                f"processing ({elapsed:.1f}s), "
+                f"stages: {', '.join(sorted(stages)) or 'unknown'}"
+            )
+
+        time.sleep(interval)
+
+    elapsed = time.time() - started
+    print(
+        f"  Timeout reached after {elapsed:.1f}s; "
+        f"memories were not fully processed."
+    )
+
+    return False, elapsed
 
 
 def search_space(
@@ -257,7 +392,7 @@ def search_space(
     return status, result
 
 
-def test_space(
+def run_space_test(
     name,
     is_public,
     source_text,
@@ -284,7 +419,7 @@ def test_space(
     print()
     print(f"Created space UUID: {space_uuid}")
 
-    add_status, add_result = add_memory(
+    add_status, memory_uuid, add_result = add_memory(
         space_uuid,
         source_text,
         target_text,
@@ -294,7 +429,7 @@ def test_space(
         print("Memory creation failed.")
         return
 
-    found, memories = wait_for_memory(
+    found, memories, wait_elapsed = wait_for_memory(
         space_uuid,
         source_text,
     )
@@ -311,16 +446,40 @@ def test_space(
         else memories,
     )
 
+    # Wait until processing completes before searching; otherwise
+    # search may return an empty result even though the memory is
+    # already visible in the space listing.
+    processed, process_elapsed = wait_for_processed(space_uuid)
+
     search_space(
         space_uuid,
         source_text,
     )
 
     print()
+    print("-" * 72)
+    print("SUMMARY")
+    print("-" * 72)
     print(
         f"Memory visible through spaceId: "
         f"{'YES' if found else 'NO'}"
     )
+    print(
+        f"Memory fully processed:         "
+        f"{'YES' if processed else 'NO'}"
+    )
+    print(f"Time to become visible:         {wait_elapsed:.1f}s")
+    print(f"Time to finish processing:      {process_elapsed:.1f}s")
+    print(
+        f"Total wait time:                "
+        f"{wait_elapsed + process_elapsed:.1f}s"
+    )
+
+    # Clean up the memory so repeated runs do not accumulate test
+    # content on the account. The space itself is left in place
+    # because the API does not document a space-delete endpoint.
+    if memory_uuid:
+        delete_memory(memory_uuid)
 
 
 def main():
@@ -336,29 +495,31 @@ def main():
     print("MyMemory.dev Spaces + Memory Integration Test")
     print("=" * 72)
 
-    test_space(
-        name="SHL Private Memory Integration Test",
-        is_public=False,
-        source_text=(
-            "SHL private space memory test "
-            "2026-10-04"
+    run_space_test(
+        name=(
+            "SHL Private Memory Integration Test "
+            f"{uuid.uuid4().hex[:6]}"
         ),
-        target_text=(
-            "SHL yksityisen spacen muistitesti "
-            "2026-10-04"
+        is_public=False,
+        source_text=make_test_text(
+            "SHL private space memory test"
+        ),
+        target_text=make_test_text(
+            "SHL yksityisen spacen muistitesti"
         ),
     )
 
-    test_space(
-        name="SHL Public Memory Integration Test",
-        is_public=True,
-        source_text=(
-            "SHL public space memory test "
-            "2026-10-04"
+    run_space_test(
+        name=(
+            "SHL Public Memory Integration Test "
+            f"{uuid.uuid4().hex[:6]}"
         ),
-        target_text=(
-            "SHL julkisen spacen muistitesti "
-            "2026-10-04"
+        is_public=True,
+        source_text=make_test_text(
+            "SHL public space memory test"
+        ),
+        target_text=make_test_text(
+            "SHL julkisen spacen muistitesti"
         ),
     )
 
@@ -368,7 +529,8 @@ def main():
     print("=" * 72)
     print()
     print(
-        "Created test spaces are intentionally not deleted."
+        "Test memories are deleted after each run. "
+        "Test spaces are intentionally not deleted."
     )
 
 

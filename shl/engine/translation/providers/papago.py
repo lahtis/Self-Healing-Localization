@@ -1,20 +1,28 @@
 """
-File: papago.py — module for Papago translation adapter.
+File: shl/engine/translation/providers/papago.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.3.0
 License: MIT
-Description: Robust translation provider adapter for the Naver Papago API.
-Handles language pair validation, honorific support, glossary mapping,
-registry validation (TTL-based), and security checks for suspicious output.
+Description: Robust translation provider adapter for the Naver Papago
+API. Handles language pair validation, honorific support, glossary
+mapping, registry validation (TTL-based), and security checks for
+suspicious output.
+
+All outbound HTTP goes through safe_urlopen for SSRF prevention,
+redirect validation, and response size limits.
 """
 
 import json
 import logging
-import socket
-from typing import Dict, Any, Optional, Set, Tuple
+from typing import Any
 from urllib.request import Request
+
 from shl.utils.safe_http import safe_urlopen as urlopen
-from urllib.error import URLError, HTTPError
+from shl.utils.safe_http_common import (
+    MAX_RESPONSE_BYTES,
+    SafeHTTPError,
+    read_limited_response,
+)
 
 from shl._version import __version__ as SHL_VERSION
 from shl.config import get_config_value
@@ -33,26 +41,28 @@ from .papago_registry import PapagoRegistry
 from ...errors.parser import ErrorParser
 from ...errors.providers import PAPAGO
 
+
 logger = logging.getLogger(__name__)
 
 PAPAGO_TIMEOUT = 15
-PAPAGO_ENDPOINT = "https://papago.apigw.ntruss.com/nmt/v1/translation"
+PAPAGO_ENDPOINT = (
+    "https://papago.apigw.ntruss.com/nmt/v1/translation"
+)
 
 
 class PapagoAdapter(TranslationProvider):
-    """
-    Papago translation adapter (Naver Cloud).
+    """Papago translation adapter (Naver Cloud).
 
     Supports:
     - text, source_lang, target_lang
     - honorific (direct bool/str or via formality)
     - glossary (glossaryKey)
     - registry validation (TTL-based blacklist)
-    - security checks
+    - security checks for suspicious output
     """
 
-    # Staattisesti tuetut kieliparit
-    SUPPORTED_PAIRS: Set[Tuple[str, str]] = {
+    # Statically supported language pairs.
+    SUPPORTED_PAIRS: set[tuple[str, str]] = {
         # Korean
         ("ko", "en"), ("en", "ko"),
         ("ko", "ja"), ("ja", "ko"),
@@ -90,24 +100,29 @@ class PapagoAdapter(TranslationProvider):
 
     def __init__(
         self,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
+        client_id: str | None = None,
+        client_secret: str | None = None,
     ):
-        # Käytä annettuja tunnisteita tai lue ympäristömuuttujista
-        self.client_id = client_id or get_env_value("NAVER_CLIENT_ID")
-        self.client_secret = client_secret or get_env_value("NAVER_CLIENT_SECRET")
+        # Use the supplied credentials or read from environment.
+        self.client_id = (
+            client_id or get_env_value("NAVER_CLIENT_ID")
+        )
+        self.client_secret = (
+            client_secret or get_env_value("NAVER_CLIENT_SECRET")
+        )
 
         if not self.client_id or not self.client_secret:
             raise ValueError(
-                "Papago client_id and client_secret must be provided as parameters or "
-                "set as NAVER_CLIENT_ID and NAVER_CLIENT_SECRET in ./.env/shl/.env"
+                "Papago client_id and client_secret must be provided "
+                "as parameters or set as NAVER_CLIENT_ID and "
+                "NAVER_CLIENT_SECRET in ./.env/shl/.env"
             )
 
         self.client_id = self.client_id.strip()
         self.client_secret = self.client_secret.strip()
         self.base_url = PAPAGO_ENDPOINT
 
-        # TTL-based registry
+        # TTL-based registry.
         ttl_env = float(get_config_value("ttl.papago", "86400"))
         self.registry = PapagoRegistry(cache_ttl=ttl_env)
 
@@ -117,8 +132,10 @@ class PapagoAdapter(TranslationProvider):
         )
 
         logger.debug(
-            f"PapagoAdapter initialized "
-            f"(client_id={mask_api_key(self.client_id)}, ttl={ttl_env}s)"
+            "PapagoAdapter initialized "
+            "(client_id=%s, ttl=%ss)",
+            mask_api_key(self.client_id),
+            ttl_env,
         )
 
     @property
@@ -126,44 +143,49 @@ class PapagoAdapter(TranslationProvider):
         return "papago"
 
     @property
-    def supported_features(self) -> list:
+    def supported_features(self) -> list[str]:
         return ["honorific", "glossary", "formality"]
 
     def translate(self, request: TranslationRequest) -> str:
         """Translate text using Papago API."""
 
-        # Pre-validate language pair
+        # Pre-validate language pair.
         if request.source_lang and request.source_lang.lower() != "auto":
             src = request.source_lang.lower()
             tgt = request.target_lang.lower()
 
-            # 1. Staattinen tuki
+            # 1. Static support.
             if (src, tgt) not in self.SUPPORTED_PAIRS:
                 raise LanguageNotSupportedError(
                     f"Papago does not support language pair "
                     f"{request.source_lang}->{request.target_lang}"
                 )
 
-            # 2. TTL-blacklist check
+            # 2. TTL-blacklist check.
             if not self.registry.is_pair_supported(
                 request.source_lang,
                 request.target_lang,
                 static_supported=True,
             ):
                 raise ServiceUnavailableError(
-                    f"Papago pair {request.source_lang}->{request.target_lang} "
-                    "temporarily unavailable"
+                    f"Papago pair {request.source_lang}->"
+                    f"{request.target_lang} temporarily unavailable"
                 )
 
         payload = self.build_request(request)
         return self._call_api(payload, request)
 
-    def build_request(self, request: TranslationRequest) -> Dict[str, Any]:
+    def build_request(
+        self,
+        request: TranslationRequest,
+    ) -> dict[str, Any]:
         """Build Papago API JSON payload."""
         source = (request.source_lang or "auto").lower()
         target = request.target_lang.lower()
 
-        payload: Dict[str, Any] = {
+        # Explicit annotation is required because the payload holds
+        # a mix of str values and optional glossary keys.
+        payload: dict[str, Any] = {
             "source": source,
             "target": target,
             "text": request.text,
@@ -174,9 +196,12 @@ class PapagoAdapter(TranslationProvider):
 
         if hasattr(request, "honorific") and request.honorific is not None:
             if isinstance(request.honorific, bool):
-                honorific_value = "true" if request.honorific else "false"
+                honorific_value = (
+                    "true" if request.honorific else "false"
+                )
             elif isinstance(request.honorific, str):
                 val = request.honorific.lower().strip()
+
                 if val in (
                     "true",
                     "1",
@@ -192,6 +217,7 @@ class PapagoAdapter(TranslationProvider):
 
         elif getattr(request, "formality", None):
             formality = str(request.formality).lower()
+
             if formality in (
                 "formal",
                 "more",
@@ -209,7 +235,7 @@ class PapagoAdapter(TranslationProvider):
         if honorific_value is not None:
             payload["honorific"] = honorific_value
 
-        # Glossary support
+        # Glossary support.
         if request.glossary and "id" in request.glossary:
             payload["glossaryKey"] = request.glossary["id"]
 
@@ -217,7 +243,7 @@ class PapagoAdapter(TranslationProvider):
 
     def _call_api(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         request: TranslationRequest,
     ) -> str:
         """Execute request against Papago API endpoint."""
@@ -226,9 +252,10 @@ class PapagoAdapter(TranslationProvider):
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"Papago request to {url} "
-                f"(client_id={mask_api_key(self.client_id)}, "
-                f"text length: {len(payload['text'])})"
+                "Papago request to %s (client_id=%s, text length: %d)",
+                url,
+                mask_api_key(self.client_id),
+                len(payload["text"]),
             )
 
             req = Request(
@@ -245,61 +272,67 @@ class PapagoAdapter(TranslationProvider):
             )
 
             with urlopen(req, timeout=PAPAGO_TIMEOUT) as response:
-                response_data = json.loads(
-                    response.read().decode("utf-8")
+                raw = read_limited_response(
+                    response,
+                    MAX_RESPONSE_BYTES,
+                )
+                response_data = json.loads(raw.decode("utf-8"))
+
+            message = response_data.get("message", {})
+            result = message.get("result", {})
+            translated = result.get("translatedText")
+
+            if not translated:
+                raise TranslationError(
+                    "Papago returned an empty translation payload"
                 )
 
-                message = response_data.get("message", {})
-                result = message.get("result", {})
-                translated = result.get("translatedText")
+            # --- SECURITY CHECKS ---
 
-                if not translated:
-                    raise TranslationError(
-                        "Papago returned an empty translation payload"
-                    )
-
-                # --- SECURITY CHECKS ---
-                if not translated or translated.strip() == "":
-                    raise TranslationError(
-                        "Papago returned empty text."
-                    )
-
-                if translated.strip() == payload["text"].strip():
-                    raise TranslationError(
-                        "Papago returned unchanged text."
-                    )
-
-                if not getattr(request, "html_format", False):
-                    if "<" in translated and ">" in translated:
-                        raise TranslationError(
-                            "Papago returned unexpected HTML markup."
-                        )
-
-                if len(translated) < 3 and len(payload["text"]) > 20:
-                    raise TranslationError(
-                        "Papago returned suspiciously short output."
-                    )
-
-                logger.debug("Papago translation successful")
-                return translated
-
-        except HTTPError as e:
-            try:
-                error_body = e.read().decode(
-                    "utf-8",
-                    errors="replace",
+            if not translated or translated.strip() == "":
+                raise TranslationError(
+                    "Papago returned empty text."
                 )
-            except Exception:
-                error_body = ""
+
+            if translated.strip() == payload["text"].strip():
+                raise TranslationError(
+                    "Papago returned unchanged text."
+                )
+
+            if not getattr(request, "html_format", False):
+                if "<" in translated and ">" in translated:
+                    raise TranslationError(
+                        "Papago returned unexpected HTML markup."
+                    )
+
+            if len(translated) < 3 and len(payload["text"]) > 20:
+                raise TranslationError(
+                    "Papago returned suspiciously short output."
+                )
+
+            logger.debug("Papago translation successful")
+            return translated
+
+        # safe_urlopen converts urllib's HTTPError and URLError into
+        # SafeHTTPError before they leave the safe layer. The HTTP
+        # status and response body are preserved on the error object.
+        except SafeHTTPError as e:
+            if e.status_code is None:
+                # Transport-level failure, no HTTP status.
+                normalized = self.error_parser.parse(
+                    {},
+                    exception=e,
+                )
+                raise self._map_normalized_error(normalized) from e
 
             normalized = self.error_parser.parse(
-                error_body,
-                http_status=e.code,
+                e.response_body,
+                http_status=e.status_code,
             )
 
             if normalized is None:
                 raise TranslationError(
-                    f"Papago HTTP error status code: {e.code}"
+                    f"Papago HTTP error status code: {e.status_code}"
                 ) from e
 
             if normalized.code in {
@@ -315,27 +348,21 @@ class PapagoAdapter(TranslationProvider):
                         request.target_lang,
                     )
 
-            raise self._map_normalized_error(
-                normalized
-            ) from e
+            raise self._map_normalized_error(normalized) from e
 
-        except URLError as e:
+        except TimeoutError as e:
             normalized = self.error_parser.parse(
+                {},
                 exception=e,
             )
+            raise self._map_normalized_error(normalized) from e
 
-            raise self._map_normalized_error(
-                normalized
-            ) from e
-
-        except (socket.timeout, TimeoutError) as e:
+        except OSError as e:
             normalized = self.error_parser.parse(
+                {},
                 exception=e,
             )
-
-            raise self._map_normalized_error(
-                normalized
-            ) from e
+            raise self._map_normalized_error(normalized) from e
 
         except Exception as e:
             if isinstance(
@@ -357,18 +384,20 @@ class PapagoAdapter(TranslationProvider):
             )
 
     def _map_normalized_error(self, error) -> Exception:
-        """Map a normalized SHL error to existing Papago exceptions."""
+        """Map a normalized SHL error to existing Papago exceptions.
+
+        Unlike most adapters, this returns an exception instead of
+        raising it. The caller decides when to raise.
+        """
 
         if error.code == "RATE_LIMIT_EXCEEDED":
             return RateLimitExceededError(
-                error.message
-                or "Papago rate limit exceeded."
+                error.message or "Papago rate limit exceeded."
             )
 
         if error.code == "QUOTA_EXCEEDED":
             return RateLimitExceededError(
-                error.message
-                or "Papago quota exceeded."
+                error.message or "Papago quota exceeded."
             )
 
         if error.code in {
@@ -376,8 +405,7 @@ class PapagoAdapter(TranslationProvider):
             "SERVICE_UNAVAILABLE",
         }:
             return ServiceUnavailableError(
-                error.message
-                or "Papago service unavailable."
+                error.message or "Papago service unavailable."
             )
 
         if error.code in {
@@ -387,8 +415,7 @@ class PapagoAdapter(TranslationProvider):
             "ACCESS_DENIED",
         }:
             return ProviderAccessError(
-                error.message
-                or "Papago access denied."
+                error.message or "Papago access denied."
             )
 
         if error.code in {
@@ -396,8 +423,7 @@ class PapagoAdapter(TranslationProvider):
             "LANG_PAIR_UNSUPPORTED",
         }:
             return LanguageNotSupportedError(
-                error.message
-                or "Papago language is not supported."
+                error.message or "Papago language is not supported."
             )
 
         if error.code in {
@@ -407,11 +433,9 @@ class PapagoAdapter(TranslationProvider):
             "METHOD_NOT_ALLOWED",
         }:
             return InvalidRequestError(
-                error.message
-                or "Papago request is invalid."
+                error.message or "Papago request is invalid."
             )
 
         return TranslationError(
-            error.message
-            or "Papago translation failed."
+            error.message or "Papago translation failed."
         )

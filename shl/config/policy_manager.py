@@ -1,9 +1,11 @@
 """
-file: /shl/config/policy_manager.py - SHL policy manager
+File: shl/config/policy_manager.py
 Author: Tuomas Lähteenmäki
+Version: 0.3.0
 License: MIT
-Version: 0.2.17
-Description: Policy-konfiguraatio projektin juuresta (CWD).
+Description: SHL policy manager. Loads policy configuration from the
+project root (current working directory) and exposes typed accessors
+for providers, timeouts, retries, and memory backends.
 """
 
 import json
@@ -28,8 +30,12 @@ logger = logging.getLogger(__name__)
 
 
 class ConfigManager:
-    """
-    SHL-policy konfiguraationhallinta – 0-riippuvuutta, säieturvallinen.
+    """SHL policy configuration manager.
+
+    Dependency-free and thread-safe. Loads the policy JSON from the
+    project root (current working directory by default), watches it
+    for changes, and exposes typed getters for providers, timeouts,
+    retries, and memory backends.
     """
 
     def __init__(
@@ -171,7 +177,7 @@ class ConfigManager:
     def _create_default_config(self) -> None:
         provider_defaults = {
             "MyMemory": {
-                "enabled": True,
+                "enabled": False,
                 "detection_enabled": False,
                 "timeout": 10,
                 "requires_env": ["MYMEMORY_EMAIL"],
@@ -181,7 +187,7 @@ class ConfigManager:
                 "retry_delay": 2.0,
             },
             "LibreTranslate": {
-                "enabled": True,
+                "enabled": False,
                 "detection_enabled": False,
                 "timeout": 8,
                 "requires_env": [],
@@ -191,7 +197,7 @@ class ConfigManager:
                 "retry_delay": 2.0,
             },
             "LibreTranslateCommunity": {
-                "enabled": True,
+                "enabled": False,
                 "detection_enabled": False,
                 "timeout": 15,
                 "requires_env": [],
@@ -201,7 +207,7 @@ class ConfigManager:
                 "retry_delay": 2.0,
             },
             "DeepL": {
-                "enabled": True,
+                "enabled": False,
                 "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["DEEPL_API_KEY"],
@@ -211,7 +217,7 @@ class ConfigManager:
                 "retry_delay": 2.0,
             },
             "Google": {
-                "enabled": True,
+                "enabled": False,
                 "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["GOOGLE_API_KEY"],
@@ -221,7 +227,7 @@ class ConfigManager:
                 "retry_delay": 2.0,
             },
             "MicrosoftTranslator": {
-                "enabled": True,
+                "enabled": False,
                 "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["MICROSOFT_TRANSLATOR_KEY"],
@@ -231,7 +237,7 @@ class ConfigManager:
                 "retry_delay": 2.0,
             },
             "Papago": {
-                "enabled": True,
+                "enabled": False,
                 "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": [
@@ -244,7 +250,7 @@ class ConfigManager:
                 "retry_delay": 2.0,
             },
             "Yandex": {
-                "enabled": True,
+                "enabled": False,
                 "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["YANDEX_API_KEY"],
@@ -254,7 +260,7 @@ class ConfigManager:
                 "retry_delay": 2.0,
             },
             "Local": {
-                "enabled": True,
+                "enabled": False,
                 "detection_enabled": False,
                 "timeout": 5,
                 "requires_env": ["LOCAL_API_KEY"],
@@ -265,14 +271,13 @@ class ConfigManager:
             },
             "DetectLanguage": {
                 "enabled": False,
-                "detection_enabled": True,
+                "detection_enabled": False,
                 "timeout": 10,
                 "requires_env": ["DETECTLANGUAGE_API_KEY"],
                 "priority": None,
                 "detection_priority": 7,
                 "retry": 2,
                 "retry_delay": 2.0,
-                
             },
         }
 
@@ -304,7 +309,7 @@ class ConfigManager:
             "providers": providers,
             "memory": {
                 "private_mymemory": {
-                    "enabled": True,
+                    "enabled": False,
                     "requires_env": "MYMEMORY_DEV_API_KEY",
                     "space_name": "SHL Private Memory",
                     "space_uuid": "",
@@ -401,6 +406,7 @@ class ConfigManager:
         provider_name: str,
         default: float = 10.0,
     ) -> float:
+        """Return the provider timeout in seconds."""
         return float(
             self.get_provider_setting(
                 provider_name,
@@ -414,8 +420,7 @@ class ConfigManager:
         provider_name: str,
         default: int = 0,
     ) -> int:
-        """Get provider retry count from policy manager or default."""
-
+        """Return the provider retry count."""
         value = self.get_provider_setting(
             provider_name,
             "retry",
@@ -430,10 +435,13 @@ class ConfigManager:
     def get_retry_delay(
         self,
         provider_name: str,
-        default: float = 1.0,
+        default: float = 0.0,
     ) -> float:
-        """Get provider retry delay from policy manager or default."""
+        """Return the provider retry delay in seconds.
 
+        Defaults to 0.0 rather than 1.0 so a missing `retry_delay`
+        does not introduce an implicit wait.
+        """
         value = self.get_provider_setting(
             provider_name,
             "retry_delay",
@@ -446,6 +454,7 @@ class ConfigManager:
             return default
 
     def get_enabled_providers(self) -> List[str]:
+        """Return the names of all enabled providers."""
         with self._lock:
             providers = self._config.get("providers", {})
 
@@ -456,8 +465,9 @@ class ConfigManager:
                 and config.get("enabled", False) is True
             ]
 
-
     def get_available_providers(self) -> List[str]:
+        """Return enabled providers with satisfied env requirements,
+        ordered by translation priority."""
         with self._lock:
             providers_config = self._config.get("providers", {})
             providers = []
@@ -469,38 +479,28 @@ class ConfigManager:
                 if not config.get("enabled", False):
                     continue
 
-
                 requires = config.get("requires_env", [])
 
                 if isinstance(requires, list) and requires:
                     if not all(self.get_env(key) for key in requires):
                         continue
 
-                priority = config.get(
-                    "priority",
-                    999,
-                )
+                priority = config.get("priority", 999)
 
                 if priority is None:
                     continue
 
-                providers.append(
-                    (priority, name)
-                )
+                providers.append((priority, name))
 
-            providers.sort(
-                key=lambda item: item[0]
-            )
+            providers.sort(key=lambda item: item[0])
 
-            return [
-                name
-                for _, name in providers
-            ]
+            return [name for _, name in providers]
 
     def get_fallback_providers(
         self,
         current_provider: Optional[str] = None,
     ) -> List[str]:
+        """Return enabled providers excluding the current one."""
         with self._lock:
             providers = self._config.get("providers", {})
 
@@ -516,6 +516,7 @@ class ConfigManager:
         self,
         callback: Callable[[Dict[str, Any]], None],
     ) -> None:
+        """Register a callback invoked after each successful reload."""
         if not callable(callback):
             raise TypeError("callback must be callable")
 
@@ -527,11 +528,13 @@ class ConfigManager:
         self,
         callback: Callable[[Dict[str, Any]], None],
     ) -> None:
+        """Remove a previously registered reload callback."""
         with self._lock:
             if callback in self._callbacks:
                 self._callbacks.remove(callback)
 
     def start_watcher(self) -> None:
+        """Start the background thread that watches for file changes."""
         with self._lock:
             if self._watcher and self._watcher.is_alive():
                 return
@@ -561,6 +564,7 @@ class ConfigManager:
             self._stop_event.wait(timeout=self.check_interval)
 
     def stop_watcher(self) -> None:
+        """Stop the background watcher thread."""
         self._stop_event.set()
 
         watcher = self._watcher
@@ -576,6 +580,7 @@ class ConfigManager:
         self._watcher = None
 
     def close(self) -> None:
+        """Stop the watcher and release resources."""
         self.stop_watcher()
 
     def __enter__(self) -> "ConfigManager":
@@ -590,6 +595,15 @@ class ConfigManager:
         self.close()
 
     def get_available_detection_providers(self) -> List[str]:
+        """Return providers enabled for language detection, ordered by
+        detection priority.
+
+        A provider is included only when all of the following hold:
+          - `detection_enabled` is True
+          - The provider capability map marks language_detection True
+          - All `requires_env` environment variables are set
+          - `detection_priority` is not None
+        """
         with self._lock:
             providers_config = self._config.get("providers", {})
             providers = []
@@ -620,13 +634,48 @@ class ConfigManager:
                 if detection_priority is None:
                     continue
 
-                providers.append(
-                    (detection_priority, name)
-                )
+                providers.append((detection_priority, name))
 
             providers.sort(key=lambda item: item[0])
 
             return [name for _, name in providers]
+
+
+    def validate_config(self) -> List[str]:
+        """Return warnings about the current configuration.
+
+        Empty list means the config looks usable. Callers can log
+        these at startup to give the user a head start, before any
+        runtime error appears.
+        """
+        warnings: List[str] = []
+        providers = self.get().get("providers", {})
+
+        enabled_translation = [
+            name for name, cfg in providers.items()
+            if isinstance(cfg, dict) and cfg.get("enabled", False)
+        ]
+
+        enabled_detection = [
+            name for name, cfg in providers.items()
+            if isinstance(cfg, dict) and cfg.get("detection_enabled", False)
+        ]
+
+        if not enabled_translation:
+            warnings.append(
+                "No translation providers are enabled. "
+                "Set `enabled: true` on at least one provider in "
+                f"{self.path.name}."
+            )
+
+        if not enabled_detection:
+            warnings.append(
+                "No language detection providers are enabled. "
+                "Set `detection_enabled: true` on at least one provider "
+                "if you want automatic language detection."
+            )
+
+        return warnings
 
     def get_memory_settings(
         self,
@@ -647,25 +696,26 @@ class ConfigManager:
         key: str,
         value: Any,
     ) -> bool:
-        """Set and persist a memory backend configuration value."""
+        """Set and persist a memory backend configuration value.
+
+        Writes atomically via a temporary file. Returns True on
+        success, False if the write failed (previous config is kept).
+        """
         with self._lock:
             config = deepcopy(self._config)
 
-            memory_config = config.setdefault(
-                "memory",
-                {},
-            )
-
-            settings = memory_config.setdefault(
-                backend,
-                {},
-            )
+            memory_config = config.setdefault("memory", {})
+            settings = memory_config.setdefault(backend, {})
 
             if not isinstance(settings, dict):
                 settings = {}
                 memory_config[backend] = settings
 
             settings[key] = value
+
+            # Declared before the try block so the except handler can
+            # safely check whether a partial temp file was created.
+            temp_path: Optional[Path] = None
 
             try:
                 temp_path = self.path.with_suffix(
@@ -698,7 +748,7 @@ class ConfigManager:
                 )
 
                 try:
-                    if temp_path.exists():
+                    if temp_path is not None and temp_path.exists():
                         temp_path.unlink()
                 except OSError:
                     pass

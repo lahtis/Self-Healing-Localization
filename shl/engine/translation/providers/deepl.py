@@ -1,21 +1,28 @@
 """
-File: deepl.py — module for DeepL translation adapter.
+File: shl/engine/translation/providers/deepl.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.13
+Version: 0.3.0
 License: MIT
 Description: Robust translation provider adapter for the DeepL API.
-Handles advanced features including context matching,
-formality adjustment, glossary mapping, registry validation,
-and security checks for suspicious output.
+Handles advanced features including context matching, formality
+adjustment, glossary mapping, registry validation, and security
+checks for suspicious output.
+
+All outbound HTTP goes through safe_urlopen for SSRF prevention,
+redirect validation, and response size limits.
 """
 
 import json
 import logging
-import socket
-from typing import Dict, Any, Optional
+from typing import Any, NoReturn
 from urllib.request import Request
+
 from shl.utils.safe_http import safe_urlopen as urlopen
-from urllib.error import URLError, HTTPError
+from shl.utils.safe_http_common import (
+    MAX_RESPONSE_BYTES,
+    SafeHTTPError,
+    read_limited_response,
+)
 
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value, mask_api_key
@@ -33,26 +40,27 @@ from ...errors.providers import DEEPL
 from .base import TranslationProvider
 from .deepl_registry import DeepLRegistry
 
+
 logger = logging.getLogger(__name__)
 
 DEEPL_TIMEOUT = 15
 
 
 class DeepLAdapter(TranslationProvider):
-    """
-    DeepL translation adapter.
+    """DeepL translation adapter.
+
     Supports:
     - text, source_lang, target_lang
     - context (built from SHL metadata)
     - formality
     - glossary
-    - registry validation
+    - registry-based language pair validation
     """
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        registry: Optional[DeepLRegistry] = None,
+        api_key: str | None = None,
+        registry: DeepLRegistry | None = None,
     ):
         self.api_key = api_key or get_env_value("DEEPL_API_KEY")
 
@@ -64,26 +72,27 @@ class DeepLAdapter(TranslationProvider):
 
         self.api_key = self.api_key.strip()
 
-        # Auto-detect Free vs Pro endpoint
+        # Auto-detect Free vs Pro endpoint.
         if self.api_key.endswith(":fx"):
             self.base_url = "https://api-free.deepl.com/v2"
         else:
             self.base_url = "https://api.deepl.com/v2"
 
-        # The router supplies its shared registry so a language pair rejected
-        # by one request is skipped by all later requests in this process.
-        # Direct adapter users retain an isolated registry by default.
+        # The router supplies its shared registry so a language pair
+        # rejected by one request is skipped by all later requests in
+        # this process. Direct adapter users retain an isolated
+        # registry by default.
         self.registry = registry or DeepLRegistry()
 
-        # Provider-independent error parser
+        # Provider-independent error parser.
         self.error_parser = ErrorParser(
             provider=self.name,
             config=DEEPL,
         )
 
         logger.debug(
-            f"DeepLAdapter initialized "
-            f"(api_key={mask_api_key(self.api_key)})"
+            "DeepLAdapter initialized (api_key=%s)",
+            mask_api_key(self.api_key),
         )
 
     @property
@@ -91,13 +100,12 @@ class DeepLAdapter(TranslationProvider):
         return "deepl"
 
     @property
-    def supported_features(self) -> list:
+    def supported_features(self) -> list[str]:
         return ["formality", "context", "glossary", "html_format"]
 
     def translate(self, request: TranslationRequest) -> str:
         """Translate text using DeepL API."""
 
-        # Pre-validate language pair using registry
         if request.source_lang:
             if not self.registry.is_pair_supported(
                 request.source_lang,
@@ -111,9 +119,17 @@ class DeepLAdapter(TranslationProvider):
         payload = self.build_request(request)
         return self._call_api(payload, request)
 
-    def build_request(self, request: TranslationRequest) -> Dict[str, Any]:
+    def build_request(
+        self,
+        request: TranslationRequest,
+    ) -> dict[str, Any]:
         """Build DeepL API JSON payload."""
-        payload = {
+
+        # Explicit annotation is required because the payload holds
+        # heterogeneous value types (list, str). Without it, mypy
+        # narrows the inferred type to dict[str, list[str]] based on
+        # the first entry and rejects str values on later keys.
+        payload: dict[str, Any] = {
             "text": [request.text],
             "target_lang": request.target_lang.upper(),
         }
@@ -152,11 +168,10 @@ class DeepLAdapter(TranslationProvider):
     def _raise_normalized_error(
         self,
         error,
-        request: Optional[TranslationRequest] = None,
-    ) -> None:
-        """
-        Convert a normalized SHL error into the existing adapter
-        exception hierarchy.
+        request: TranslationRequest | None = None,
+    ) -> NoReturn:
+        """Convert a normalized SHL error into the adapter's exception
+        hierarchy. Always raises.
         """
 
         message = error.message or (
@@ -210,7 +225,7 @@ class DeepLAdapter(TranslationProvider):
 
     def _call_api(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         request: TranslationRequest,
     ) -> str:
         """Execute request against DeepL API endpoints."""
@@ -219,9 +234,10 @@ class DeepLAdapter(TranslationProvider):
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"DeepL request to {url} "
-                f"(api_key={mask_api_key(self.api_key)}, "
-                f"text length: {len(payload['text'][0])})"
+                "DeepL request to %s (api_key=%s, text length: %d)",
+                url,
+                mask_api_key(self.api_key),
+                len(payload["text"][0]),
             )
 
             req = Request(
@@ -237,162 +253,114 @@ class DeepLAdapter(TranslationProvider):
             )
 
             with urlopen(req, timeout=DEEPL_TIMEOUT) as response:
-                raw_response = response.read().decode("utf-8")
-
-                response_data = self.error_parser._decode_payload(
-                    raw_response
-                )
-
-                if response_data is None:
-                    error = self.error_parser.parse(
-                        raw_response,
-                        http_status=response.status,
-                    )
-                    self._raise_normalized_error(error, request)
-
-                translations = response_data.get(
-                    "translations",
-                    [],
-                )
-
-                if not translations:
-                    error = self.error_parser.parse(
-                        {
-                            "message": (
-                                "DeepL returned an empty "
-                                "translations payload"
-                            )
-                        },
-                        http_status=response.status,
-                    )
-                    self._raise_normalized_error(error, request)
-
-                translated = translations[0].get("text")
-                detected = translations[0].get(
-                    "detected_source_language",
-                    "",
-                ).lower()
-
-                # --- SECURITY CHECK: DeepL output validation ---
-
-                # 1. Empty output
-                # Unchanged output is intentionally accepted here.
-                # The translation router validates unchanged results
-                # using SHL language detection.
-                if not translated or translated.strip() == "":
-                    error = self.error_parser.parse(
-                        {
-                            "message": "DeepL returned empty text."
-                        },
-                        http_status=response.status,
-                    )
-                    self._raise_normalized_error(error, request)
-
-                # 2. Unexpected detected source language
-                if request.source_lang:
-                    if (
-                        detected
-                        and detected != request.source_lang.lower()
-                    ):
-                        error = self.error_parser.parse(
-                            {
-                                "message": (
-                                    "DeepL detected unexpected source "
-                                    f"language '{detected}' for input "
-                                    f"declared as "
-                                    f"'{request.source_lang}'."
-                                )
-                            },
-                            http_status=response.status,
-                        )
-                        self._raise_normalized_error(error, request)
-
-                # 3. Unexpected HTML markup
-                if not request.html_format:
-                    if "<" in translated and ">" in translated:
-                        error = self.error_parser.parse(
-                            {
-                                "message": (
-                                    "DeepL returned unexpected "
-                                    "HTML markup."
-                                )
-                            },
-                            http_status=response.status,
-                        )
-                        self._raise_normalized_error(error, request)
-
-                # 4. Suspiciously short output
-                if len(translated) < 3 and len(
-                    payload["text"][0]
-                ) > 20:
-                    error = self.error_parser.parse(
-                        {
-                            "message": (
-                                "DeepL returned suspiciously "
-                                "short output."
-                            )
-                        },
-                        http_status=response.status,
-                    )
-                    self._raise_normalized_error(error, request)
-
-                logger.debug("DeepL translation successful")
-                return translated
-
-        except HTTPError as e:
-            response_data = None
+                raw = read_limited_response(response, MAX_RESPONSE_BYTES)
+                raw_response = raw.decode("utf-8")
+                status_code = response.status
 
             try:
-                raw_body = e.read().decode("utf-8")
-
-                if raw_body:
-                    response_data = json.loads(raw_body)
-            except (UnicodeDecodeError, json.JSONDecodeError):
+                response_data = json.loads(raw_response)
+            except json.JSONDecodeError:
                 response_data = None
 
-            if response_data is None:
-                response_data = {}
-
-            error = self.error_parser.parse(
-                response_data,
-                http_status=e.code,
-            )
-
-            if error is None:
+            if not isinstance(response_data, dict):
                 error = self.error_parser.parse(
-                    {},
-                    http_status=e.code,
+                    raw_response,
+                    http_status=status_code,
                 )
+                self._raise_normalized_error(error, request)
 
-            self._raise_normalized_error(error, request)
+            translations = response_data.get("translations", [])
 
-        except URLError as e:
-            if isinstance(
-                e.reason,
-                (socket.timeout, TimeoutError),
-            ):
+            if not translations:
                 error = self.error_parser.parse(
-                    {},
-                    exception=TimeoutError(
-                        "DeepL network timeout reached"
-                    ),
+                    {
+                        "message": (
+                            "DeepL returned an empty translations "
+                            "payload"
+                        )
+                    },
+                    http_status=status_code,
                 )
-            else:
+                self._raise_normalized_error(error, request)
+
+            translated = translations[0].get("text")
+            detected = translations[0].get(
+                "detected_source_language",
+                "",
+            ).lower()
+
+            # --- SECURITY CHECK: DeepL output validation ---
+
+            # 1. Empty output. Unchanged output is intentionally
+            #    accepted here; the translation router validates
+            #    unchanged results using SHL language detection.
+            if not translated or translated.strip() == "":
                 error = self.error_parser.parse(
-                    {},
-                    exception=ConnectionError(
-                        f"DeepL socket pipeline failure: {e.reason}"
-                    ),
+                    {"message": "DeepL returned empty text."},
+                    http_status=status_code,
                 )
+                self._raise_normalized_error(error, request)
 
-            self._raise_normalized_error(error, request)
+            # 2. Unexpected detected source language
+            if request.source_lang:
+                if detected and detected != request.source_lang.lower():
+                    error = self.error_parser.parse(
+                        {
+                            "message": (
+                                "DeepL detected unexpected source "
+                                f"language '{detected}' for input "
+                                f"declared as "
+                                f"'{request.source_lang}'."
+                            )
+                        },
+                        http_status=status_code,
+                    )
+                    self._raise_normalized_error(error, request)
 
-        except (socket.timeout, TimeoutError) as e:
-            error = self.error_parser.parse(
-                {},
-                exception=e,
-            )
-            self._raise_normalized_error(error, request)
+            # 3. Unexpected HTML markup
+            if not request.html_format:
+                if "<" in translated and ">" in translated:
+                    error = self.error_parser.parse(
+                        {
+                            "message": (
+                                "DeepL returned unexpected HTML "
+                                "markup."
+                            )
+                        },
+                        http_status=status_code,
+                    )
+                    self._raise_normalized_error(error, request)
+
+            # 4. Suspiciously short output
+            if len(translated) < 3 and len(payload["text"][0]) > 20:
+                error = self.error_parser.parse(
+                    {
+                        "message": (
+                            "DeepL returned suspiciously short "
+                            "output."
+                        )
+                    },
+                    http_status=status_code,
+                )
+                self._raise_normalized_error(error, request)
+
+            logger.debug("DeepL translation successful")
+            return translated
+
+        # safe_urlopen converts urllib's HTTPError and URLError into
+        # SafeHTTPError before they leave the safe layer, so those two
+        # exception types no longer need to be handled here.
+        except SafeHTTPError as e:
+            normalized = self.error_parser.parse(exception=e)
+            self._raise_normalized_error(normalized, request)
+
+        except TimeoutError as e:
+            normalized = self.error_parser.parse(exception=e)
+            self._raise_normalized_error(normalized, request)
+
+        except OSError as e:
+            normalized = self.error_parser.parse(exception=e)
+            self._raise_normalized_error(normalized, request)
 
         except (
             RateLimitExceededError,
@@ -405,8 +373,5 @@ class DeepLAdapter(TranslationProvider):
             raise
 
         except Exception as e:
-            error = self.error_parser.parse(
-                {},
-                exception=e,
-            )
-            self._raise_normalized_error(error, request)
+            normalized = self.error_parser.parse(exception=e)
+            self._raise_normalized_error(normalized, request)

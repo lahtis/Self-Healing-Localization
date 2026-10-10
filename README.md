@@ -3,7 +3,7 @@
 
 * **Author:**  Tuomas Lähteenmäki  
 * **License:** MIT  
-* **Version:** 0.2.17
+* **Version:** 0.3.0
 * **Type:**    Library
 * **Status:**  stable, test, dev
 
@@ -91,7 +91,7 @@ pip install self-healing-localization
 
 ### Latest Development (TestPyPI)
 ```bash
-pip install -i https://test.pypi.org/simple/ self-healing-localization==0.2.17
+pip install -i https://test.pypi.org/simple/ self-healing-localization==0.3.0
 ```
 
 ## Environment Variables (.env)

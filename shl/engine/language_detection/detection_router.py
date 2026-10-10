@@ -1,13 +1,13 @@
 """
-File: detection_router.py — Policy-aware routing for SHL language detection.
+File: shl/engine/language_detection/detection_router.py — Policy-aware
+routing for SHL language detection.
 Author: Tuomas Lähteenmäki
-Version: 0.2.13
+Version: 0.3.0
 License: MIT
 """
 
 import logging
 import time
-from typing import List, Optional
 
 from .provider_cache import load_cache
 
@@ -33,16 +33,16 @@ logger = logging.getLogger(__name__)
 try:
     _policy = ConfigManager()
     _USE_POLICY = True
-    print(
-        f"[Detection Router] PolicyManager loaded from "
-        f"{_policy.path}"
+    logger.info(
+        "PolicyManager loaded from %s",
+        _policy.path,
     )
 except Exception as error:
     _USE_POLICY = False
     _policy = None
-    print(
-        f"[Detection Router] PolicyManager failed to load: "
-        f"{error}"
+    logger.warning(
+        "PolicyManager failed to load: %s",
+        error,
     )
 
 
@@ -58,28 +58,25 @@ _PROVIDER_CACHE = load_cache()
 # ---------------------------------------------------------------------------
 
 def get_provider_priority(
-    source_lang: Optional[str] = None,
-) -> List[str]:
-    """
-    Return language detection providers in priority order.
+    source_lang: str | None = None,
+) -> list[str]:
+    """Return language detection providers in priority order.
 
-    When PolicyManager is available, provider order is taken from policy.
-    Otherwise, providers are selected from the language detection cache.
+    Policy takes precedence. Providers are expected to be filtered by
+    `detection_enabled` and ordered by `detection_priority` inside
+    PolicyManager. Providers whose `detection_priority` is null are
+    excluded.
     """
 
     if _USE_POLICY and _policy is not None:
         available = _policy.get_available_detection_providers()
 
         if available:
-            return [
-                name.lower()
-                for name in available
-            ]
+            return [name.lower() for name in available]
 
-    providers_cache = _PROVIDER_CACHE.get(
-        "providers",
-        {},
-    )
+    # Fallback: infer from the static provider cache when policy
+    # is unavailable.
+    providers_cache = _PROVIDER_CACHE.get("providers", {})
 
     providers = []
 
@@ -92,23 +89,19 @@ def get_provider_priority(
 
             if isinstance(languages, dict):
                 if normalized_source not in {
-                    code.lower()
-                    for code in languages
+                    code.lower() for code in languages
                 }:
                     continue
 
             elif isinstance(languages, list):
                 supported = {
-                    str(code).lower()
-                    for code in languages
+                    str(code).lower() for code in languages
                 }
 
                 if normalized_source not in supported:
                     continue
 
-        providers.append(
-            provider_name.lower()
-        )
+        providers.append(provider_name.lower())
 
     return providers
 
@@ -117,15 +110,8 @@ def get_provider_priority(
 # POLICY PROVIDER NAME
 # ---------------------------------------------------------------------------
 
-def _get_policy_provider_name(
-    provider_name: str,
-) -> str:
-    """
-    Resolve a provider name to its canonical policy name.
-
-    Provider names inside the router are normalized to lowercase,
-    while policy configuration preserves its configured casing.
-    """
+def _get_policy_provider_name(provider_name: str) -> str:
+    """Resolve a provider name to its canonical policy name."""
 
     if _USE_POLICY and _policy is not None:
         config = _policy.get()
@@ -142,20 +128,12 @@ def _get_policy_provider_name(
 # PROVIDER TIMEOUT
 # ---------------------------------------------------------------------------
 
-def get_provider_timeout(
-    provider_name: str,
-) -> float:
-    """Get provider timeout from policy manager or default."""
+def get_provider_timeout(provider_name: str) -> float:
+    """Get provider timeout (seconds) from policy or default."""
 
     if _USE_POLICY and _policy is not None:
-        policy_name = _get_policy_provider_name(
-            provider_name,
-        )
-
-        return _policy.get_timeout(
-            policy_name,
-            default=10.0,
-        )
+        policy_name = _get_policy_provider_name(provider_name)
+        return _policy.get_timeout(policy_name, default=10.0)
 
     return 10.0
 
@@ -164,31 +142,37 @@ def get_provider_timeout(
 # PROVIDER RETRY
 # ---------------------------------------------------------------------------
 
-def get_provider_retry(
-    provider_name: str,
-) -> int:
-    """Get provider retry count from policy manager or default."""
+def get_provider_retry(provider_name: str) -> int:
+    """Get provider retry count from policy or default."""
 
     if _USE_POLICY and _policy is not None:
-        policy_name = _get_policy_provider_name(
-            provider_name,
-        )
-
-        return _policy.get_retry(
-            policy_name,
-            default=0,
-        )
+        policy_name = _get_policy_provider_name(provider_name)
+        value = _policy.get_retry(policy_name, default=0)
+        if isinstance(value, int) and value >= 0:
+            return value
+        return 0
 
     return 0
+
+
+def get_provider_retry_delay(provider_name: str) -> float:
+    """Get provider retry delay (seconds) from policy or default."""
+
+    if _USE_POLICY and _policy is not None:
+        policy_name = _get_policy_provider_name(provider_name)
+        value = _policy.get_retry_delay(policy_name, default=0.0)
+        if isinstance(value, (int, float)) and value >= 0:
+            return float(value)
+        return 0.0
+
+    return 0.0
 
 
 # ---------------------------------------------------------------------------
 # ERROR PARSER
 # ---------------------------------------------------------------------------
 
-def _get_error_parser(
-    provider_name: str,
-) -> ErrorParser:
+def _get_error_parser(provider_name: str) -> ErrorParser:
     """Create an error parser using the provider error definition."""
 
     provider_name = provider_name.lower()
@@ -199,30 +183,21 @@ def _get_error_parser(
             config=DETECTLANGUAGE,
         )
 
-    return ErrorParser(
-        provider=provider_name,
-    )
+    return ErrorParser(provider=provider_name)
 
 
 # ---------------------------------------------------------------------------
 # PROVIDER FACTORY
 # ---------------------------------------------------------------------------
 
-def _create_provider(
-    provider_name: str,
-):
-    """
-    Create a language detection provider adapter.
-
-    Provider-specific configuration remains inside the adapter.
-    """
+def _create_provider(provider_name: str):
+    """Create a language detection provider adapter."""
 
     if provider_name == "detectlanguage":
         return DetectLanguageAdapter()
 
     raise ValueError(
-        f"Unsupported language detection provider: "
-        f"{provider_name}"
+        f"Unsupported language detection provider: {provider_name}"
     )
 
 
@@ -232,24 +207,46 @@ def _create_provider(
 
 def detect_language(
     text: str,
-    source_lang: Optional[str] = None,
+    source_lang: str | None = None,
     total_timeout: float = 30.0,
-) -> List[LanguageDetectionResult]:
+) -> list[LanguageDetectionResult]:
     """
     Detect the language of the supplied text.
 
     Providers are attempted in policy or cache priority order.
-    Retry behavior is controlled by the provider policy.
+    Timeout, retry count, and retry delay come from the provider
+    policy. Retries happen only on retryable errors; empty results
+    move on to the next provider immediately.
+
+    Args:
+        text: Text to detect.
+        source_lang: Optional source language hint, used only for
+            provider filtering when the provider is language-pair
+            specific.
+        total_timeout: Wall-clock budget across all providers and
+            retries.
+
+    Raises:
+        ValueError: if text is not a non-empty string.
+        RuntimeError: if every provider fails or the total timeout
+            is reached before any provider returns a result.
     """
 
     if not isinstance(text, str) or not text.strip():
-        raise ValueError(
-            "Text must be a non-empty string."
-        )
+        raise ValueError("Text must be a non-empty string.")
 
-    order = get_provider_priority(
-        source_lang=source_lang,
-    )
+    order = get_provider_priority(source_lang=source_lang)
+
+
+    # CHANGED: distinguish "no providers configured" from "all
+    # providers failed". The previous generic error was misleading
+    # when the policy had no detection providers enabled.
+    if not order:
+        raise RuntimeError(
+            "No language detection providers are enabled. "
+            "Set `detection_enabled: true` on at least one provider "
+            "in shl-policy-config.json."
+        )
 
     logger.info(
         "Language detection provider order: %s",
@@ -262,41 +259,36 @@ def detect_language(
         if time.time() - start_time >= total_timeout:
             break
 
-        provider_timeout = get_provider_timeout(
-            service,
-        )
+        provider_timeout = get_provider_timeout(service)
+        retry_count = get_provider_retry(service)
+        retry_delay = get_provider_retry_delay(service)
 
-        retry_count = get_provider_retry(
-            service,
-        )
-
-        remaining = total_timeout - (
-            time.time() - start_time
-        )
-
+        remaining = total_timeout - (time.time() - start_time)
         if remaining <= 0:
             break
 
-        timeout = min(
-            provider_timeout,
-            remaining,
-        )
+        timeout = min(provider_timeout, remaining)
 
-        parser = _get_error_parser(
-            service,
-        )
+        parser = _get_error_parser(service)
 
-        for attempt in range(
-            retry_count + 1,
-        ):
+        # Create the adapter once per provider — construction failures
+        # are not retryable.
+        try:
+            adapter = _create_provider(service)
+        except Exception as exception:
+            logger.warning(
+                "Could not instantiate language detection provider "
+                "'%s': %s",
+                service,
+                exception,
+            )
+            continue
+
+        for attempt in range(retry_count + 1):
             if time.time() - start_time >= total_timeout:
                 break
 
             try:
-                adapter = _create_provider(
-                    service,
-                )
-
                 logger.debug(
                     "Language detection using provider '%s' "
                     "(attempt %d/%d, timeout=%s).",
@@ -306,27 +298,29 @@ def detect_language(
                     timeout,
                 )
 
-                # The current provider adapters use their own
-                # network timeout. The calculated timeout is kept
-                # here for router-level deadline handling.
-                results = adapter.detect(
-                    text,
-                )
+                results = adapter.detect(text, timeout=timeout)
 
                 if results:
                     return results
 
-            except Exception as exception:
-                http_status = getattr(
-                    exception,
-                    "code",
-                    None,
+                # Empty result = the provider answered but found no
+                # language. This is not a transient failure, so do
+                # not retry — move on to the next provider.
+                logger.debug(
+                    "Provider '%s' returned no detections; "
+                    "trying next provider.",
+                    service,
                 )
+                break
 
-                if not isinstance(
-                    http_status,
-                    int,
-                ):
+            except Exception as exception:
+                # Broad on purpose: a provider failure of any kind
+                # must not crash the router. Known transport and
+                # HTTP errors are normalized by the parser.
+                http_status = getattr(exception, "status_code", None)
+                if not isinstance(http_status, int):
+                    http_status = getattr(exception, "code", None)
+                if not isinstance(http_status, int):
                     http_status = None
 
                 normalized_error = parser.parse(
@@ -347,6 +341,9 @@ def detect_language(
                     normalized_error.retryable
                     and attempt < retry_count
                 ):
+                    if retry_delay > 0:
+                        time.sleep(retry_delay)
+
                     logger.info(
                         "Retrying language detection provider '%s' "
                         "(retry %d/%d).",
@@ -359,6 +356,5 @@ def detect_language(
                 break
 
     raise RuntimeError(
-        "All language detection providers failed "
-        "or timed out."
+        "All language detection providers failed or timed out."
     )

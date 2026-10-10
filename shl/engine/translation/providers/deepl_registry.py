@@ -1,24 +1,26 @@
 """
-File: providers/deepl_registry.py — Registry for DeepL translation language support.
+File: shl/engine/translation/providers/deepl_registry.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.13
+Version: 0.3.0
 License: MIT
 Description:
-    Manages DeepL language validation and runtime learning for unsupported
-    language pairs.
+    Manages DeepL language validation and runtime learning for
+    unsupported language pairs.
 
-    Supported languages are loaded from the shared provider language cache.
-    No network requests are performed by this registry.
+    Supported languages are loaded from the shared provider language
+    cache. No network requests are performed by this registry.
 
     Runtime unsupported-pair blacklist TTL is controlled through the
     central SHL configuration.
+
+    This module performs no HTTP calls. It only tracks which pairs
+    DeepL has rejected at runtime.
 """
 
 import json
-import time
 import logging
+import time
 from pathlib import Path
-from typing import Dict, Tuple
 
 from shl.config import get_ttl
 
@@ -35,21 +37,21 @@ LANGUAGE_CACHE_FILE = PROJECT_ROOT / ".languages_cache.json"
 
 
 class DeepLRegistry:
-    """
-    Handles DeepL language support validation and runtime pair blacklisting.
+    """Handles DeepL language support validation and runtime pair
+    blacklisting.
 
-    Supported languages are loaded from the shared provider language cache.
-    The registry never performs network requests.
+    Supported languages are loaded from the shared provider language
+    cache. The registry never performs network requests.
 
-    The runtime unsupported-pair blacklist prevents repeated API calls for
-    language pairs that DeepL has previously rejected.
+    The runtime unsupported-pair blacklist prevents repeated API calls
+    for language pairs that DeepL has previously rejected.
     """
 
     def __init__(self):
         # Runtime cache:
         # (source_language, target_language) -> expiry timestamp
-        self._unsupported_pairs_cache: Dict[
-            Tuple[str, str], float
+        self._unsupported_pairs_cache: dict[
+            tuple[str, str], float
         ] = {}
 
         # Load blacklist TTL from central SHL configuration.
@@ -71,25 +73,19 @@ class DeepLRegistry:
         )
 
     def _load_supported_languages(self) -> frozenset[str]:
-        """
-        Load DeepL supported language codes from the shared provider cache.
+        """Load DeepL supported language codes from the shared cache.
 
-        Expected cache structure:
+        Expected cache structure::
 
             {
                 "providers": {
-                    "deepl": [
-                        "en",
-                        "fi",
-                        "de",
-                        "es",
-                        ...
-                    ]
+                    "deepl": ["en", "fi", "de", "es", ...]
                 }
             }
 
         Returns:
-            frozenset[str]: Normalized language codes.
+            frozenset[str]: Normalized language codes. Empty set on any
+            read, parse, or structure error (fail-closed).
         """
 
         try:
@@ -147,11 +143,10 @@ class DeepLRegistry:
         source_lang: str,
         target_lang: str,
     ) -> bool:
-        """
-        Check whether a DeepL language pair is currently supported.
+        """Check whether a DeepL language pair is currently supported.
 
-        First checks the runtime unsupported-pair blacklist.
-        If the pair is not blacklisted, both language codes are checked
+        First checks the runtime unsupported-pair blacklist. If the
+        pair is not blacklisted, both language codes are checked
         against the provider language cache.
 
         Args:
@@ -207,13 +202,10 @@ class DeepLRegistry:
         source_lang: str,
         target_lang: str,
     ) -> None:
-        """
-        Temporarily blacklist an unsupported DeepL language pair.
+        """Temporarily blacklist an unsupported DeepL language pair.
 
         The blacklist duration is controlled by the central SHL
-        configuration under:
-
-            ttl.deepl
+        configuration under ``ttl.deepl``.
         """
 
         if (
@@ -248,5 +240,4 @@ class DeepLRegistry:
 
     def clear_blacklist(self) -> None:
         """Clear all runtime unsupported language pairs."""
-
         self._unsupported_pairs_cache.clear()

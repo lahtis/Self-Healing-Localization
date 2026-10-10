@@ -1,22 +1,32 @@
 """
-File: local_translator.py — module for local translation adapter.
+File: shl/engine/translation/providers/local_translator.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.3.0
 License: MIT
-Description: Translation provider adapter for the SHL local translation API.
-Builds metadata-aware translation requests, supports formality, context,
-glossary, honorifics, and HTML handling, validates language pairs through
-the local provider registry, and validates translation responses for
-unexpected or suspicious output.
+Description: Translation provider adapter for the SHL local translation
+API. Builds metadata-aware translation requests, supports formality,
+context, glossary, honorifics, and HTML handling, validates language
+pairs through the local provider registry, and validates translation
+responses for unexpected or suspicious output.
+
+All outbound HTTP goes through safe_local_urlopen for SSRF prevention,
+redirect blocking, and response size limits. The configured
+`providers.local.url` hostname must appear in the allowlist defined in
+shl/utils/safe_local_http.py (_ALLOWED_LOCAL_HOSTS). The default
+`https://localhost` is already allowed.
 """
 
 import json
 import logging
-import socket
-from typing import Dict, Any, Optional
+from typing import Any
 from urllib.request import Request
-from shl.utils.safe_http import safe_urlopen as urlopen
+
 from urllib.error import URLError, HTTPError
+
+# CHANGED: local endpoints must use the local safe path, not the
+# outbound one. safe_local_urlopen enforces the allowlist and skips
+# the is_global DNS check that would reject localhost.
+from shl.utils.safe_local_http import safe_local_urlopen as urlopen
 
 from shl._version import __version__ as SHL_VERSION
 from shl.config import get_config_value
@@ -36,36 +46,38 @@ from .local_translator_registry import LocalRegistry
 from ...errors.parser import ErrorParser
 from ...errors.providers import LOCAL
 
+
 logger = logging.getLogger(__name__)
 
 LOCAL_TRANSLATOR_TIMEOUT = 15
 
 
 class LocalTranslatorAdapter(TranslationProvider):
-    """
-    local_translator adapter.
+    """Translation adapter for the SHL local translation API.
+
     Supports:
     - text, source_lang, target_lang
     - context (built from SHL metadata)
     - formality
     - glossary
     - honorifics
-    - all features
-    - registry validation
-    - security checks
+    - HTML handling
+    - registry-based language pair validation
     """
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        registry: Optional[LocalRegistry] = None,
+        api_key: str | None = None,
+        registry: LocalRegistry | None = None,
     ):
-        self.api_key = api_key or get_env_value("LOCAL_TRANSLATOR_API_KEY")
+        self.api_key = api_key or get_env_value(
+            "LOCAL_TRANSLATOR_API_KEY"
+        )
 
         if not self.api_key:
             raise ValueError(
-                "Local translator API key must be provided as parameter or "
-                "set as LOCAL_TRANSLATOR_API_KEY in ./.env/shl/.env"
+                "Local translator API key must be provided as parameter "
+                "or set as LOCAL_TRANSLATOR_API_KEY in ./.env/shl/.env"
             )
 
         self.api_key = self.api_key.strip()
@@ -84,8 +96,8 @@ class LocalTranslatorAdapter(TranslationProvider):
         )
 
         logger.debug(
-            f"local_translator_adapter initialized "
-            f"(api_key={mask_api_key(self.api_key)})"
+            "local_translator_adapter initialized (api_key=%s)",
+            mask_api_key(self.api_key),
         )
 
     @property
@@ -93,8 +105,14 @@ class LocalTranslatorAdapter(TranslationProvider):
         return "local"
 
     @property
-    def supported_features(self) -> list:
-        return ["formality", "context", "glossary", "honorific", "html_format"]
+    def supported_features(self) -> list[str]:
+        return [
+            "formality",
+            "context",
+            "glossary",
+            "honorific",
+            "html_format",
+        ]
 
     def translate(self, request: TranslationRequest) -> str:
         """Translate text using Local API. Backward-compatible str return."""
@@ -122,9 +140,14 @@ class LocalTranslatorAdapter(TranslationProvider):
     def build_request(
         self,
         request: TranslationRequest,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build local translator API JSON payload."""
-        payload = {
+
+        # Explicit annotation is required because the payload holds
+        # heterogeneous value types (list, str, bool, dict). Without
+        # it, mypy narrows the inferred type to dict[str, Sequence[str]]
+        # based on the first two entries and rejects bool/dict values.
+        payload: dict[str, Any] = {
             "text": [request.text],
             "target_lang": request.target_lang.upper(),
         }
@@ -164,7 +187,7 @@ class LocalTranslatorAdapter(TranslationProvider):
 
     def _call_api(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         request: TranslationRequest,
     ) -> TranslationResult:
         """Execute request against Local API endpoints."""
@@ -174,9 +197,10 @@ class LocalTranslatorAdapter(TranslationProvider):
             request_data = json.dumps(payload).encode("utf-8")
 
             logger.debug(
-                f"Local request to {url} "
-                f"(api_key={mask_api_key(self.api_key)}, "
-                f"text length: {len(payload['text'][0])})"
+                "Local request to %s (api_key=%s, text length: %d)",
+                url,
+                mask_api_key(self.api_key),
+                len(payload["text"][0]),
             )
 
             req = Request(
@@ -191,7 +215,10 @@ class LocalTranslatorAdapter(TranslationProvider):
                 method="POST",
             )
 
-            with urlopen(req, timeout=LOCAL_TRANSLATOR_TIMEOUT) as response:
+            with urlopen(
+                req,
+                timeout=LOCAL_TRANSLATOR_TIMEOUT,
+            ) as response:
                 response_data = json.loads(
                     response.read().decode("utf-8")
                 )
@@ -214,7 +241,9 @@ class LocalTranslatorAdapter(TranslationProvider):
                 confidence = response_data.get("confidence")
 
                 if not translated or translated.strip() == "":
-                    raise TranslationError("Local returned empty text.")
+                    raise TranslationError(
+                        "Local returned empty text."
+                    )
 
                 if translated.strip() == payload["text"][0].strip():
                     raise TranslationError(
@@ -222,7 +251,10 @@ class LocalTranslatorAdapter(TranslationProvider):
                     )
 
                 if request.source_lang:
-                    if detected and detected != request.source_lang.lower():
+                    if (
+                        detected
+                        and detected != request.source_lang.lower()
+                    ):
                         raise TranslationError(
                             f"Local detected unexpected source language "
                             f"'{detected}' for input declared as "
@@ -235,7 +267,10 @@ class LocalTranslatorAdapter(TranslationProvider):
                             "Local returned unexpected HTML markup."
                         )
 
-                if len(translated) < 3 and len(payload["text"][0]) > 20:
+                if (
+                    len(translated) < 3
+                    and len(payload["text"][0]) > 20
+                ):
                     raise TranslationError(
                         "Local returned suspiciously short output."
                     )
@@ -247,8 +282,10 @@ class LocalTranslatorAdapter(TranslationProvider):
                 )
 
                 logger.debug(
-                    f"Local translation successful "
-                    f"(engine={engine}, fallback={fallback})"
+                    "Local translation successful "
+                    "(engine=%s, fallback=%s)",
+                    engine,
+                    fallback,
                 )
 
                 return TranslationResult(
@@ -299,7 +336,7 @@ class LocalTranslatorAdapter(TranslationProvider):
 
             raise self._map_normalized_error(normalized)
 
-        except (socket.timeout, TimeoutError) as e:
+        except TimeoutError as e:
             normalized = self.error_parser.parse(
                 exception=e,
             )

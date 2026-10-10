@@ -1,18 +1,30 @@
 """
-File: detect_language.py
+File: shl/engine/language_detection/providers/detect_language.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.15
+Version: 0.3.0
 License: MIT
 Description:
     Detect Language API adapter for SHL language detection.
+
+# Known issue: detectlanguage returns only top-3 candidates, so
+# target languages tied at the low score (e.g. 'dan' at 0.0679
+# alongside 'ita', 'swe') are not visible in the result. Revisit
+# when a second detection provider is added — may want a shared
+# "short text skip" heuristic in the router.
 """
 
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from urllib.request import Request
 from shl.utils.safe_http import safe_urlopen as urlopen
+
+from shl.utils.safe_http_common import (
+    SafeHTTPError,
+    MAX_RESPONSE_BYTES,
+    read_limited_response,
+)
 
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value
@@ -31,15 +43,14 @@ DETECTLANGUAGE_URL = "https://ws.detectlanguage.com/v3/detect"
 
 
 class DetectLanguageAdapter(LanguageDetectionProvider):
-    """
-    Detect Language API adapter.
+    """Detect Language API adapter.
 
     Provides language detection through the Detect Language API
     and converts provider responses into SHL
     LanguageDetectionResult objects.
     """
 
-    def __init__(self, api_key=None):
+    def __init__(self, api_key: str | None = None):
         self.api_key = api_key or get_env_value(
             "DETECTLANGUAGE_API_KEY"
         )
@@ -53,34 +64,33 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
         self.api_key = self.api_key.strip()
 
         logger.debug(
-            "DetectLanguageAdapter initialized "
-            "(api_key=%s)",
+            "DetectLanguageAdapter initialized (api_key=%s)",
             self._mask_credential(self.api_key),
         )
 
     @property
     def name(self) -> str:
-        """
-        Return the unique provider name.
-        """
+        """Return the unique provider name."""
         return "detectlanguage"
 
     @property
-    def supported_features(self) -> List[str]:
-        """
-        Return optional features supported by this provider.
-        """
+    def supported_features(self) -> list[str]:
+        """Return optional features supported by this provider."""
         return []
 
+    # CHANGED: `timeout` parameter added so the router can pass the
+    # policy-configured value instead of the hard-coded default.
     def detect(
         self,
         text: str,
-    ) -> List[LanguageDetectionResult]:
-        """
-        Detect the language of the supplied text.
+        timeout: float | None = None,
+    ) -> list[LanguageDetectionResult]:
+        """Detect the language of the supplied text.
 
         Args:
             text: Text whose language should be detected.
+            timeout: Optional override for the network timeout, in
+                seconds. When None, DETECTLANGUAGE_TIMEOUT is used.
 
         Returns:
             List of LanguageDetectionResult objects.
@@ -90,17 +100,23 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
                 "Text must be a non-empty string."
             )
 
+        effective_timeout = (
+            timeout if timeout is not None else DETECTLANGUAGE_TIMEOUT
+        )
+
         payload = self.build_request(text)
-        response = self._call_api(payload)
+        response = self._call_api(
+            payload,
+            timeout=effective_timeout,
+        )
 
         return self._parse_response(response)
 
     def build_request(
         self,
         text: str,
-    ) -> Dict[str, Any]:
-        """
-        Build the Detect Language API request payload.
+    ) -> dict[str, Any]:
+        """Build the Detect Language API request payload.
 
         Args:
             text: Text to analyze.
@@ -112,15 +128,18 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
             "q": text,
         }
 
+    # CHANGED: `timeout` parameter added; the router-supplied value
+    # flows through to urllib via safe_urlopen.
     def _call_api(
         self,
-        payload: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
-        """
-        Execute the Detect Language API request.
+        payload: dict[str, Any],
+        timeout: float = DETECTLANGUAGE_TIMEOUT,
+    ) -> list[dict[str, Any]]:
+        """Execute the Detect Language API request.
 
         Args:
             payload: Provider-specific request payload.
+            timeout: Network timeout in seconds.
 
         Returns:
             Raw decoded provider response.
@@ -128,8 +147,9 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
         request_data = json.dumps(payload).encode("utf-8")
 
         logger.debug(
-            "Detect Language request to %s",
+            "Detect Language request to %s (timeout=%s)",
             DETECTLANGUAGE_URL,
+            timeout,
         )
 
         request = Request(
@@ -146,9 +166,21 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
 
         with urlopen(
             request,
-            timeout=DETECTLANGUAGE_TIMEOUT,
+            timeout=timeout,
         ) as response:
-            raw_response = response.read().decode("utf-8")
+            # Use the shared size-limited reader so a misbehaving
+            # provider cannot return an unbounded body.
+            raw = read_limited_response(response, MAX_RESPONSE_BYTES)
+
+        # Decode errors are surfaced as a clear SHL error instead of
+        # a bare UnicodeDecodeError.
+        try:
+            raw_response = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise SafeHTTPError(
+                f"Detect Language response was not valid UTF-8: {exc}",
+                kind="invalid_response",
+            ) from exc
 
         parsed_response = json.loads(raw_response)
 
@@ -161,10 +193,9 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
 
     def _parse_response(
         self,
-        response: List[Dict[str, Any]],
-    ) -> List[LanguageDetectionResult]:
-        """
-        Convert the Detect Language response into SHL results.
+        response: list[dict[str, Any]],
+    ) -> list[LanguageDetectionResult]:
+        """Convert the Detect Language response into SHL results.
 
         Args:
             response: Raw Detect Language API response.
@@ -172,7 +203,7 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
         Returns:
             List of LanguageDetectionResult objects.
         """
-        results: List[LanguageDetectionResult] = []
+        results: list[LanguageDetectionResult] = []
 
         for item in response:
             if not isinstance(item, dict):

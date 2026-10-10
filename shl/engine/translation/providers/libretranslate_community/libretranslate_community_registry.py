@@ -1,25 +1,26 @@
 """
-File: providers/libretranslate_community_registry.py
-Registry for LibreTranslate Community translation language support.
+File: shl/engine/translation/providers/libretranslate_community/libretranslate_community_registry.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.13
+Version: 0.3.0
 License: MIT
 Description:
     Manages LibreTranslate Community language validation and runtime
     learning for unsupported language pairs.
 
-    Supported languages are loaded from the shared provider language cache.
-    No network requests are performed by this registry.
+    Supported languages are loaded from the shared provider language
+    cache. No network requests are performed by this registry.
 
     Runtime unsupported-pair blacklist TTL is controlled through the
     central SHL configuration.
+
+    This module performs no HTTP calls. It only reads a local cache
+    file and tracks rejected pairs at runtime.
 """
 
 import json
-import time
 import logging
+import time
 from pathlib import Path
-from typing import Dict, Tuple
 
 from shl.config import get_ttl
 
@@ -36,22 +37,22 @@ LANGUAGE_CACHE_FILE = PROJECT_ROOT / ".languages_cache.json"
 
 
 class LibreTranslateCommunityRegistry:
-    """
-    Handles LibreTranslate Community language support validation and
-    runtime pair blacklisting.
+    """Language support validation and runtime pair blacklisting for
+    LibreTranslate Community.
 
-    Supported languages are loaded from the shared provider language cache.
-    The registry never performs network requests.
+    Supported languages are loaded from the shared provider language
+    cache. The registry never performs network requests.
 
-    The runtime unsupported-pair blacklist prevents repeated API calls for
-    language pairs that LibreTranslate Community has previously rejected.
+    The runtime unsupported-pair blacklist prevents repeated API calls
+    for language pairs that LibreTranslate Community has previously
+    rejected.
     """
 
     def __init__(self):
-        # Runtime cache:
-        # (source_language, target_language) -> expiry timestamp
-        self._unsupported_pairs_cache: Dict[
-            Tuple[str, str], float
+        # Runtime blacklist:
+        # (source, target) -> expiry timestamp
+        self._unsupported_pairs_cache: dict[
+            tuple[str, str], float
         ] = {}
 
         # Load blacklist TTL from central SHL configuration.
@@ -77,26 +78,20 @@ class LibreTranslateCommunityRegistry:
         )
 
     def _load_supported_languages(self) -> frozenset[str]:
-        """
-        Load LibreTranslate Community supported language codes from
+        """Load LibreTranslate Community supported language codes from
         the shared provider language cache.
 
-        Expected cache structure:
+        Expected cache structure::
 
             {
                 "providers": {
-                    "libretranslate_community": [
-                        "en",
-                        "fi",
-                        "de",
-                        "es",
-                        ...
-                    ]
+                    "libretranslate_community": ["en", "fi", "de", ...]
                 }
             }
 
         Returns:
-            frozenset[str]: Normalized language codes.
+            frozenset[str]: Normalized language codes. Empty set on any
+            read, parse, or structure error (fail-closed).
         """
 
         try:
@@ -123,7 +118,8 @@ class LibreTranslateCommunityRegistry:
 
         except OSError as exc:
             logger.warning(
-                "Unable to read LibreTranslate Community language cache: %s",
+                "Unable to read LibreTranslate Community language "
+                "cache: %s",
                 exc,
             )
             return frozenset()
@@ -143,8 +139,8 @@ class LibreTranslateCommunityRegistry:
 
         if not isinstance(languages, list):
             logger.warning(
-                "Invalid LibreTranslate Community language "
-                "cache structure."
+                "Invalid LibreTranslate Community language cache "
+                "structure."
             )
             return frozenset()
 
@@ -159,12 +155,11 @@ class LibreTranslateCommunityRegistry:
         source_lang: str,
         target_lang: str,
     ) -> bool:
-        """
-        Check whether a LibreTranslate Community language pair is
+        """Check whether a LibreTranslate Community language pair is
         currently supported.
 
-        First checks the runtime unsupported-pair blacklist.
-        If the pair is not blacklisted, both language codes are checked
+        First checks the runtime unsupported-pair blacklist. If the
+        pair is not blacklisted, both language codes are checked
         against the provider language cache.
 
         Args:
@@ -181,14 +176,14 @@ class LibreTranslateCommunityRegistry:
         pair = (src, tgt)
         now = time.time()
 
-        # Check runtime blacklist.
+        # Check the runtime blacklist.
         if pair in self._unsupported_pairs_cache:
             expiry = self._unsupported_pairs_cache[pair]
 
             if now < expiry:
                 logger.debug(
-                    "LibreTranslate Community pair %s is "
-                    "currently blacklisted.",
+                    "LibreTranslate Community pair %s is currently "
+                    "blacklisted.",
                     pair,
                 )
                 return False
@@ -196,7 +191,7 @@ class LibreTranslateCommunityRegistry:
             # TTL expired; allow the pair to be tested again.
             del self._unsupported_pairs_cache[pair]
 
-        # Check provider language cache.
+        # Check the provider language cache.
         return (
             src in self.supported_languages
             and tgt in self.supported_languages
@@ -207,14 +202,11 @@ class LibreTranslateCommunityRegistry:
         source_lang: str,
         target_lang: str,
     ) -> None:
-        """
-        Temporarily blacklist an unsupported LibreTranslate Community
-        language pair.
+        """Temporarily blacklist an unsupported LibreTranslate
+        Community language pair.
 
         The blacklist duration is controlled by the central SHL
-        configuration under:
-
-            ttl.libretranslate_community
+        configuration under ``ttl.libretranslate_community``.
         """
 
         pair = (
@@ -235,5 +227,4 @@ class LibreTranslateCommunityRegistry:
 
     def clear_blacklist(self) -> None:
         """Clear all runtime unsupported language pairs."""
-
         self._unsupported_pairs_cache.clear()

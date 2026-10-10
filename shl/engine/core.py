@@ -1,7 +1,7 @@
 """
-File: core.py
+File: shl/engine/core.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.15
+Version: 0.3.0
 License: MIT
 Description:
     Central localization engine for the Self-Healing Localization Layer.
@@ -19,10 +19,15 @@ Description:
     provider registries, and translation caching are handled by the
     translation subsystem rather than by this class.
 """
+import json
+import logging
+from typing import Any
+
+from urllib.request import Request
+from shl.utils.safe_http import safe_urlopen as urlopen
 
 import logging
-import os
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from shl.engine.localizer import Localizer
 from shl.engine.template_localizer import TemplateLocalizer
@@ -37,20 +42,50 @@ from shl.utils.env_loader import get_env_value, load_shl_env
 logger = logging.getLogger(__name__)
 
 
+# Shared ConfigManager for the process. Creating one per engine instance
+# would start a watcher thread each time. The shared instance is created
+# lazily on first use and reused.
+_shared_policy: "ConfigManager | None" = None
+
+
+def _get_shared_policy():
+    """Return the process-wide ConfigManager, or None if unavailable."""
+    global _shared_policy
+    if _shared_policy is None:
+        try:
+            from shl.config.policy_manager import ConfigManager
+            _shared_policy = ConfigManager()
+        except Exception as error:
+            logger.debug(
+                "Policy validation skipped (ConfigManager unavailable): %s",
+                error,
+            )
+            return None
+    return _shared_policy
+
+
 class LocalizationEngine:
     """High-level localization engine for UI text and prompt templates."""
 
     def __init__(
         self,
-        lang_code: Optional[str] = None,
+        lang_code: str | None = None,
         base_lang: str = "en",
         ui_folder: str = "locales",
         template_folder: str = "prompts",
-        config: Optional[Dict[str, Any]] = None,
-        glfm_path: Optional[str] = None,
-        glfm_lite: Optional[bool] = None,
+        config: dict[str, Any] | None = None,
+        glfm_path: str | None = None,
+        glfm_lite: bool | None = None,
     ) -> None:
         load_shl_env()
+
+        # Warn early about configuration gaps before the first
+        # translation or detection call fails with a less specific
+        # message.
+        policy = _get_shared_policy()
+        if policy is not None:
+            for warning in policy.validate_config():
+                logger.warning(warning)
 
         self.config = self._build_config(config)
 
@@ -78,13 +113,13 @@ class LocalizationEngine:
 
         # A bootstrap may introduce dozens of missing UI strings at once.
         # When the translation layer has conclusively rejected a language
-        # pair, remember it for this engine instance instead of routing every
-        # remaining key through the same unavailable providers.
-        self._unavailable_translation_pairs: Set[Tuple[str, str]] = set()
+        # pair, remember it for this engine instance instead of routing
+        # every remaining key through the same unavailable providers.
+        self._unavailable_translation_pairs: set[tuple[str, str]] = set()
 
         self.validator = LanguageValidator(glfm_path)
 
-        self.glfm_fallback: List[str] = []
+        self.glfm_fallback: list[str] = []
 
         self._validate_language()
         self._build_fallback_chain()
@@ -113,11 +148,11 @@ class LocalizationEngine:
 
     def _build_config(
         self,
-        config: Optional[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        config: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         """Build the localization configuration."""
 
-        defaults = {
+        defaults: dict[str, Any] = {
             "m_translation_enabled": False,
             "fallback_to_base": True,
             "strict_mode": False,
@@ -280,9 +315,8 @@ class LocalizationEngine:
         self,
         localizer: Any,
         key: str,
-    ) -> Optional[str]:
-        """
-        Resolve a localized value through the localization fallback chain.
+    ) -> str | None:
+        """Resolve a localized value through the fallback chain.
 
         Order:
             active language
@@ -359,15 +393,14 @@ class LocalizationEngine:
         key: str,
         default_value: str = "",
     ) -> str:
-        """
-        Return localized UI text.
+        """Return localized UI text.
 
         Existing localization always has priority. Missing text may be
         machine-translated when translation is explicitly enabled.
 
-        Translation failures are not converted into successful translations.
-        The translation subsystem is responsible for provider failover and
-        translation caching.
+        Translation failures are not converted into successful
+        translations. The translation subsystem is responsible for
+        provider failover and translation caching.
         """
 
         validated_key = self._validate_key(key)
@@ -419,13 +452,23 @@ class LocalizationEngine:
                     self.base_lang,
                     error,
                 )
-                self.set_language(self.base_lang)
-                                
-                return self.ui_text(
-                    key=validated_key,
-                    default_value=default_value,
+
+                # Guard against re-entry: set_language may not change
+                # lang_code if validation fails, which would recurse.
+                if self.lang_code != self.base_lang:
+                    self.set_language(self.base_lang)
+                    return self.ui_text(
+                        key=validated_key,
+                        default_value=default_value,
+                    )
+
+                # Already on the base language — accept the default.
+                self.ui_localizer.set_text(
+                    validated_key,
+                    default_value,
                 )
-    				
+                return default_value
+
             except Exception as error:
                 logger.warning(
                     "Machine translation failed for key '%s': %s",
@@ -559,7 +602,7 @@ class LocalizationEngine:
     # Statistics
     # ------------------------------------------------------------------
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return localization engine statistics."""
 
         return {

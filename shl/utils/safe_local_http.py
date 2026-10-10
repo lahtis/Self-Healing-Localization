@@ -3,7 +3,7 @@ File: shl/utils/safe_local_http.py
 Author: Tuomas Lähteenmäki
 Version: 0.3.0
 License: MIT
-Description: Safe, dependency-free HTTP POST helper for the local path
+Description: Safe, dependency-free HTTP helpers for the local path
 (localhost + internal network). Endpoints originate directly from code.
 
 Security model:
@@ -31,11 +31,8 @@ Known limitation — DNS rebinding:
 
 import json
 import ssl
-# CHANGED: removed `socket` import — socket.timeout is an alias for
-# TimeoutError in Python 3.10+ (our minimum), so it is never needed.
 import urllib.error
 import urllib.request
-# CHANGED: added typing imports for NoReturn on _raise_http_error.
 from typing import NoReturn
 from urllib.parse import urlsplit
 
@@ -54,14 +51,15 @@ _ALLOWED_LOCAL_HOSTS = {
     "127.0.0.1",
     "::1",
     "ollama.internal",
+    "libretranslate.internal",
 }
 
-_ALLOWED_LOCAL_PORTS = {80, 443, 8000, 8080, 11434}
+_ALLOWED_LOCAL_PORTS = {80, 443, 8000, 8080, 11434, 5000}
 
 # Numeric loopback addresses do not require DNS resolution.
 _LOOPBACK_LITERALS = {"127.0.0.1", "::1"}
 
-# CHANGED: cap on the length of response_body stored in SafeHTTPError,
+# Cap on the length of response_body stored in SafeHTTPError,
 # matching the outbound path so both stay loggable.
 _MAX_ERROR_BODY_CHARS = 2048
 
@@ -166,14 +164,11 @@ def _read_http_error_body(
         return None
 
     text = raw.decode("utf-8", errors="replace")
-    # CHANGED: truncate response_body so logs stay manageable.
     if len(text) > _MAX_ERROR_BODY_CHARS:
         text = text[:_MAX_ERROR_BODY_CHARS] + "... (truncated)"
     return text
 
 
-# CHANGED: return type NoReturn tells mypy (and readers) that this
-# function always raises; callers can rely on it not returning.
 def _raise_http_error(error: urllib.error.HTTPError) -> NoReturn:
     """Convert HTTPError while preserving status and response body."""
     body = _read_http_error_body(error)
@@ -186,12 +181,8 @@ def _raise_http_error(error: urllib.error.HTTPError) -> NoReturn:
     ) from error
 
 
-# CHANGED: parameter type changed from Exception to BaseException for
-# consistency with safe_http.py.
 def _network_error(error: BaseException) -> SafeHTTPError:
     """Convert a network exception into an SHL HTTP error."""
-    # CHANGED: socket.timeout removed — it is an alias for TimeoutError
-    # in Python 3.10+, which is our minimum supported version.
     if isinstance(error, TimeoutError):
         return SafeHTTPError(
             f"Local HTTP request timed out: {error}",
@@ -211,6 +202,56 @@ def _network_error(error: BaseException) -> SafeHTTPError:
         f"Local HTTP transport failure: {error}",
         kind="transport",
     )
+
+
+# ---------------------------------------------------------------------------
+# Public API — mirrors safe_http.py
+# ---------------------------------------------------------------------------
+
+def safe_local_urlopen(
+    request: str | urllib.request.Request,
+    timeout: float = DEFAULT_TIMEOUT,
+):
+    """Open a request to an approved local/internal endpoint safely.
+
+    Accepts a URL string or urllib.request.Request, preserving the
+    request method, body, and headers. The URL is validated against
+    the allowlist before the connection is attempted.
+
+    The returned response must be closed by the caller, preferably by
+    using it as a context manager:
+
+        with safe_local_urlopen(req) as response:
+            ...
+
+    Raises SafeHTTPError for URL validation, HTTP, transport, timeout,
+    and redirect failures.
+    """
+    if isinstance(request, str):
+        url = request
+    elif isinstance(request, urllib.request.Request):
+        url = request.full_url
+    else:
+        raise TypeError(
+            "request must be a URL string or urllib.request.Request"
+        )
+
+    if not is_allowed_local_url(url):
+        raise SafeHTTPError(
+            "Insecure or forbidden local URL requested.",
+            kind="security",
+        )
+
+    try:
+        response = _opener.open(request, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        _raise_http_error(exc)
+    except urllib.error.URLError as exc:
+        raise _network_error(exc) from exc
+    except OSError as exc:
+        raise _network_error(exc) from exc
+
+    return response
 
 
 def safe_local_http_post(
@@ -253,7 +294,7 @@ def safe_local_http_post(
     )
 
     try:
-        with _opener.open(req, timeout=timeout) as response:
+        with safe_local_urlopen(req, timeout=timeout) as response:
             status = response.status
 
             if status != 200:
@@ -283,9 +324,6 @@ def safe_local_http_post(
         _raise_http_error(exc)
     except urllib.error.URLError as exc:
         raise _network_error(exc) from exc
-    # CHANGED: merged TimeoutError into OSError — TimeoutError is an
-    # OSError subclass, so a single handler covers both. socket.timeout
-    # was removed for the same reason as above.
     except OSError as exc:
         raise _network_error(exc) from exc
 
