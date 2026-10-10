@@ -1,7 +1,7 @@
 """
 File: cache.py — Translation cache for SHL.
 Author: Tuomas Lähteenmäki
-Version: 0.2.5-persist
+Version: 0.3.1
 License: MIT
 Description: Memory-backed translation cache with optional disk persistence.
              Prevents duplicate remote API calls with TTL, max_size eviction,
@@ -39,7 +39,7 @@ class TranslationCache:
         persist: bool = True,
         persist_path: Optional[str] = None,
     ):
-        self.cache: dict[str, tuple] = {}
+        self.cache: dict[str, tuple[str, float]] = {}
         self.ttl = ttl
         self.max_size = max_size
         self.persist = persist
@@ -62,9 +62,10 @@ class TranslationCache:
         target_lang: str,
         formality: Optional[str] = None,
         context_type: Optional[str] = None,
+        style_id: Optional[str] = None,
     ) -> str:
         """Create a unique deterministic MD5 hex digest."""
-        raw_key = f"{text}:{source_lang}:{target_lang}:{formality or ''}:{context_type or ''}"
+        raw_key = f"{text}:{source_lang}:{target_lang}:{formality or ''}:{context_type or ''}:{style_id or ''}"
         return hashlib.md5(raw_key.encode("utf-8")).hexdigest()
 
     # ------------------------------------------------------------------
@@ -137,7 +138,6 @@ class TranslationCache:
         now = time.time()
         if now - self._last_save >= min_interval:
             self.save_to_disk()
-        return False
 
     # ------------------------------------------------------------------
     # PUBLIC API (existing logic preserved)
@@ -150,12 +150,16 @@ class TranslationCache:
         target_lang: str,
         formality: Optional[str] = None,
         context_type: Optional[str] = None,
+        style_id: Optional[str] = None,
     ) -> Optional[str]:
         """
         Retrieve localized strings from memory if signature is fresh.
         Returns None if cache is missing or contents have expired past TTL boundary.
         """
-        key = self._generate_key(text, source_lang, target_lang, formality, context_type)
+        key = self._generate_key(
+            text, source_lang, target_lang,
+            formality, context_type, style_id,
+        )
 
         with self._lock:
             if key in self.cache:
@@ -178,6 +182,7 @@ class TranslationCache:
         target_lang: str,
         formality: Optional[str] = None,
         context_type: Optional[str] = None,
+        style_id: Optional[str] = None,
     ) -> None:
         """Commit a successful translation into the cache."""
         if translated is None:
@@ -191,17 +196,20 @@ class TranslationCache:
 
         with self._lock:
             logger.info(
-            "CACHE SET: text=%r translated=%r source=%s target=%s",
-            text,
-            translated,
-            source_lang,
-            target_lang,
+                "CACHE SET: text=%r translated=%r source=%s target=%s",
+                text,
+                translated,
+                source_lang,
+                target_lang,
             )
 
             if len(self.cache) >= self.max_size:
                 self._evict_stale_or_oldest()
 
-            key = self._generate_key(text, source_lang, target_lang, formality, context_type)
+            key = self._generate_key(
+                text, source_lang, target_lang,
+                formality, context_type, style_id,
+            )
             self.cache[key] = (translated, time.time())
             self._dirty = True
 
@@ -255,4 +263,3 @@ class TranslationCache:
         """Auto-save to disk on exit if persist is enabled and dirty."""
         if self.persist and self._dirty:
             self.save_to_disk()
-

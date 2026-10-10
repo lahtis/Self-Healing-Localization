@@ -1,12 +1,18 @@
 """
 File: shl/engine/translation/providers/deepl.py
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.2
 License: MIT
 Description: Robust translation provider adapter for the DeepL API.
 Handles advanced features including context matching, formality
 adjustment, glossary mapping, registry validation, and security
 checks for suspicious output.
+
+DeepL tier notes:
+    - Pro API keys support the full feature set, including Style Rules.
+    - Free API keys (ending in ":fx") do not support Style Rules.
+      When style_id is provided on the Free tier, it is ignored with
+      a warning log, and the translation proceeds without a style.
 
 All outbound HTTP goes through safe_urlopen for SSRF prevention,
 redirect validation, and response size limits.
@@ -55,6 +61,12 @@ class DeepLAdapter(TranslationProvider):
     - formality
     - glossary
     - registry-based language pair validation
+
+    Tier notes:
+    - Pro API keys: full feature set including style_rules.
+    - Free API keys (ending in ":fx"): style_rules is silently
+      ignored (with a warning log), because DeepL's Style Rules
+      API is Pro-only.
     """
 
     def __init__(
@@ -72,8 +84,13 @@ class DeepLAdapter(TranslationProvider):
 
         self.api_key = self.api_key.strip()
 
-        # Auto-detect Free vs Pro endpoint.
-        if self.api_key.endswith(":fx"):
+        # Auto-detect Free vs Pro tier.
+        # Free keys end with ":fx" and use a separate endpoint.
+        # Style Rules is a Pro-only feature, so the tier flag
+        # controls whether style_id is sent to the API.
+        self.is_free_tier = self.api_key.endswith(":fx")
+
+        if self.is_free_tier:
             self.base_url = "https://api-free.deepl.com/v2"
         else:
             self.base_url = "https://api.deepl.com/v2"
@@ -91,8 +108,9 @@ class DeepLAdapter(TranslationProvider):
         )
 
         logger.debug(
-            "DeepLAdapter initialized (api_key=%s)",
+            "DeepLAdapter initialized (api_key=%s, tier=%s)",
             mask_api_key(self.api_key),
+            "free" if self.is_free_tier else "pro",
         )
 
     @property
@@ -101,7 +119,13 @@ class DeepLAdapter(TranslationProvider):
 
     @property
     def supported_features(self) -> list[str]:
-        return ["formality", "context", "glossary", "html_format"]
+        features = ["formality", "context", "glossary", "html_format"]
+
+        # Style Rules is available on the Pro tier only.
+        if not self.is_free_tier:
+            features.append("style_rules")
+
+        return features
 
     def translate(self, request: TranslationRequest) -> str:
         """Translate text using DeepL API."""
@@ -156,6 +180,17 @@ class DeepLAdapter(TranslationProvider):
             payload["formality"] = (
                 "less" if request.formality == "informal" else "more"
             )
+
+        if request.style_id:
+            if self.is_free_tier:
+                logger.warning(
+                    "style_id=%r ignored: DeepL Free API does not "
+                    "support Style Rules. Upgrade to Pro to use "
+                    "style_id.",
+                    request.style_id,
+                )
+            else:
+                payload["style_id"] = request.style_id
 
         if request.glossary and "id" in request.glossary:
             payload["glossary_id"] = request.glossary["id"]

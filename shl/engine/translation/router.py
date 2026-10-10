@@ -1,7 +1,7 @@
 """
 File: router.py — Policy-aware routing for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.1
 License: MIT
 """
 
@@ -625,6 +625,8 @@ def translate_text_with_metadata(
 
     formality = request.formality
     context_type = request.context_type
+    style_id = request.style_id
+
     start_time = time.time()
 
     if use_cache:
@@ -634,6 +636,7 @@ def translate_text_with_metadata(
             target_lang,
             formality,
             context_type,
+            style_id,
         )
 
         if cached is not None:
@@ -647,6 +650,7 @@ def translate_text_with_metadata(
         source_text=text,
         source_lang=source_lang,
         target_lang=target_lang,
+        style_id=style_id,
     )
 
     if memory_translation is not None:
@@ -948,6 +952,7 @@ def translate_text_with_metadata(
                             target_lang,
                             formality,
                             context_type,
+                            style_id, 
                         )
 
                     # Translation has succeeded. Memory persistence is
@@ -958,6 +963,7 @@ def translate_text_with_metadata(
                             translated_text=translated,
                             source_lang=source_lang,
                             target_lang=target_lang,
+                            style_id=style_id,
                         )
                     except Exception:
                         logger.exception(

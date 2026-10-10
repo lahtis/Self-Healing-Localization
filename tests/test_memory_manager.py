@@ -121,7 +121,8 @@ def test_store_translation_passes_correct_content():
             "Source language: en\n"
             "Target language: fi\n"
             "Source: Hello world\n"
-            "Translation: Hei maailma"
+            "Translation: Hei maailma\n"
+            "Style: "
         ),
         memory_type="note",
     )

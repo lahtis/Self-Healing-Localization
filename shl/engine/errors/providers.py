@@ -1,7 +1,7 @@
 """
 File: shl/engine/errors/providers.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.16
+Version: 0.3.1
 License: MIT
 Description:
     Provider-specific error response definitions for SHL.
@@ -317,9 +317,9 @@ MYMEMORY_DEV = {
     ],
     "code_paths": (),
     "message_paths": (
-        ("error",),
         ("message",),
         ("details",),
+        ("error",),        
     ),
     "error_codes": {
         400: INVALID_REQUEST,

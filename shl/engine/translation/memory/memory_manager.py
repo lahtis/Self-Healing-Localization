@@ -95,6 +95,7 @@ class MemoryManager:
         source_text: str,
         source_lang: str,
         target_lang: str,
+        style_id: Optional[str] = None,
     ) -> Optional[str]:
         """
         Search the private translation memory for an exact source
@@ -139,6 +140,7 @@ class MemoryManager:
                 stored_target_lang = memory["target_language"]
                 stored_source = memory["source"]
                 translation = memory["translation"]
+                stored_style = memory.get("style", "")
 
                 try:
                     stored_pair = self.language_parser.normalize_pair(
@@ -160,19 +162,25 @@ class MemoryManager:
                 if stored_source.strip() != source_text.strip():
                     continue
 
+                # style matching
+                if stored_style.strip() != (style_id or "").strip():
+                    continue
+
                 if not translation:
                     continue
 
                 logger.debug(
-                    "Translation memory hit: %s",
+                    "Translation memory hit: %s (style=%s)",
                     language_pair,
+                    style_id or "",
                 )
 
                 return translation
 
             logger.debug(
-                "No translation memory hit for language pair '%s'.",
+                "No translation memory hit for language pair '%s' (style=%s).",
                 language_pair,
+                style_id or "",
             )
 
             return None
@@ -246,6 +254,7 @@ class MemoryManager:
             Target language: ...
             Source: ...
             Translation: ...
+            Style: ...
         """
         values: Dict[str, str] = {}
 
@@ -254,6 +263,7 @@ class MemoryManager:
             "target_language": "Target language:",
             "source": "Source:",
             "translation": "Translation:",
+            "style": "Style:", 
         }
 
         lines = content.splitlines()
@@ -282,6 +292,7 @@ class MemoryManager:
         translated_text: str,
         source_lang: str,
         target_lang: str,
+        style_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Store a successful translation in the enabled memory backend."""
         try:
@@ -294,7 +305,8 @@ class MemoryManager:
                 f"Source language: {source_lang}\n"
                 f"Target language: {target_lang}\n"
                 f"Source: {source_text}\n"
-                f"Translation: {translated_text}"
+                f"Translation: {translated_text}\n"
+                f"Style: {style_id or ''}"
             )
 
             return backend.add_memory(

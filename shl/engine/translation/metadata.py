@@ -1,7 +1,7 @@
 """
 File: metadata.py — metadata for translation requests.
 Author: Tuomas Lähteenmäki
-Version: 0.2.4
+Version: 0.3.1
 License: MIT
 Description: Data transfer objects (DTO) for standardizing localized text payloads,
              context preservation markers, and external provider results.
@@ -34,8 +34,11 @@ class TranslationRequest:
     honorific: Optional[bool] = None                    # Papago-specific: True = polite/honorific style
     glossary: Optional[Dict[str, Any]] = None           # e.g., {"Save": "Tallenna"}
     glossary_id: Optional[str] = None                   # DeepL glossary ID
+    style: Optional[str] = None                         # Generic: "menu", "error", "formal"
+    style_id: Optional[str] = None                      # DeepL style_rules UUID
     html_format: bool = False                           # Explicit markup protection handling
     placeholder_pattern: Optional[str] = None           # Regex for application-specific placeholders
+   
 
     # Tier 3: Engine Internal Tracking
     key: Optional[str] = None                           # e.g., "settings.save"

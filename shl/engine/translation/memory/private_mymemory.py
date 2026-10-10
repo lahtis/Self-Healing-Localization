@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/memory/private_mymemory.py
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.1
 License: MIT
 Description:
     MyMemory.dev memory backend for SHL.
@@ -56,6 +56,10 @@ class MyMemoryHTTPError(MyMemoryError):
 
 class MyMemoryAlreadyExistsError(MyMemoryError):
     """Raised when a memory already exists in MyMemory.dev."""
+
+
+class MyMemoryRateLimitError(MyMemoryError):
+    """Raised when MyMemory.dev rate limit is exceeded."""
 
 
 class PrivateMyMemoryBackend:
@@ -242,6 +246,9 @@ class PrivateMyMemoryBackend:
 
         if error.code == "ALREADY_EXISTS":
             raise MyMemoryAlreadyExistsError(message)
+
+        if error.code == "RATE_LIMIT_EXCEEDED":
+            raise MyMemoryRateLimitError(message)
 
         raise MyMemoryHTTPError(message)
 
