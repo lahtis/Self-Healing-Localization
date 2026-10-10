@@ -18,5 +18,11 @@
     "File": "Fil",
     "Language": "Språk",
     "Retry delay": "Fördröjning innan nytt försök",
-    "Priority:": "Prioritet:"
+    "Priority:": "Prioritet:",
+    "Source": "Källa",
+    "Capability": "Kapacitet",
+    "Allow": "Tillåt",
+    "Deny": "Förneka",
+    "No": "Nej",
+    "Yes": "Ja"
 }

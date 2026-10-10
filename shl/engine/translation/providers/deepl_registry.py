@@ -163,6 +163,20 @@ class DeepLRegistry:
             currently blacklisted.
         """
 
+        if (
+            not isinstance(source_lang, str)
+            or not source_lang.strip()
+            or not isinstance(target_lang, str)
+            or not target_lang.strip()
+        ):
+            logger.debug(
+                "Cannot validate DeepL language pair: "
+                "source=%r, target=%r.",
+                source_lang,
+                target_lang,
+            )
+            return False
+
         src = source_lang.strip().lower()
         tgt = target_lang.strip().lower()
         pair = (src, tgt)
@@ -201,6 +215,20 @@ class DeepLRegistry:
 
             ttl.deepl
         """
+
+        if (
+            not isinstance(source_lang, str)
+            or not source_lang.strip()
+            or not isinstance(target_lang, str)
+            or not target_lang.strip()
+        ):
+            logger.debug(
+                "Cannot blacklist invalid DeepL language pair: "
+                "source=%r, target=%r.",
+                source_lang,
+                target_lang,
+            )
+            return
 
         pair = (
             source_lang.strip().lower(),

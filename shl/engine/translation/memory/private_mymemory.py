@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/memory/private_mymemory.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.17
+Version: 0.3.0
 License: MIT
 Description:
     MyMemory.dev memory backend for SHL.
@@ -17,10 +17,14 @@ import json
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request
-from shl.utils.safe_http import safe_urlopen as urlopen
 
+from shl.utils.safe_http import (
+    SafeHTTPError,
+    safe_urlopen as urlopen,
+)
 from shl._version import __version__ as SHL_VERSION
 from shl.utils.env_loader import get_env_value
+
 from ...errors.parser import ErrorParser
 from ...errors.providers import MYMEMORY_DEV
 
@@ -152,7 +156,7 @@ class PrivateMyMemoryBackend:
         return self._post("/add", payload)
 
     def get_memory(self, memory_uuid: str) -> Dict[str, Any]:
-        """Return a memory by UUID."""
+        """Return a MyMemory.dev memory by UUID."""
         return self._get(f"/memories/{memory_uuid}")
 
     # ------------------------------------------------------------
@@ -214,7 +218,6 @@ class PrivateMyMemoryBackend:
         Convert a normalized SHL error into the existing
         MyMemory.dev backend exception hierarchy.
         """
-
         if error is None:
             raise MyMemoryHTTPError(
                 "MyMemory.dev returned an unknown error."
@@ -247,6 +250,43 @@ class PrivateMyMemoryBackend:
 
         raise MyMemoryHTTPError(message)
 
+    def _raise_http_error(
+        self,
+        status_code: Optional[int],
+        response_body: bytes,
+    ) -> None:
+        """
+        Convert an HTTP error into a provider-specific exception.
+
+        HTTP 409 indicates that the submitted memory already exists.
+        Other statuses are normalized through the configured
+        MyMemory.dev error parser.
+        """
+        response_data = self._decode_json(response_body)
+
+        if status_code == 409:
+            normalized_error = self.error_parser.parse(
+                response_data,
+                http_status=status_code,
+            )
+
+            if (
+                normalized_error is not None
+                and normalized_error.code == "ALREADY_EXISTS"
+            ):
+                self._raise_normalized_error(normalized_error)
+
+            raise MyMemoryAlreadyExistsError(
+                "MyMemory.dev reports that the memory already exists."
+            )
+
+        normalized_error = self.error_parser.parse(
+            response_data,
+            http_status=status_code,
+        )
+
+        self._raise_normalized_error(normalized_error)
+
     # ------------------------------------------------------------
     # HTTP helpers
     # ------------------------------------------------------------
@@ -257,7 +297,6 @@ class PrivateMyMemoryBackend:
         is_public: bool = False,
     ) -> str:
         """Return an existing space UUID or create the space."""
-
         if self.space_uuid:
             try:
                 space = self.get_space(self.space_uuid)
@@ -358,20 +397,34 @@ class PrivateMyMemoryBackend:
                 status_code = response.status
                 response_body = response.read()
 
+        except SafeHTTPError as error:
+            response_body = getattr(
+                error,
+                "response_body",
+                b"",
+            )
+
+            status_code = getattr(
+                error,
+                "status_code",
+                None,
+            )
+
+            self._raise_http_error(
+                status_code=status_code,
+                response_body=response_body,
+            )
+
         except HTTPError as error:
             try:
                 response_body = error.read()
-            except Exception:
+            except OSError:
                 response_body = b""
 
-            response_data = self._decode_json(response_body)
-
-            normalized_error = self.error_parser.parse(
-                response_data,
-                http_status=error.code,
+            self._raise_http_error(
+                status_code=error.code,
+                response_body=response_body,
             )
-
-            self._raise_normalized_error(normalized_error)
 
         except URLError as error:
             normalized_error = self.error_parser.parse(
@@ -402,12 +455,10 @@ class PrivateMyMemoryBackend:
         response_data = self._decode_json(response_body)
 
         if status_code >= 400:
-            normalized_error = self.error_parser.parse(
-                response_data,
-                http_status=status_code,
+            self._raise_http_error(
+                status_code=status_code,
+                response_body=response_body,
             )
-
-            self._raise_normalized_error(normalized_error)
 
         if not isinstance(response_data, dict):
             normalized_error = self.error_parser.parse(
@@ -420,20 +471,20 @@ class PrivateMyMemoryBackend:
         return response_data
 
     @staticmethod
-    def _decode_json(
-        response_body: bytes,
-    ) -> Any:
-        """Decode a JSON response body."""
+    def _decode_json(response_body: Any) -> Dict[str, Any]:
+        """Decode a JSON response body safely."""
         if not response_body:
             return {}
 
-        try:
-            return json.loads(
-                response_body.decode("utf-8")
-            )
-        except (
-            UnicodeDecodeError,
-            json.JSONDecodeError,
-        ):
+        if isinstance(response_body, bytes):
+            response_body = response_body.decode("utf-8", errors="replace")
+
+        if not isinstance(response_body, str):
             return {}
 
+        try:
+            data = json.loads(response_body)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {}
+
+        return data if isinstance(data, dict) else {}

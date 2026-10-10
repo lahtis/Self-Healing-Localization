@@ -1,7 +1,7 @@
 """
 File: router.py — Policy-aware routing for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.2.16
+Version: 0.3.0
 License: MIT
 """
 
@@ -31,8 +31,9 @@ from .providers.microsoft_registry import MicrosoftServiceRegistry
 from .providers.libretranslate import LibreTranslateAdapter
 from .providers.libretranslate_registry import LibreTranslateRegistry
 
-from .providers.libretranslate_community import (LibreTranslateCommunityAdapter)
-
+from .providers.libretranslate_community import (
+    LibreTranslateCommunityAdapter,
+)
 
 from .providers.deepl import DeepLAdapter
 from .providers.deepl_registry import DeepLRegistry
@@ -55,6 +56,7 @@ from shl.utils.env_loader import get_env_value
 from shl.language_parser import LanguageParser
 from shl.engine.language_detection.detection_router import detect_language
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,10 +68,11 @@ try:
     _policy = ConfigManager()
     _USE_POLICY = True
     logger.debug("PolicyManager loaded from %s", _policy.path)
-except Exception as e:
+except Exception as error:
     _USE_POLICY = False
     _policy = None
-    logger.warning("PolicyManager failed to load: %s", e)
+    logger.warning("PolicyManager failed to load: %s", error)
+
 
 _PROVIDER_CACHE = load_cache()
 
@@ -85,6 +88,7 @@ _translation_cache = TranslationCache(
     persist=get_config_value("cache.cache_persist"),
     persist_path=get_config_value("cache.cache_persist_path"),
 )
+
 _memory_manager = MemoryManager()
 
 _mymemory_registry = MyMemoryRegistry()
@@ -100,6 +104,7 @@ _ms_registry = MicrosoftServiceRegistry(
 )
 
 language_parser = LanguageParser()
+
 
 # ---------------------------------------------------------------------------
 # HTML POLICY
@@ -279,15 +284,15 @@ def get_provider_priority(
     local_api_key: Optional[str] = None,
     request: Optional[TranslationRequest] = None,
 ) -> List[str]:
-    """
-    Return translation providers in priority order.
-    """
+    """Return translation providers in priority order."""
 
     # --- Policy-manager mode ---
     if _USE_POLICY and _policy is not None:
         available = _policy.get_available_providers()
-        # Jos policy on käytössä, ÄLÄ IKINÄ pudota zero-budget-polkuun.
-        # Palautetaan se mitä policy sanoo – vaikka tyhjä lista.
+
+        # Never fall back to the zero-budget path when policy is enabled.
+        # Return the providers specified by the policy, even if the list
+        # is empty.
         if not available:
             logger.warning(
                 "Policy is enabled but no providers are available. "
@@ -452,9 +457,12 @@ def get_provider_timeout(provider_name: str) -> float:
 
     return 10.0
 
-def get_provider_retry(provider_name: str, default: int = 2) -> int:
-    """Get provider retry count from policy manager or default."""
 
+def get_provider_retry(
+    provider_name: str,
+    default: int = 2,
+) -> int:
+    """Get provider retry count from policy manager or default."""
     if _USE_POLICY and _policy is not None:
         return _policy.get_retry(
             provider_name,
@@ -463,9 +471,12 @@ def get_provider_retry(provider_name: str, default: int = 2) -> int:
 
     return default
 
-def get_provider_retry_delay(provider_name: str, default: float = 1.0) -> float:
-    """Get provider retry delay from policy manager or default."""
 
+def get_provider_retry_delay(
+    provider_name: str,
+    default: float = 1.0,
+) -> float:
+    """Get provider retry delay from policy manager or default."""
     if _USE_POLICY and _policy is not None:
         return _policy.get_retry_delay(
             provider_name,
@@ -473,6 +484,7 @@ def get_provider_retry_delay(provider_name: str, default: float = 1.0) -> float:
         )
 
     return default
+
 
 # ---------------------------------------------------------------------------
 # BEST PROVIDER
@@ -516,7 +528,6 @@ def get_best_provider(
 
 def clear_unavailable_cache() -> None:
     """Clear internal provider and language-pair availability caches."""
-
     _libre_registry.clear_blacklist()
     _mymemory_registry.clear_blacklist()
     _deepl_registry.clear_blacklist()
@@ -575,7 +586,6 @@ def translate_text_with_metadata(
     source_lang: str = "en",
     use_cache: bool = True,
     mymemory_email: Optional[str] = None,
-    mymemory_api_key: Optional[str] = None,
     deepl_key: Optional[str] = None,
     google_api_key: Optional[str] = None,
     google_backup_api_key: Optional[str] = None,
@@ -683,6 +693,15 @@ def translate_text_with_metadata(
                 "deepl",
             )
 
+            logger.debug(
+                "DeepL language mapping: source=%r -> %r, "
+                "target=%r -> %r",
+                request.source_lang,
+                deepl_source_lang,
+                request.target_lang,
+                deepl_target_lang,
+            )
+
             if not _deepl_registry.is_pair_supported(
                 deepl_source_lang,
                 deepl_target_lang,
@@ -733,7 +752,6 @@ def translate_text_with_metadata(
                 elif service == "mymemory":
                     adapter = MyMemoryAdapter(
                         email=mymemory_email,
-                        api_key=mymemory_api_key,
                     )
 
                     source_provider_lang = language_parser.get_provider_code(
@@ -871,7 +889,6 @@ def translate_text_with_metadata(
                         get_provider_html_policy(service),
                     )
 
-
                 elif service == "libretranslate_community":
                     adapter = LibreTranslateCommunityAdapter()
 
@@ -908,8 +925,20 @@ def translate_text_with_metadata(
                     )
 
                 if translated is not None:
-                    if not _accept_unchanged_translation(text, translated, source_lang, target_lang):
+                    if not _accept_unchanged_translation(
+                        text,
+                        translated,
+                        source_lang,
+                        target_lang,
+                    ):
                         continue
+
+                    logger.info(
+                        "Translation accepted: provider=%s, source=%s, target=%s",
+                        service,
+                        source_lang,
+                        target_lang,
+                    )
 
                     if use_cache:
                         _translation_cache.set(
@@ -921,12 +950,21 @@ def translate_text_with_metadata(
                             context_type,
                         )
 
-                    _memory_manager.store_translation(
-                        source_text=text,
-                        translated_text=translated,
-                        source_lang=source_lang,
-                        target_lang=target_lang,
-                    )
+                    # Translation has succeeded. Memory persistence is
+                    # best-effort and must not invalidate the translation.
+                    try:
+                        _memory_manager.store_translation(
+                            source_text=text,
+                            translated_text=translated,
+                            source_lang=source_lang,
+                            target_lang=target_lang,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Failed to store translation in memory "
+                            "for provider '%s'.",
+                            service,
+                        )
 
                     return TranslationResult(
                         translated_text=translated,
@@ -991,7 +1029,6 @@ def translate_text_with_metadata(
                     error,
                 )
 
-                # backoff = retry_delay * (attempt + 1)
                 backoff = provider_retry_delay * (attempt + 1)
 
                 if time.time() + backoff > service_deadline:
@@ -1036,6 +1073,7 @@ def translate_text_with_metadata(
         f"All translation services failed or timed out "
         f"within {total_timeout}s."
     )
+
 
 def _accept_unchanged_translation(
     text: str,
@@ -1096,13 +1134,14 @@ def _accept_unchanged_translation(
 
         return target_normalized in detected_languages
 
-    except Exception as exc:
+    except Exception as error:
         logger.debug(
             "Language detection failed for unchanged translation: %s",
-            exc,
+            error,
             exc_info=True,
         )
         return False
+
 
 # ---------------------------------------------------------------------------
 # RAW TRANSLATION WRAPPER
@@ -1114,7 +1153,6 @@ def translate_text(
     source_lang: str = "en",
     use_cache: bool = True,
     mymemory_email: Optional[str] = None,
-    mymemory_api_key: Optional[str] = None,
     deepl_key: Optional[str] = None,
     google_api_key: Optional[str] = None,
     google_backup_api_key: Optional[str] = None,
@@ -1138,7 +1176,6 @@ def translate_text(
             source_lang=source_lang,
             use_cache=use_cache,
             mymemory_email=mymemory_email,
-            mymemory_api_key=mymemory_api_key,
             deepl_key=deepl_key,
             google_api_key=google_api_key,
             google_backup_api_key=google_backup_api_key,

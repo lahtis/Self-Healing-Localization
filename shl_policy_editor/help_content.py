@@ -20,7 +20,7 @@ to run before the request is considered unsuccessful.</p>
 is allowed to process.</p>
 <ul>
 <li><strong>Allow Tags</strong> defines which HTML or markup features the provider is allowed to receive.</li>
-<li><strong>Deny Tags</strong> defines which tags must not be processed by the provider. SHL handles denied HTML tags and <code>{}</code> placeholders internally, protecting them during translation and restoring them afterwards.</li>
+<li><strong>Deny Tags</strong> defines which tags must not be processed by the provider. SHL handles denied HTML tags and <code> {} </code> placeholders internally, protecting them during translation and restoring them afterwards.</li>
 </ul>
 <h2>Policy Changes</h2>
 <p>Changes made in the editor are saved to the SHL policy configuration.

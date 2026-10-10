@@ -5,7 +5,35 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)  
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-10-10
+
+### Added
+- `shl/utils/safe_http_common.py`: shared constants, `SafeHTTPError`,
+  and DNS/response helpers used by both HTTP paths.
+- `shl/utils/safe_local_http.py`: dedicated safety layer for localhost
+  and internal network calls. Uses an explicit hostname and port
+  allowlist, rejects any hostname that resolves to a public IP, and
+  refuses to follow redirects.
+- `shl/_version.py`: single source of truth for the package version.
+- Tests covering URL validation, DNS failures, and response handling
+  for both HTTP paths.
+
+### Changed
+- `shl/utils/safe_http.py` refactored to import shared constants and
+  helpers from `safe_http_common.py`. Behavior unchanged; the refactor
+  keeps the two HTTP paths consistent.
+- `pyproject.toml` now reads the version dynamically from
+  `shl/_version.py`.
+- Minimum supported Python is now 3.10.
+
+### Security
+- Two distinct HTTP paths with distinct security models:
+  - Outbound: HTTPS-only, public-IP-only resolution, redirect validation.
+  - Local: explicit allowlist, no public IPs, no redirects.
+  This makes the trust boundary explicit at the call site.
+
 ---
+
 ## [0.2.11] - 2026-09-16 Language Detect
 - Added Language detect profider to prevented failed translations. (en -> message -> fr message = Null)
 - Added Language detect language cache

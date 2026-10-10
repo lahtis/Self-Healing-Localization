@@ -1,7 +1,7 @@
 """
 File: shl/engine/errors/codes.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.16
+Version: 0.3.0
 License: MIT
 Description:
     Common error codes used by the SHL error handling system.
@@ -44,8 +44,14 @@ ALREADY_EXISTS = "ALREADY_EXISTS"
 TIMEOUT = "TIMEOUT"
 SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
 
+# Transport and security errors
+NETWORK_ERROR = "NETWORK_ERROR"
+SECURITY_VIOLATION = "SECURITY_VIOLATION"
+
 # Response errors
 INVALID_RESPONSE = "INVALID_RESPONSE"
+RESPONSE_TOO_LARGE = "RESPONSE_TOO_LARGE"
+INVALID_CONTENT_TYPE = "INVALID_CONTENT_TYPE"
 
 # Unknown
 UNKNOWN_ERROR = "UNKNOWN_ERROR"
