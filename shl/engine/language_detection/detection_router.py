@@ -2,7 +2,7 @@
 File: shl/engine/language_detection/detection_router.py — Policy-aware
 routing for SHL language detection.
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.1
 License: MIT
 """
 
@@ -12,6 +12,7 @@ import time
 from .provider_cache import load_cache
 
 from .providers.base import (
+    LanguageDetectionProvider,
     LanguageDetectionResult,
 )
 
@@ -19,9 +20,13 @@ from .providers.detect_language import (
     DetectLanguageAdapter,
 )
 
+from .providers.deepl import (
+    DeepLDetectionAdapter,
+)
+
 from shl.config.policy_manager import ConfigManager
 from shl.engine.errors import ErrorParser
-from shl.engine.errors.providers import DETECTLANGUAGE
+from shl.engine.errors.providers import DEEPL, DETECTLANGUAGE
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +34,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # POLICY MANAGER INITIALIZATION
 # ---------------------------------------------------------------------------
+
+_policy: ConfigManager | None
 
 try:
     _policy = ConfigManager()
@@ -117,9 +124,12 @@ def _get_policy_provider_name(provider_name: str) -> str:
         config = _policy.get()
         providers = config.get("providers", {})
 
+        if not isinstance(providers, dict):
+            return provider_name
+
         for name in providers:
             if name.lower() == provider_name.lower():
-                return name
+                return str(name)
 
     return provider_name
 
@@ -183,6 +193,12 @@ def _get_error_parser(provider_name: str) -> ErrorParser:
             config=DETECTLANGUAGE,
         )
 
+    if provider_name == "deepl":
+        return ErrorParser(
+            provider=provider_name,
+            config=DEEPL,
+        )
+
     return ErrorParser(provider=provider_name)
 
 
@@ -190,11 +206,14 @@ def _get_error_parser(provider_name: str) -> ErrorParser:
 # PROVIDER FACTORY
 # ---------------------------------------------------------------------------
 
-def _create_provider(provider_name: str):
+def _create_provider(provider_name: str) -> LanguageDetectionProvider:
     """Create a language detection provider adapter."""
 
     if provider_name == "detectlanguage":
         return DetectLanguageAdapter()
+
+    if provider_name == "deepl":
+        return DeepLDetectionAdapter()
 
     raise ValueError(
         f"Unsupported language detection provider: {provider_name}"
@@ -220,16 +239,15 @@ def detect_language(
 
     Args:
         text: Text to detect.
-        source_lang: Optional source language hint, used only for
-            provider filtering when the provider is language-pair
-            specific.
+        source_lang: Optional source language hint. Some providers
+            (e.g. DeepL) require it to construct a valid request.
         total_timeout: Wall-clock budget across all providers and
             retries.
 
     Raises:
         ValueError: if text is not a non-empty string.
-        RuntimeError: if every provider fails or the total timeout
-            is reached before any provider returns a result.
+        RuntimeError: if no detection providers are enabled, or if
+            every provider fails before any returns a result.
     """
 
     if not isinstance(text, str) or not text.strip():
@@ -237,10 +255,9 @@ def detect_language(
 
     order = get_provider_priority(source_lang=source_lang)
 
-
-    # CHANGED: distinguish "no providers configured" from "all
-    # providers failed". The previous generic error was misleading
-    # when the policy had no detection providers enabled.
+    # Distinguish "no providers configured" from "all providers
+    # failed". The generic error at the end is misleading when the
+    # policy has no detection providers enabled at all.
     if not order:
         raise RuntimeError(
             "No language detection providers are enabled. "
@@ -298,7 +315,11 @@ def detect_language(
                     timeout,
                 )
 
-                results = adapter.detect(text, timeout=timeout)
+                results = adapter.detect(
+                    text,
+                    source_lang=source_lang,
+                    timeout=timeout,
+                )
 
                 if results:
                     return results
@@ -327,6 +348,17 @@ def detect_language(
                     exception=exception,
                     http_status=http_status,
                 )
+
+                if normalized_error is None:
+                    logger.warning(
+                        "Language detection provider '%s' failed "
+                        "(attempt %d/%d): unparsed exception %s",
+                        service,
+                        attempt + 1,
+                        retry_count + 1,
+                        type(exception).__name__,
+                    )
+                    break
 
                 logger.warning(
                     "Language detection provider '%s' failed "

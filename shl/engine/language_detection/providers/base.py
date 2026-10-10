@@ -1,7 +1,7 @@
 """
 File: shl/engine/language_detection/providers/base.py
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.1
 License: MIT
 Description: Base provider interface for language detection adapters.
 """
@@ -44,22 +44,24 @@ class LanguageDetectionResult:
 class LanguageDetectionProvider(ABC):
     """Abstract base class for language detection providers."""
 
-    # CHANGED: `timeout` added so the router can pass the policy-
-    # configured value. Providers that do not support a runtime
-    # timeout override should accept the argument and ignore it.
     @abstractmethod
     def detect(
         self,
         text: str,
+        source_lang: str | None = None,
         timeout: float | None = None,
     ) -> list[LanguageDetectionResult]:
         """Detect the language(s) present in the supplied text.
 
         Args:
             text: Text to analyze.
+            source_lang: Optional known source language hint. Some
+                providers (e.g. DeepL) require it to construct a
+                valid request. Providers that do not need it should
+                accept it and ignore it.
             timeout: Optional override for the provider's network
-                timeout, in seconds. When None, the provider uses
-                its own configured default.
+                timeout, in seconds. When None, the provider uses its
+                own configured default.
 
         Returns:
             List of detected language candidates. An empty list
@@ -70,8 +72,22 @@ class LanguageDetectionProvider(ABC):
         ...
 
     @abstractmethod
-    def build_request(self, text: str) -> dict[str, Any]:
-        """Build the raw API request payload."""
+    def build_request(
+        self,
+        text: str,
+        source_lang: str | None = None,
+    ) -> dict[str, Any]:
+        """Build the raw API request payload.
+
+        Args:
+            text: Text to analyze.
+            source_lang: Optional known source language hint. Some
+                providers (e.g. DeepL) require it to construct a
+                valid request.
+
+        Returns:
+            Provider-specific request payload.
+        """
         ...
 
     @property

@@ -8,7 +8,7 @@
                 "MYMEMORY_EMAIL"
             ],
             "priority": 1,
-            "detection_priority": 2,
+            "detection_priority": 4,
             "retry": 2,
             "allow": [],
             "deny": [
@@ -23,7 +23,7 @@
             "timeout": 8,
             "requires_env": [],
             "priority": 3,
-            "detection_priority": 4,
+            "detection_priority": 6,
             "retry": 2,
             "allow": [
                 "html"
@@ -39,7 +39,7 @@
             "timeout": 15,
             "requires_env": [],
             "priority": 4,
-            "detection_priority": 3,
+            "detection_priority": 5,
             "retry": 2,
             "allow": [
                 "html"
@@ -51,13 +51,13 @@
         },
         "DeepL": {
             "enabled": true,
-            "detection_enabled": false,
+            "detection_enabled": true,
             "timeout": 5,
             "requires_env": [
                 "DEEPL_API_KEY"
             ],
             "priority": 2,
-            "detection_priority": null,
+            "detection_priority": 1,
             "retry": 2,
             "allow": [
                 "html"
@@ -75,7 +75,7 @@
                 "GOOGLE_API_KEY"
             ],
             "priority": 5,
-            "detection_priority": 5,
+            "detection_priority": 7,
             "retry": 2,
             "allow": [
                 "html"
@@ -93,7 +93,7 @@
                 "MICROSOFT_TRANSLATOR_KEY"
             ],
             "priority": 6,
-            "detection_priority": 6,
+            "detection_priority": 8,
             "retry": 2,
             "allow": [
                 "html"
@@ -112,7 +112,7 @@
                 "NAVER_CLIENT_SECRET"
             ],
             "priority": 7,
-            "detection_priority": 7,
+            "detection_priority": 3,
             "retry": 2,
             "allow": [],
             "deny": [
@@ -128,7 +128,7 @@
                 "YANDEX_API_KEY"
             ],
             "priority": 8,
-            "detection_priority": 8,
+            "detection_priority": 9,
             "retry": 2,
             "allow": [
                 "html"
@@ -156,13 +156,13 @@
         },
         "DetectLanguage": {
             "enabled": true,
-            "detection_enabled": true,
+            "detection_enabled": false,
             "timeout": 10,
             "requires_env": [
                 "DETECTLANGUAGE_API_KEY"
             ],
             "priority": null,
-            "detection_priority": 1,
+            "detection_priority": 2,
             "retry": 2,
             "allow": [],
             "deny": [],

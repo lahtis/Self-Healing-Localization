@@ -1,7 +1,7 @@
 """
 File: shl/engine/language_detection/providers/detect_language.py
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.1
 License: MIT
 Description:
     Detect Language API adapter for SHL language detection.
@@ -78,17 +78,18 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
         """Return optional features supported by this provider."""
         return []
 
-    # CHANGED: `timeout` parameter added so the router can pass the
-    # policy-configured value instead of the hard-coded default.
     def detect(
         self,
         text: str,
+        source_lang: str | None = None,
         timeout: float | None = None,
     ) -> list[LanguageDetectionResult]:
         """Detect the language of the supplied text.
 
         Args:
             text: Text whose language should be detected.
+            source_lang: Ignored. Present for interface compatibility
+                with providers that require it (e.g. DeepL).
             timeout: Optional override for the network timeout, in
                 seconds. When None, DETECTLANGUAGE_TIMEOUT is used.
 
@@ -115,11 +116,13 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
     def build_request(
         self,
         text: str,
+        source_lang: str | None = None,
     ) -> dict[str, Any]:
         """Build the Detect Language API request payload.
 
         Args:
             text: Text to analyze.
+            source_lang: Ignored. Present for interface compatibility.
 
         Returns:
             Provider-specific request payload.
@@ -128,8 +131,6 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
             "q": text,
         }
 
-    # CHANGED: `timeout` parameter added; the router-supplied value
-    # flows through to urllib via safe_urlopen.
     def _call_api(
         self,
         payload: dict[str, Any],
@@ -168,12 +169,8 @@ class DetectLanguageAdapter(LanguageDetectionProvider):
             request,
             timeout=timeout,
         ) as response:
-            # Use the shared size-limited reader so a misbehaving
-            # provider cannot return an unbounded body.
             raw = read_limited_response(response, MAX_RESPONSE_BYTES)
 
-        # Decode errors are surfaced as a clear SHL error instead of
-        # a bare UnicodeDecodeError.
         try:
             raw_response = raw.decode("utf-8")
         except UnicodeDecodeError as exc:

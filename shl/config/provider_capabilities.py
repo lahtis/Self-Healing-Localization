@@ -44,7 +44,7 @@ PROVIDER_CAPABILITIES = {
         "formality": True,
         "contextual_suggestions": False,
         "honorific": False,
-        "language_detection": False,
+        "language_detection": True,
         "document_translation": True,
         "website_translation": False,
         "batch_translation": True,

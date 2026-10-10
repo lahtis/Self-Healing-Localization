@@ -1,5 +1,6 @@
 {
     "SHL Policy Editor": "Redaktør for SHL-politik",
+    "Save": "Gem",
     "Exit": "Afslut",
     "Help": "Hjælp",
     "About": "Om",
@@ -14,15 +15,7 @@
     "Retry delay": "Forsinkelse på genforsøg",
     "Provider Editor": "Udbyderredaktør",
     "Provider Capabilities": "Udbyderkapaciteter",
-    "Source": "Kilde",
-    "Capability": "Egenskaber",
-    "SHL": "SHL",
-    "Allow": "Tillad",
-    "Deny": "Afvis",
-    "No": "Nej",
-    "Yes": "Ja",
     "File": "Fil",
     "Language": "Sprog",
-    "Priority:": "Prioritet:",
-    "Save": "Gem"
+    "Detection Priority": "Detektionsprioritet"
 }

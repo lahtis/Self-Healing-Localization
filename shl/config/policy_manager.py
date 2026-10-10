@@ -212,7 +212,7 @@ class ConfigManager:
                 "timeout": 5,
                 "requires_env": ["DEEPL_API_KEY"],
                 "priority": 3,
-                "detection_priority": None,
+                "detection_priority": 8,
                 "retry": 2,
                 "retry_delay": 2.0,
             },
