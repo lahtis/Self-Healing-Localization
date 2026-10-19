@@ -70,9 +70,11 @@ Documentation = "https://codeberg.org/lahtis/Self_Healing_Localization/src/branc
 
 [project.scripts]
 shl = "shl.cli:main"
+shl-extract = "shl.extract.cli:main"
 
-[tool.setuptools]
-packages = ["shl"]
+[tool.setuptools.packages.find]
+include = ["shl*"]
+exclude = ["tests*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "shl._version.__version__" }
