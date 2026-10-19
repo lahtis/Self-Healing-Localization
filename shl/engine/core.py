@@ -619,3 +619,4 @@ class LocalizationEngine:
             "template_keys": len(self.template_localizer.templates),
             "config": dict(self.config),
         }
+
