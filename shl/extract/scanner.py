@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 # Function names treated as translation calls. Attribute access is
 # stripped before comparison: engine.ui_text(...) matches "ui_text".
 DEFAULT_FUNCTION_NAMES: frozenset[str] = frozenset({
+    "_",                 # ← gettext-tyylinen
+    "gettext",           # ← gettext-tyylinen
+    "ngettext",          # ← monikko
     "ui_text",
     "L",
     "template",

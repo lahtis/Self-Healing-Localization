@@ -24,7 +24,8 @@ from shl.config.provider_capabilities import (
 
 __all__ = ["ConfigManager"]
 
-DEFAULT_POLICY_PATH = Path.cwd() / "shl-policy-config.json"
+# DEFAULT_POLICY_PATH = Path.cwd() / "shl-policy-config.json"
+DEFAULT_POLICY_PATH = Path.home() / ".config" / "shl" / "shl-policy-config.json"
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class ConfigManager:
         self,
         path: Optional[Union[str, Path]] = None,
         check_interval: float = 1.0,
-        env_path: Optional[Union[str, Path]] = ".env",
+        env_path: Optional[Union[str, Path]] = str(Path.home() / ".config" / "shl" / ".env"),
     ):
         self.path = Path(path) if path else DEFAULT_POLICY_PATH
         self.check_interval = check_interval

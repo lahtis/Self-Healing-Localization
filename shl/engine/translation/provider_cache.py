@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/provider_cache.py
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.2
 License: MIT
 Description:
     Provider language support and cache.
@@ -12,6 +12,10 @@ Description:
 
     All outbound HTTP goes through safe_urlopen for SSRF prevention,
     redirect validation, and response size limits.
+
+    The local provider's languages are read from the existing
+    local_languages_cache.json so that get_provider_code() can
+    resolve local language codes the same way it resolves the others.
 
     This module is imported during SHL startup and may run a network
     refresh when the cache file is missing.
@@ -24,8 +28,10 @@ Description:
 import json
 import logging
 import shutil
+import os
 from pathlib import Path
 from urllib.request import Request
+from datetime import datetime, timezone
 
 from shl.utils.safe_http import safe_urlopen as urlopen
 from shl.utils.safe_http_common import (
@@ -51,8 +57,72 @@ logger = logging.getLogger(__name__)
 
 SHL_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = SHL_DIR.parent
-CACHE_FILE = PROJECT_DIR / ".languages_cache.json"
+CACHE_FILE = Path.home() / ".cache" / "shl" / "languages_cache.json"
+LOCAL_CACHE_FILE = Path.home() / ".cache" / "shl" / "local_languages_cache.json"
 PM_FILE = SHL_DIR / "data" / "papago_mymemory.json"
+
+
+# ---------------------------------------------------------------------------
+# LOCAL PROVIDER
+# ---------------------------------------------------------------------------
+
+def fetch_local() -> list[str]:
+    """Read the local provider's supported languages.
+
+    Reads the existing local_languages_cache.json (written by
+    local_languages_cache.py) so the local provider's language list
+    is available in the shared languages_cache.json without
+    duplicating the fetch logic or creating a circular import.
+
+    Returns an empty list when the cache is missing or malformed.
+    """
+
+    if not LOCAL_CACHE_FILE.exists():
+        logger.warning(
+            "Local languages cache not found: %s",
+            LOCAL_CACHE_FILE,
+        )
+        return []
+
+    try:
+        with LOCAL_CACHE_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "Failed to read local languages cache '%s': %s",
+            LOCAL_CACHE_FILE,
+            exc,
+        )
+        return []
+
+    if not isinstance(data, dict):
+        logger.warning(
+            "Invalid local languages cache format: %s",
+            LOCAL_CACHE_FILE,
+        )
+        return []
+
+    languages = data.get("languages")
+
+    if not isinstance(languages, list):
+        logger.warning(
+            "Local languages cache missing 'languages' list: %s",
+            LOCAL_CACHE_FILE,
+        )
+        return []
+
+    codes = [
+        code.strip().lower()
+        for code in languages
+        if isinstance(code, str) and code.strip()
+    ]
+
+    logger.info(
+        "Local provider: %d languages from cache",
+        len(codes),
+    )
+
+    return sorted(set(codes))
 
 
 # ---------------------------------------------------------------------------
@@ -60,11 +130,14 @@ PM_FILE = SHL_DIR / "data" / "papago_mymemory.json"
 # ---------------------------------------------------------------------------
 
 def load_cache() -> dict:
-    """Load the existing cache or generate a new one."""
+    """Load the existing cache or generate a new one.
 
-    # Ensure the user endpoints file exists even when the language
-    # cache is already present. This gives users a visible, editable
-    # template without forcing a full cache regeneration.
+    Calls load_endpoints() first so the user's editable endpoint
+    template exists even when the language cache is already present.
+    This avoids forcing a full cache regeneration just to expose
+    the endpoint configuration.
+    """
+
     load_endpoints()
 
     if CACHE_FILE.exists():
@@ -72,7 +145,7 @@ def load_cache() -> dict:
             with CACHE_FILE.open("r", encoding="utf-8") as file:
                 data = json.load(file)
 
-            if isinstance(data, dict):
+            if isinstance(data, dict) and "providers" in data:
                 return data
 
             logger.warning(
@@ -80,15 +153,50 @@ def load_cache() -> dict:
                 CACHE_FILE,
             )
 
-        except (json.JSONDecodeError, OSError):
-            backup = CACHE_FILE.with_suffix(".json.bak")
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning(
+                "Cache file %s is corrupted: %s",
+                CACHE_FILE,
+                exc,
+            )
 
+        # Backup with timestamp, then try to restore from it
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup = CACHE_FILE.with_suffix(f".json.{timestamp}.bak")
+
+        try:
+            shutil.copy2(CACHE_FILE, backup)
+            logger.info("Corrupted cache backed up to %s", backup)
+        except OSError:
+            pass
+
+        # Try to restore from the most recent valid backup
+        for candidate in sorted(
+            CACHE_FILE.parent.glob("languages_cache.json.*.bak"),
+            reverse=True,
+        ):
             try:
-                shutil.copy2(CACHE_FILE, backup)
-            except OSError:
-                pass
+                with candidate.open("r", encoding="utf-8") as file:
+                    data = json.load(file)
+                if isinstance(data, dict) and "providers" in data:
+                    logger.warning(
+                        "Restored cache from backup %s",
+                        candidate,
+                    )
+                    return data
+            except (json.JSONDecodeError, OSError):
+                continue
 
-    return generate_cache()
+    # No valid cache or backup; regenerate
+    try:
+        return generate_cache()
+    except (OSError, SafeHTTPError) as exc:
+        logger.error(
+            "Cache regeneration failed (%s); using empty cache",
+            exc,
+        )
+        return {"providers": {}}
 
 
 def fetch_json(
@@ -237,6 +345,9 @@ def generate_cache() -> dict:
 
     papago_mymemory = load_papago_mymemory()
 
+    # Local provider reads its languages from local_languages_cache.json.
+    local = fetch_local()
+
     cache = {
         "providers": {
             "microsoft_translator": microsoft,
@@ -263,7 +374,10 @@ def generate_cache() -> dict:
                     [],
                 )
             ),
-        }
+
+            "local": local,
+        },
+        "last_updated": datetime.now(timezone.utc).isoformat(),
     }
 
     CACHE_FILE.parent.mkdir(
@@ -271,13 +385,33 @@ def generate_cache() -> dict:
         exist_ok=True,
     )
 
-    with CACHE_FILE.open("w", encoding="utf-8") as file:
-        json.dump(
-            cache,
-            file,
-            indent=4,
-            ensure_ascii=False,
+    tmp_path = CACHE_FILE.with_suffix(".json.tmp")
+
+    try:
+        with tmp_path.open("w", encoding="utf-8") as file:
+            json.dump(
+                cache,
+                file,
+                indent=4,
+                ensure_ascii=False,
+            )
+            file.flush()
+            os.fsync(file.fileno())
+
+        os.replace(tmp_path, CACHE_FILE)
+
+    except OSError as error:
+        logger.error(
+            "Failed to write provider cache %s: %s",
+            CACHE_FILE,
+            error,
         )
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        raise
 
     logger.info(
         "Provider language cache generated: %s",

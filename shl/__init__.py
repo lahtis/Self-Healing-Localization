@@ -1,7 +1,8 @@
 """
-Self-Healing Localization Layer (SHL)
-A lightweight, dependency-free Python library that eliminates missing translations forever.
+(SHL) A lightweight, dependency-free Python library with a preloader manager.
 """
+
+from .manager import PreloaderManager, PreloaderEntry
 
 from shl._version import (
     __version__,
@@ -67,6 +68,9 @@ __all__ = [
     "get_logger",
     "set_level",
     "get_log_stats",
+    # Preload
+    "PreloaderManager", 
+    "PreloaderEntry",    
     # Core
     "LanguageValidator",
     # Lang utils

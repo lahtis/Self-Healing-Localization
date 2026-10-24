@@ -1,7 +1,7 @@
 """
 File: shl/engine/core.py
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.3
 License: MIT
 Description:
     Central localization engine for the Self-Healing Localization Layer.
@@ -14,25 +14,32 @@ Description:
     - Manages GLFM language fallback chains.
     - Synchronizes localized keys and templates.
     - Provides optional machine translation through the translation layer.
+    - Provides a preload() generator that yields PreloadEvent instances.
 
     Translation providers, provider failover, provider policies, retries,
     provider registries, and translation caching are handled by the
     translation subsystem rather than by this class.
 """
-import json
-import logging
-from typing import Any
-
-from urllib.request import Request
-from shl.utils.safe_http import safe_urlopen as urlopen
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from shl.engine.localizer import Localizer
 from shl.engine.template_localizer import TemplateLocalizer
 from shl.engine.translation import translate_text
 from shl.engine.translation.exceptions import LanguageNotSupportedError
+
+from shl.engine.preload import (
+    PreloadEvent,
+    KIND_SCAN,
+    KIND_GLFM,
+    KIND_LANGUAGE,
+    KIND_TRANSLATE,
+    KIND_READY,
+)
+
+from shl.extract.scanner import scan_tree, merge_keys
 
 from shl.language_validator import LanguageValidator
 from shl.utils.lang_utils import base_language, normalize_full_tag
@@ -54,6 +61,7 @@ def _get_shared_policy():
     if _shared_policy is None:
         try:
             from shl.config.policy_manager import ConfigManager
+
             _shared_policy = ConfigManager()
         except Exception as error:
             logger.debug(
@@ -583,6 +591,197 @@ class LocalizationEngine:
             self._sync_from_lang(self.base_lang)
 
     # ------------------------------------------------------------------
+    # Preload
+    # ------------------------------------------------------------------
+
+    def preload(
+        self,
+        include_translation: bool = True,
+        source_path: Path | None = None,
+    ):
+        """Preload the engine and yield progress events.
+
+        Yields PreloadEvent instances in this order:
+
+            scan        source code scanned for keys
+            glfm        GLFM database loaded
+            language    locale file loaded
+            translate   missing keys translated (optional)
+            ready       all work complete
+
+        The generator never raises on individual translation failures.
+        Those are logged and reported as missing keys.
+        """
+
+        # ------------------------------------------------------------------
+        # 1. Scan source code
+        # ------------------------------------------------------------------
+        yield PreloadEvent(
+            kind=KIND_SCAN,
+            done=0,
+            total=1,
+            message="Scanning source files...",
+        )
+
+        keys: dict[str, str] = {}
+
+        if source_path is not None:
+            try:
+                results = list(scan_tree(source_path))
+                keys = merge_keys(results)
+            except Exception as error:
+                logger.warning("Scan failed: %s", error)
+
+        yield PreloadEvent(
+            kind=KIND_SCAN,
+            done=1,
+            total=1,
+            message=f"Found {len(keys)} translation keys",
+        )
+
+        # ------------------------------------------------------------------
+        # 2. Load GLFM
+        # ------------------------------------------------------------------
+        yield PreloadEvent(
+            kind=KIND_GLFM,
+            done=0,
+            total=1,
+            message="Loading GLFM...",
+        )
+
+        try:
+            self.reload_glfm()
+        except Exception as error:
+            logger.warning("GLFM reload failed: %s", error)
+
+        yield PreloadEvent(
+            kind=KIND_GLFM,
+            done=1,
+            total=1,
+            message="GLFM loaded",
+        )
+
+        # ------------------------------------------------------------------
+        # 3. Load locale file
+        # ------------------------------------------------------------------
+        yield PreloadEvent(
+            kind=KIND_LANGUAGE,
+            done=0,
+            total=1,
+            message=f"Loading locale: {self.lang_code}",
+        )
+
+        # Ensure the base locale file (en.json) is populated with the
+        # scanned keys. Without this, a fresh project has an empty
+        # en.json, and preload() has no source text to translate.
+        base_localizer = Localizer(
+            lang_code=self.base_lang,
+            base_lang=self.base_lang,
+            folder=self.ui_folder,
+        )
+
+        if keys:
+            for key, default in keys.items():
+                if not base_localizer.get_text(key):
+                    base_localizer.set_text(key, default or key)
+            # Persist the populated base locale so UI reads it back.
+            base_localizer.save()
+
+        existing = set(self.ui_localizer.keys())
+        missing = [key for key in keys if key not in existing]
+
+        yield PreloadEvent(
+            kind=KIND_LANGUAGE,
+            done=1,
+            total=1,
+            message=(
+                f"Loaded {len(existing)} keys, "
+                f"{len(missing)} missing"
+            ),
+            translated=len(existing),
+            missing=len(missing),
+        )
+
+        # ------------------------------------------------------------------
+        # 4. Translate missing keys
+        # ------------------------------------------------------------------
+        if (
+            include_translation
+            and missing
+            and self.m_translation_enabled
+            and self.lang_code != self.base_lang
+        ):
+            total = len(missing)
+            translated_count = 0
+
+            for index, key in enumerate(missing, 1):
+                yield PreloadEvent(
+                    kind=KIND_TRANSLATE,
+                    done=index - 1,
+                    total=total,
+                    message=f"Translating {index}/{total}",
+                    translated=translated_count,
+                    missing=total - translated_count,
+                    current_key=key,
+                )
+
+                # Prefer the scanned default. If the scanner found no
+                # literal default, fall back to the base locale entry.
+                default = keys.get(key, "")
+
+                if not default:
+                    default = base_localizer.get_text(key) or ""
+
+                if not default:
+                    continue
+
+                try:
+                    translated = translate_text(
+                        text=default,
+                        target_lang=self.lang_code,
+                        source_lang=self.base_lang,
+                        raise_on_language_not_supported=True,
+                    )
+                except LanguageNotSupportedError as error:
+                    logger.warning(
+                        "Language pair not supported (%s -> %s): %s",
+                        self.base_lang,
+                        self.lang_code,
+                        error,
+                    )
+                    break
+                except Exception as error:
+                    logger.warning(
+                        "Translation failed for '%s': %s", key, error
+                    )
+                    continue
+
+                if translated is not None:
+                    self.ui_localizer.set_text(key, translated)
+                    translated_count += 1
+
+            yield PreloadEvent(
+                kind=KIND_TRANSLATE,
+                done=total,
+                total=total,
+                message=f"Translated {translated_count} keys",
+                translated=translated_count,
+                missing=total - translated_count,
+            )
+
+        # ------------------------------------------------------------------
+        # 5. Ready
+        # ------------------------------------------------------------------
+        yield PreloadEvent(
+            kind=KIND_READY,
+            done=1,
+            total=1,
+            message="Ready",
+            translated=len(self.ui_localizer.keys()),
+            missing=0,
+        )
+
+    # ------------------------------------------------------------------
     # GLFM
     # ------------------------------------------------------------------
 
@@ -619,4 +818,3 @@ class LocalizationEngine:
             "template_keys": len(self.template_localizer.templates),
             "config": dict(self.config),
         }
-

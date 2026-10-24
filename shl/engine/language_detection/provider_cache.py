@@ -2,7 +2,7 @@
 File: shl/engine/language_detection/provider_cache.py
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.3.1
+Version: 0.3.2
 Description:
     Language detection provider support and cache.
 
@@ -11,11 +11,18 @@ Description:
 
     All outbound HTTP goes through safe_urlopen for SSRF prevention,
     redirect validation, and response size limits.
+
+    The cache file is written atomically (tmp + fsync + replace).
+    A crash mid-write cannot corrupt an existing cache. Corrupted
+    caches are backed up with a timestamp and the most recent valid
+    backup is restored before regenerating.
 """
 
 import json
 import logging
+import os
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 # CHANGED: import Request only; urlopen is replaced with the safe
@@ -43,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 SHL_DIR = Path(__file__).resolve().parents[2]
 PROJECT_DIR = SHL_DIR.parent
-CACHE_FILE = PROJECT_DIR / ".language_detection_cache.json"
+CACHE_FILE = Path.home() / ".cache" / "shl" / "language_detection_cache.json"
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +62,10 @@ def load_cache() -> dict:
 
     A cache written before a provider was added is completed with the
     missing providers only. Providers already in the file are kept.
+
+    If the cache file is corrupted, it is backed up with a timestamp
+    and the most recent valid backup is restored before falling back
+    to a full regeneration.
     """
 
     if CACHE_FILE.exists():
@@ -62,13 +73,38 @@ def load_cache() -> dict:
             with CACHE_FILE.open("r", encoding="utf-8") as file:
                 cache = json.load(file)
 
-        except (json.JSONDecodeError, OSError):
-            backup = CACHE_FILE.with_suffix(".json.bak")
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning(
+                "Detection cache %s is corrupted: %s",
+                CACHE_FILE,
+                exc,
+            )
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup = CACHE_FILE.with_suffix(f".json.{timestamp}.bak")
 
             try:
                 shutil.copy2(CACHE_FILE, backup)
+                logger.info("Corrupted cache backed up to %s", backup)
             except OSError:
                 pass
+
+            # Try to restore from the most recent valid backup.
+            for candidate in sorted(
+                CACHE_FILE.parent.glob("language_detection_cache.json.*.bak"),
+                reverse=True,
+            ):
+                try:
+                    with candidate.open("r", encoding="utf-8") as file:
+                        restored = json.load(file)
+                    if isinstance(restored, dict):
+                        logger.warning(
+                            "Restored detection cache from backup %s",
+                            candidate,
+                        )
+                        return _add_missing_providers(restored)
+                except (json.JSONDecodeError, OSError):
+                    continue
 
         else:
             return _add_missing_providers(cache)
@@ -103,20 +139,45 @@ def _fetch_provider(name: str) -> object:
 
 
 def _write_cache(cache: dict) -> None:
-    """Write the cache file."""
+    """Write the cache file atomically.
+
+    Writes to a temporary file first and replaces the target only
+    after a successful flush and fsync. A crash mid-write cannot
+    corrupt an existing cache.
+    """
 
     CACHE_FILE.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    with CACHE_FILE.open("w", encoding="utf-8") as file:
-        json.dump(
-            cache,
-            file,
-            indent=4,
-            ensure_ascii=False,
+    tmp_path = CACHE_FILE.with_suffix(".json.tmp")
+
+    try:
+        with tmp_path.open("w", encoding="utf-8") as file:
+            json.dump(
+                cache,
+                file,
+                indent=4,
+                ensure_ascii=False,
+            )
+            file.flush()
+            os.fsync(file.fileno())
+
+        os.replace(tmp_path, CACHE_FILE)
+
+    except OSError as error:
+        logger.error(
+            "Failed to write detection cache %s: %s",
+            CACHE_FILE,
+            error,
         )
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        raise
 
 
 def _add_missing_providers(cache: object) -> dict:
@@ -143,6 +204,7 @@ def _add_missing_providers(cache: object) -> dict:
     for name in missing:
         providers[name] = _fetch_provider(name)
 
+    cache["last_updated"] = datetime.now(timezone.utc).isoformat()
     _write_cache(cache)
 
     return cache
@@ -201,10 +263,18 @@ def generate_cache() -> dict:
         "providers": {
             name: _fetch_provider(name)
             for name in _provider_fetchers()
-        }
+        },
+        "last_updated": datetime.now(timezone.utc).isoformat(),
     }
 
-    _write_cache(cache)
+    try:
+        _write_cache(cache)
+    except OSError as exc:
+        logger.error(
+            "Detection cache generation failed (%s); returning in-memory cache",
+            exc,
+        )
+        return cache
 
     return cache
 
@@ -331,6 +401,11 @@ def fetch_yandex() -> dict:
             exc,
         )
         return {}
+
+
+# ---------------------------------------------------------------------------
+# DEEPL
+# ---------------------------------------------------------------------------
 
 def fetch_deepl() -> list:
     """Fetch supported language codes from DeepL."""

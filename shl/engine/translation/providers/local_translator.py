@@ -1,13 +1,28 @@
 """
 File: shl/engine/translation/providers/local_translator.py
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.3
 License: MIT
 Description: Translation provider adapter for the SHL local translation
 API. Builds metadata-aware translation requests, supports formality,
 context, glossary, honorifics, and HTML handling, validates language
 pairs through the local provider registry, and validates translation
 responses for unexpected or suspicious output.
+
+The local service is a LibreTranslate-compatible endpoint. The request
+uses the LibreTranslate API shape (q, source, target, format) and the
+response is read from translatedText.
+
+Placeholders such as {} and {name} are protected with PlaceholderProtector
+before the request is sent to LibreTranslate and restored afterwards.
+This keeps them intact even when LibreTranslate would otherwise interpret
+{} as an emoji or strip it.
+
+Supported languages are loaded from a cache (local_languages_cache.json)
+on first use. The cache is refreshed from the local service's
+/languages endpoint when stale or missing. If the service cannot be
+reached, the stale cache is used; if no cache exists at all, all
+languages are assumed to be supported.
 
 All outbound HTTP goes through safe_local_urlopen for SSRF prevention,
 redirect blocking, and response size limits. The configured
@@ -18,14 +33,12 @@ shl/utils/safe_local_http.py (_ALLOWED_LOCAL_HOSTS). The default
 
 import json
 import logging
+import re
 from typing import Any
 from urllib.request import Request
 
 from urllib.error import URLError, HTTPError
 
-# CHANGED: local endpoints must use the local safe path, not the
-# outbound one. safe_local_urlopen enforces the allowlist and skips
-# the is_global DNS check that would reject localhost.
 from shl.utils.safe_local_http import safe_local_urlopen as urlopen
 
 from shl._version import __version__ as SHL_VERSION
@@ -41,8 +54,13 @@ from ..exceptions import (
     InvalidRequestError,
 )
 from ..metadata import TranslationRequest
+from ..placeholder import (
+    PlaceholderProtector,
+    PlaceholderIntegrityError,
+)
 from .base import TranslationProvider, TranslationResult
 from .local_translator_registry import LocalRegistry
+from ..local_languages_cache import get_local_supported_languages
 from ...errors.parser import ErrorParser
 from ...errors.providers import LOCAL
 
@@ -51,19 +69,12 @@ logger = logging.getLogger(__name__)
 
 LOCAL_TRANSLATOR_TIMEOUT = 15
 
+# Default placeholder pattern: matches {name}, {}, {0}, etc.
+_DEFAULT_PLACEHOLDER_PATTERN = r"\{[^{}]*\}"
+
 
 class LocalTranslatorAdapter(TranslationProvider):
-    """Translation adapter for the SHL local translation API.
-
-    Supports:
-    - text, source_lang, target_lang
-    - context (built from SHL metadata)
-    - formality
-    - glossary
-    - honorifics
-    - HTML handling
-    - registry-based language pair validation
-    """
+    """Translation adapter for the SHL local translation API."""
 
     def __init__(
         self,
@@ -77,7 +88,7 @@ class LocalTranslatorAdapter(TranslationProvider):
         if not self.api_key:
             raise ValueError(
                 "Local translator API key must be provided as parameter "
-                "or set as LOCAL_TRANSLATOR_API_KEY in ./.env/shl/.env"
+                "or set as LOCAL_TRANSLATOR_API_KEY in ~/.config/shl/.env"
             )
 
         self.api_key = self.api_key.strip()
@@ -87,8 +98,21 @@ class LocalTranslatorAdapter(TranslationProvider):
             "https://localhost",
         ).rstrip("/")
 
-        # Use a shared registry when one is not explicitly supplied.
         self.registry = registry or LocalRegistry.shared()
+
+        self.supported_languages: set[str] = set(
+            get_local_supported_languages(self.base_url)
+        )
+
+        if self.supported_languages:
+            logger.info(
+                "Local service supports %d languages",
+                len(self.supported_languages),
+            )
+        else:
+            logger.info(
+                "Local service language list unknown; assuming all supported",
+            )
 
         self.error_parser = ErrorParser(
             provider=self.name,
@@ -124,6 +148,20 @@ class LocalTranslatorAdapter(TranslationProvider):
     ) -> TranslationResult:
         """Translate text using Local API and return full metadata."""
 
+        if (
+            self.supported_languages
+            and request.target_lang.lower() not in self.supported_languages
+        ):
+            self.registry.mark_failure(
+                self.name,
+                request.source_lang,
+                request.target_lang,
+            )
+            raise LanguageNotSupportedError(
+                f"Local does not support target language: "
+                f"{request.target_lang}"
+            )
+
         if not self.registry.is_supported(
             self.name,
             request.source_lang,
@@ -134,26 +172,57 @@ class LocalTranslatorAdapter(TranslationProvider):
                 f"{request.source_lang or 'auto'}->{request.target_lang}"
             )
 
-        payload = self.build_request(request)
-        return self._call_api(payload, request)
+        # Protect placeholders before sending to LibreTranslate.
+        # LibreTranslate would otherwise turn {} into an emoji or drop it.
+        protector: PlaceholderProtector | None = None
+        protected_text = request.text
+
+        if re.search(_DEFAULT_PLACEHOLDER_PATTERN, request.text):
+            protector = PlaceholderProtector(
+                pattern=_DEFAULT_PLACEHOLDER_PATTERN
+            )
+            protected_text = protector.protect(request.text)
+
+        payload = self.build_request(request, protected_text)
+        result = self._call_api(payload, request, protector)
+
+        return result
 
     def build_request(
         self,
         request: TranslationRequest,
+        text: str | None = None,
     ) -> dict[str, Any]:
-        """Build local translator API JSON payload."""
+        """Build LibreTranslate-compatible JSON payload.
 
-        # Explicit annotation is required because the payload holds
-        # heterogeneous value types (list, str, bool, dict). Without
-        # it, mypy narrows the inferred type to dict[str, Sequence[str]]
-        # based on the first two entries and rejects bool/dict values.
+        Field names are read from providers.local.request so the same
+        adapter can serve different local translation services.
+        """
+
+        request_config = get_config_value(
+            "providers.local.request",
+            {},
+        )
+
+        if not isinstance(request_config, dict):
+            request_config = {}
+
+        text_field = request_config.get("text_field", "q")
+        source_field = request_config.get("source_field", "source")
+        target_field = request_config.get("target_field", "target")
+        format_field = request_config.get("format_field", "format")
+        format_value = request_config.get("format_value", "text")
+
         payload: dict[str, Any] = {
-            "text": [request.text],
-            "target_lang": request.target_lang.upper(),
+            text_field: text if text is not None else request.text,
+            target_field: request.target_lang.lower(),
         }
 
+        if format_field:
+            payload[format_field] = format_value
+
         if request.source_lang:
-            payload["source_lang"] = request.source_lang.upper()
+            payload[source_field] = request.source_lang.lower()
 
         context_parts = []
 
@@ -180,17 +249,15 @@ class LocalTranslatorAdapter(TranslationProvider):
         if request.glossary:
             payload["glossary"] = request.glossary
 
-        if request.html_format:
-            payload["html_format"] = True
-
         return payload
 
     def _call_api(
         self,
         payload: dict[str, Any],
         request: TranslationRequest,
+        protector: PlaceholderProtector | None = None,
     ) -> TranslationResult:
-        """Execute request against Local API endpoints."""
+        """Execute request against LibreTranslate API."""
 
         try:
             url = f"{self.base_url}/translate"
@@ -200,14 +267,13 @@ class LocalTranslatorAdapter(TranslationProvider):
                 "Local request to %s (api_key=%s, text length: %d)",
                 url,
                 mask_api_key(self.api_key),
-                len(payload["text"][0]),
+                len(payload["q"]),
             )
 
             req = Request(
                 url,
                 data=request_data,
                 headers={
-                    "Authorization": f"Local-Auth-Key {self.api_key}",
                     "Content-Type": "application/json",
                     "User-Agent": f"SHL-Client/{SHL_VERSION}",
                     "Accept": "application/json",
@@ -222,39 +288,44 @@ class LocalTranslatorAdapter(TranslationProvider):
                 response_data = json.loads(
                     response.read().decode("utf-8")
                 )
-                translations = response_data.get("translations", [])
 
-                if not translations:
-                    raise TranslationError(
-                        "Local returned an empty translations payload"
-                    )
-
-                translated = translations[0].get("text")
-                detected = (
-                    translations[0].get(
-                        "detected_source_language"
-                    ) or ""
-                ).lower()
-
-                engine = response_data.get("engine")
-                fallback = bool(response_data.get("fallback", False))
-                confidence = response_data.get("confidence")
+                translated = response_data.get("translatedText")
 
                 if not translated or translated.strip() == "":
                     raise TranslationError(
                         "Local returned empty text."
                     )
 
-                if translated.strip() == payload["text"][0].strip():
+                # Restore placeholders BEFORE further validation,
+                # because the protected tokens must be compared against
+                # the original text.
+                if protector is not None:
+                    try:
+                        protector.validate(translated)
+                    except PlaceholderIntegrityError as error:
+                        raise TranslationError(
+                            f"Local lost a placeholder: {error}"
+                        ) from error
+
+                    translated = protector.restore(translated)
+
+                if translated.strip() == request.text.strip():
                     raise TranslationError(
                         "Local returned unchanged text."
                     )
 
-                if request.source_lang:
-                    if (
-                        detected
-                        and detected != request.source_lang.lower()
-                    ):
+                detected_info = response_data.get("detectedLanguage")
+                detected = ""
+
+                if isinstance(detected_info, dict):
+                    detected = str(
+                        detected_info.get("language", "")
+                    ).lower()
+                elif isinstance(detected_info, str):
+                    detected = detected_info.lower()
+
+                if request.source_lang and detected:
+                    if detected != request.source_lang.lower():
                         raise TranslationError(
                             f"Local detected unexpected source language "
                             f"'{detected}' for input declared as "
@@ -269,7 +340,7 @@ class LocalTranslatorAdapter(TranslationProvider):
 
                 if (
                     len(translated) < 3
-                    and len(payload["text"][0]) > 20
+                    and len(request.text) > 20
                 ):
                     raise TranslationError(
                         "Local returned suspiciously short output."
@@ -280,6 +351,10 @@ class LocalTranslatorAdapter(TranslationProvider):
                     request.source_lang,
                     request.target_lang,
                 )
+
+                engine = response_data.get("engine")
+                fallback = bool(response_data.get("fallback", False))
+                confidence = response_data.get("confidence")
 
                 logger.debug(
                     "Local translation successful "

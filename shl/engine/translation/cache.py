@@ -43,7 +43,7 @@ class TranslationCache:
         self.ttl = ttl
         self.max_size = max_size
         self.persist = persist
-        self.persist_path = Path(persist_path) if persist_path else Path.cwd() / ".shl_cache.json"
+        self.persist_path = (Path(persist_path).expanduser() if persist_path else Path.home() / ".cache" / "shl" / "shl_cache.json")
         self._lock = threading.RLock()
         self._dirty = False
         self._last_save = 0.0

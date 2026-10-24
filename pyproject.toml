@@ -14,27 +14,13 @@ authors = [
 ]
 
 keywords = [
-    "localization",
-    "library",
-    "i18n",
-    "internationalization",
-    "translation",
-    "templates",
-    "self-healing",
-    "automation",
-    "python",
-    "l10n",
-    "glfm",
-    "bcp47",
-    "machine-translation",
-    "mymemory",
-    "libretranslate",
-    "deepl-translator",
-    "google-translation",
-    "papago-translator",
-    "microsoft-translator",
-    "yandex-translator",
-    "localhost-translator",
+    "localization", "library", "i18n", "internationalization",
+    "translation", "templates", "self-healing", "automation",
+    "python", "l10n", "glfm", "bcp47", "machine-translation",
+    "mymemory", "libretranslate", "deepl-translator",
+    "google-translation", "papago-translator",
+    "microsoft-translator", "yandex-translator",
+    "localhost-translator", "gui", "splash",
 ]
 
 classifiers = [
@@ -53,6 +39,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
+gui = ["pygobject>=3.42"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -69,12 +56,17 @@ Issues = "https://codeberg.org/lahtis/Self_Healing_Localization/issues"
 Documentation = "https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/doc"
 
 [project.scripts]
-shl = "shl.cli:main"
+shl = "shl.preloader:preload"
 shl-extract = "shl.extract.cli:main"
+shl-gui = "shl.gui.main:main"
+
+[project.entry-points."shl.preloaders"]
+shl = "shl.preloader:preload"
 
 [tool.setuptools.packages.find]
+where = ["."]
 include = ["shl*"]
-exclude = ["tests*"]
+exclude = ["tests*", "tools*", "shl_policy_editor*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "shl._version.__version__" }
@@ -144,3 +136,4 @@ disable = [
     "too-many-arguments",
     "too-many-instance-attributes",
 ]
+

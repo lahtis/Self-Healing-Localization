@@ -70,47 +70,63 @@ class Localizer:
     # ------------------------------------------------------------------
 
     def _detect_language(self) -> Optional[str]:
-        """Detect language from config.conf or environment."""
+        """Detect language from config.toml, config.conf, or environment.
+
+        Priority (highest first):
+            1. config.toml [general] language  (new, preferred)
+            2. config.conf [SETTINGS] language (legacy, fallback)
+            3. SHL_LANGUAGE environment variable
+            4. LANG environment variable (locale)
+            5. None (caller falls back to base_lang)
+        """
+        # 1. config.toml [general] language (new, preferred)
+        try:
+            from shl.config import get_config_value
+            value = (
+                get_config_value("general.language")
+                or get_config_value("language")
+            )
+            if value and isinstance(value, str) and value.strip():
+                logger.debug("Language from config.toml: %s", value)
+                return value.strip()
+        except Exception as error:
+            logger.debug("config.toml read failed: %s", error)
+
+        # 2. config.conf [SETTINGS] language (legacy, fallback)
         try:
             import configparser
-
             if os.path.exists("config.conf"):
                 parser = configparser.ConfigParser()
                 parser.read("config.conf", encoding="utf-8")
-
-                # SETTINGS overrides locale and environment
                 if parser.has_option("SETTINGS", "language"):
-                    language = parser.get("SETTINGS", "language")
-                    if language:
-                        logger.debug("Language forced by SETTINGS: %s", language)
-                        return language.strip()
-
+                    value = parser.get("SETTINGS", "language")
+                    if value and value.strip():
+                        logger.debug("Language from config.conf: %s", value)
+                        return value.strip()
         except Exception as error:
-            logger.debug("Language detection failed: %s", error)
+            logger.debug("config.conf read failed: %s", error)
 
-        # If SETTINGS had language, we would have returned already.
-        # Now check SHL_LANGUAGE environment variable.
-        language = os.environ.get("SHL_LANGUAGE")
-        if language:
-            logger.debug("Language forced by SHL_LANGUAGE: %s", language)
-            return language.strip()
+        # 3. SHL_LANGUAGE environment variable
+        value = os.environ.get("SHL_LANGUAGE")
+        if value and value.strip():
+            logger.debug("Language from SHL_LANGUAGE: %s", value)
+            return value.strip()
 
-        # Locale is now used ONLY if SETTINGS and SHL_LANGUAGE are missing.
-        raw_language = os.environ.get("LANG", "")
-        if raw_language:
-            language = raw_language.split(".")[0]
-
+        # 4. LANG environment variable (locale)
+        raw = os.environ.get("LANG", "")
+        if raw:
+            language = raw.split(".")[0]
             if "_" in language:
                 parts = language.split("_")
                 if len(parts) == 2:
                     detected = f"{parts[0].lower()}-{parts[1].upper()}"
-                    logger.debug("Language detected from locale: %s", detected)
+                    logger.debug("Language from locale: %s", detected)
                     return detected
-
             detected = language.lower()
-            logger.debug("Language detected from locale: %s", detected)
+            logger.debug("Language from locale: %s", detected)
             return detected
 
+        # 5. None – caller falls back to base_lang
         return None
 
     # ------------------------------------------------------------------
@@ -271,23 +287,27 @@ class Localizer:
         if os.path.exists(self.lang_file):
             texts = self._load_json_safe(self.lang_file)
             if texts is not None:
-                logger.debug("Loaded %s keys from file: %s", len(texts), self.lang_file)
+                logger.debug(
+                    "Loaded %s keys from file: %s",
+                    len(texts),
+                    self.lang_file,
+                )
                 return texts
 
-        legacy_file = os.path.join(self.folder, f"lang_{self.lang_code}.json")
-        legacy_texts = self._migrate_legacy_file(legacy_file, self.lang_file)
+        legacy_file = os.path.join(
+            self.folder, f"lang_{self.lang_code}.json"
+        )
+        legacy_texts = self._migrate_legacy_file(
+            legacy_file, self.lang_file
+        )
         if legacy_texts is not None:
             return legacy_texts
 
-        base_texts: Dict[str, Any] = {}
-
-        if os.path.exists(self.base_file):
-            loaded_base = self._load_json_safe(self.base_file)
-            if loaded_base is not None:
-                base_texts = loaded_base
-
-        self._save_texts(base_texts, self.lang_file)
-        return base_texts
+        # Älä kopioi base_file → lang_file.
+        # Luo tyhjä tiedosto, jotta engine.ui_text() voi kääntää
+        # base_lang → lang_code.
+        self._save_texts({}, self.lang_file)
+        return {}
 
     # ------------------------------------------------------------------
     # Public API

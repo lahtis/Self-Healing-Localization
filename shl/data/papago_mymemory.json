@@ -20,7 +20,7 @@
         "sm","sn","so","sq","sr","ss","st","su","sv","sw","ta","te",
         "tg","th","ti","tk","tl","tn","to","tr","ts","tt","tw","ty",
         "ug","uk","ur","uz","ve","vi","vo","wa","wo","xh","yi","yo",
-        "za","zh","zu"
+        "za", "zh", "zh-cn", "zh-tw", "zu"
     ]
 }
 

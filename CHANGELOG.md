@@ -5,6 +5,90 @@ All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)  
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.6] - 2026-10-24 Clean up 
+
+### `config.py`
+
+- **Added** `providers.local.request` to the default config:
+  - `text_field`, `source_field`, `target_field`, `format_field`, `format_value`.
+- **Moved** config files to the correct location:
+  - `~/.config/shl/shl-config.json`
+  - `~/.config/shl/shl-policy-config.json`
+  - `~/.config/shl/.env`
+  - `~/.config/shl/libretranslate_endpoints.json`
+- **Moved** cache files to the correct location:
+  - `~/.cache/shl/languages_cache.json`
+  - `~/.cache/shl/local_languages_cache.json`
+  - `~/.cache/shl/shl_cache.json`
+- **Removed** leftover project-directory files (`shl-config.json`, `shl-policy-config.json`).
+
+### `shl/engine/preload.py`
+
+- **Added** `PreloadEvent` dataclass (frozen) for progress reporting.
+- **Added** event kinds: `KIND_SCAN`, `KIND_GLFM`, `KIND_LANGUAGE`, `KIND_TRANSLATE`, `KIND_READY`.
+- **Added** properties `key_total`, `phase_fraction`, `key_fraction`.
+- **Purpose**: provider-independent progress reporting for the preload generator.
+
+### `shl/engine/core.py`
+
+- **Added** `preload()` generator to `LocalizationEngine`:
+  - Step 1: scan source files (`scan_tree`, `merge_keys`).
+  - Step 2: load GLFM (`reload_glfm`).
+  - Step 3: load locale file and populate `en.json` (`base_localizer.save()`).
+  - Step 4: translate missing keys (optional).
+  - Step 5: yield `KIND_READY`.
+- **Added** `base_localizer.save()` in step 3 so `en.json` is persisted before UI reads it.
+
+### `provider_cache.py`
+
+- **Added** atomic write: `tmp` + `fsync` + `os.replace`.
+- **Added** `last_updated` field (ISO 8601, UTC).
+- **Added** timestamped backup and backup restore.
+- **Improved** `load_cache`: validates the `providers` key, attempts to load a backup.
+- **Added** `fetch_local()` that reads from `local_languages_cache.json` without a circular import.
+- **Added** `LOCAL_CACHE_FILE` constant.
+
+### `local_translator.py`
+
+- **Added** `PlaceholderProtector` to protect `{}` and `{name}` before LibreTranslate.
+- **Added** `protector.restore()` in `_call_api` to restore placeholders.
+- **Changed** `format` to `"text"` (instead of `"html"`).
+- **Added** `import re`.
+- **Changed** `build_request` to read field names from `providers.local.request`:
+  - `text_field`, `source_field`, `target_field`, `format_field`, `format_value`.
+
+### `processor.py`
+
+- **Added** `_placeholders_preserved` – checks that all original placeholders survived.
+- **Changed** `_process_plain` – fallback when a placeholder is lost: retry without protection, verify placeholders, return the original if needed.
+- **Changed** `_process_html` – same check for HTML nodes.
+- **Added** `_DEFAULT_PLACEHOLDER_PATTERN = r"\{[^{}]*\}"`.
+
+### `router.py`
+
+- **Changed** the `local` branch to normalize `zho` → `zh-hans` via `language_parser.get_provider_code`.
+- **Changed** the `mymemory` branch to pass `_mymemory_registry` to `MyMemoryAdapter`.
+- **Changed** `_accept_unchanged_translation` to accept the original text when `TranslationProcessor` returned it.
+
+### `mymemory.py`
+
+- **Added** `registry` parameter to `__init__`.
+- **Changed** `translate` to use `self.registry` instead of `_registry`.
+
+### `mymemory_registry.py`
+
+- **Added** `"zh"` to `STANDARD_ISO_CODES`.
+
+### `language_parser.py`
+
+- **Changed** `parse()`: `input_bcp47` keeps BCP-47 input (`en-US`), otherwise uses `info["bcp47"].split("-")[0]`.
+
+### `data/papago_mymemory.json`
+
+- **Added** `"zh-cn"` and `"zh-tw"` to the `mymemory_iso_639_1` list.
+
+---
+
 ## [0.3.0] - 2026-10-10
 
 ### Added

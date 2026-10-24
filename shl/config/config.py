@@ -1,7 +1,7 @@
 """
 file: config/config.py - SHL configuration loader
 Author: Tuomas Lähteenmäki
-Version: 0.2.6
+Version: 0.4.0
 License: MIT
 Description: Loads SHL configuration from the project root.
 Creates the default configuration automatically if the file does not exist.
@@ -18,8 +18,12 @@ from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path.cwd()
-CONFIG_PATH = PROJECT_ROOT / "shl-config.json"
+from pathlib import Path
+
+CONFIG_DIR = Path.home() / ".config" / "shl"
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+CONFIG_PATH = CONFIG_DIR / "shl-config.json"
 BACKUP_PATH = CONFIG_PATH.with_suffix(".json.bak")
 
 _config_cache: Dict[str, Any] = {}
@@ -47,7 +51,7 @@ def _create_default_config() -> dict:
         },
         "cache": {
             "cache_persist": True,
-            "cache_persist_path": ".shl_cache.json",
+            "cache_persist_path": "~/.cache/shl/shl_cache.json",
             "ttl": 3600,
             "max_size": 10000
         },
@@ -57,7 +61,14 @@ def _create_default_config() -> dict:
         },
         "providers": {
             "local": {
-                "url": "http://localhost:8000"
+                "url": "http://localhost:5000",
+                "request": {
+                    "text_field": "q",
+                    "source_field": "source",
+                    "target_field": "target",
+                    "format_field": "format",
+                    "format_value": "text"
+                }
             },
             "libretranslate": {
                 "url": "http://localhost:5002"

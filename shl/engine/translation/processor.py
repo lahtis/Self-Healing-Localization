@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/processor.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.10
+Version: 0.2.12
 License: MIT
 Description:
     Provider-independent preprocessing and postprocessing for SHL
@@ -22,6 +22,7 @@ Description:
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Callable, Pattern
@@ -37,6 +38,10 @@ from .placeholder import (
     PlaceholderIntegrityError,
     PlaceholderProtector,
 )
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_PLACEHOLDER_PATTERN = r"\{[^{}]*\}"
 
 
 @dataclass(frozen=True)
@@ -73,6 +78,10 @@ class TranslationProcessor:
     provider is being used.
     """
 
+    # Default placeholder pattern. Protects both {name} and {} style
+    # placeholders so translation providers cannot mangle them.
+    _DEFAULT_PLACEHOLDER_PATTERN = r"\{[^{}]*\}"
+
     _PROTECTED_TOKEN_RE = re.compile(
         r"^\s*(?:\{[0-9]+_[0-9]+_[0-9]+\}\s*)+$"
     )
@@ -101,6 +110,15 @@ class TranslationProcessor:
             )
 
         self._translator = translator
+
+        # If the caller did not provide a pattern or matcher, fall back
+        # to the default pattern. This keeps placeholders such as
+        # {name} and {} intact through translation.
+        if (
+            placeholder_pattern is None
+            and placeholder_matcher is None
+        ):
+            placeholder_pattern = self._DEFAULT_PLACEHOLDER_PATTERN
 
         self._placeholder_pattern = placeholder_pattern
         self._placeholder_matcher = placeholder_matcher
@@ -194,6 +212,11 @@ class TranslationProcessor:
     ) -> tuple[str, int]:
         """
         Translate a normal TranslationRequest.
+
+        If placeholder protection fails (the provider loses a token),
+        retry without protection. If the retry also loses any original
+        placeholder, fall back to the original text so that the caller
+        can choose another provider.
         """
         protector = self._create_placeholder_protector()
 
@@ -207,10 +230,29 @@ class TranslationProcessor:
         )
 
         if protector is not None:
-            protector.validate(translated)
-            translated = protector.restore(
-                translated
-            )
+            try:
+                protector.validate(translated)
+                translated = protector.restore(
+                    translated
+                )
+            except PlaceholderIntegrityError:
+                logger.warning(
+                    "Placeholder lost in translation for %r; "
+                    "retrying without protection.",
+                    request.text,
+                )
+
+                # Retry without placeholder protection.
+                retry_text = self._translate(request)
+
+                if retry_text and self._placeholders_preserved(
+                    request.text,
+                    retry_text,
+                ):
+                    return retry_text, 0
+
+                # Fallback to the original text.
+                return request.text, 0
 
         return (
             translated,
@@ -266,14 +308,22 @@ class TranslationProcessor:
                 )
 
             if protector is not None:
-                protector.validate(translated)
-                translated = protector.restore(
-                    translated
-                )
+                try:
+                    protector.validate(translated)
+                    translated = protector.restore(
+                        translated
+                    )
 
-                placeholder_count += (
-                    protector.protected_count()
-                )
+                    placeholder_count += (
+                        protector.protected_count()
+                    )
+                except PlaceholderIntegrityError:
+                    logger.warning(
+                        "Placeholder lost in HTML translation for %r; "
+                        "falling back to the original node text.",
+                        node_text,
+                    )
+                    return node_text
 
             return translated
 
@@ -291,6 +341,38 @@ class TranslationProcessor:
         )
 
         return translated_html, placeholder_count
+
+    @classmethod
+    def _placeholders_preserved(
+        cls,
+        original: str,
+        translated: str,
+    ) -> bool:
+        """
+        Return True when every placeholder in the original text
+        also appears in the translated text.
+
+        This works for both {name} and {} style placeholders.
+        """
+        if not isinstance(original, str) or not isinstance(
+            translated,
+            str,
+        ):
+            return False
+
+        original_placeholders = re.findall(
+            cls._DEFAULT_PLACEHOLDER_PATTERN,
+            original,
+        )
+
+        if not original_placeholders:
+            return True
+
+        for placeholder in original_placeholders:
+            if placeholder not in translated:
+                return False
+
+        return True
 
     @classmethod
     def _contains_only_protected_tokens(

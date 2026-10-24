@@ -103,7 +103,7 @@ class LanguageParser:
     SHL's canonical internal language identifier.
     """
 
-    DEFAULT_CACHE_FILENAME = ".languages_cache.json"
+    DEFAULT_CACHE_FILENAME = "languages_cache.json"
 
     def __init__(
         self,
@@ -114,8 +114,10 @@ class LanguageParser:
 
         if cache_path is None:
             self.cache_path = (
-                Path(__file__).resolve().parent.parent
-                / self.DEFAULT_CACHE_FILENAME
+                Path.home()
+                / ".cache"
+                / "shl"
+                / self.DEFAULT_CACHE_FILENAME                
             )
         else:
             self.cache_path = Path(cache_path).expanduser().resolve()
@@ -187,13 +189,26 @@ class LanguageParser:
         parsed_language, parsed_script, parsed_region = parse_bcp47(value)
 
         if parsed_language:
-            input_bcp47 = value.replace("_", "-")
+            # BCP-47 input (e.g. "en-US", "zh-Hant-TW") keeps its
+            # original tag. Plain codes and names resolve through
+            # GLFM's canonical BCP-47 base language instead.
+            if "-" in value:
+                input_bcp47 = value.replace("_", "-")
+            elif info.get("bcp47"):
+                input_bcp47 = info["bcp47"].split("-")[0]
+            else:
+                input_bcp47 = value.replace("_", "-")
 
             if parsed_script:
                 script = parsed_script.title()
 
             if parsed_region:
                 region = parsed_region.upper()
+        else:
+            # Language name (e.g. "Finnish") – use GLFM's
+            # canonical BCP-47 base language.
+            if info.get("bcp47"):
+                input_bcp47 = info["bcp47"].split("-")[0]
 
         parsed = ParsedLanguage(
             input_value=language,

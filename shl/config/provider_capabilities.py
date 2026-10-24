@@ -145,8 +145,19 @@ PROVIDER_CAPABILITIES = {
         "website_translation": False,
         "batch_translation": False,
     },
+    
+    "Local": {
+        "html": True,
+        "glossary": True,    
+        "formality": True,  
+        "contextual_suggestions": True, 
+        "honorific": False,
+        "language_detection": True,
+        "document_translation": False,
+        "website_translation": False,
+        "batch_translation": False,
+    },
 
-    "Local": {},
 }
 
 
@@ -261,7 +272,17 @@ SHL_WHITELIST = {
         "batch_translation": False,
     },
 
-    "Local": {},
+    "Local": {
+        "html": False,
+        "glossary": False,
+        "formality": False,
+        "contextual_suggestions": False,
+        "honorific": False,
+        "language_detection": False,
+        "document_translation": False,
+        "website_translation": False,
+        "batch_translation": False,
+    },
 }
 
 
@@ -372,7 +393,17 @@ PROVIDER_ALLOW = {
         "batch_translation": False,
     },
 
-    "Local": {},
+    "Local": {
+        "html": True,
+        "glossary": False,
+        "formality": False,
+        "contextual_suggestions": False,
+        "honorific": False,
+        "language_detection": False,
+        "document_translation": False,
+        "website_translation": False,
+        "batch_translation": False,
+    },
 }
 
 
@@ -485,6 +516,14 @@ PROVIDER_DENY = {
     },
 
     "Local": {
+        "html": False,
+        "glossary": False,
+        "formality": False,
+        "contextual_suggestions": False,
         "honorific": True,
+        "language_detection": False,
+        "document_translation": False,
+        "website_translation": False,
+        "batch_translation": False,
     },
 }

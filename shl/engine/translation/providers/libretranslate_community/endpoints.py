@@ -67,7 +67,7 @@ def _user_endpoints_path() -> Path:
     Resolved on each call so a change of working directory after
     import is honoured.
     """
-    return Path.cwd() / _USER_ENDPOINTS_FILENAME
+    return Path.home() / ".config" / "shl" / _USER_ENDPOINTS_FILENAME
 
 
 def _normalize(urls: list) -> list[str]:

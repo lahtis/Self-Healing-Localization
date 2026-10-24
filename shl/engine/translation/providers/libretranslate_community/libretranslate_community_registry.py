@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
-LANGUAGE_CACHE_FILE = PROJECT_ROOT / ".languages_cache.json"
+LANGUAGE_CACHE_FILE = Path.home() / ".cache" / "shl" / "languages_cache.json"
 
 
 class LibreTranslateCommunityRegistry:

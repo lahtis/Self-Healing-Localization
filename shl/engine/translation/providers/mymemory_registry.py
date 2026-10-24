@@ -32,7 +32,7 @@ STANDARD_ISO_CODES = frozenset({
     "pt-br", "pa", "ro", "ru", "sm", "gd", "sr", "st", "sn", "sd",
     "si", "sk", "sl", "so", "es", "su", "sw", "sv", "tg", "ta",
     "te", "th", "tr", "uk", "ur", "uz", "vi", "cy", "xh", "yi",
-    "yo", "zu",
+    "yo", "zu", "zh",
 })
 
 

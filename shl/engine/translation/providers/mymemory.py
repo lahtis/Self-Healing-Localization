@@ -1,7 +1,7 @@
 """
 File: shl/engine/translation/providers/mymemory.py
 Author: Tuomas Lähteenmäki
-Version: 0.3.0
+Version: 0.3.1
 License: MIT
 Description: Robust translation provider adapter for the MyMemory
 API. Handles optional email-based quota enhancement, optional private
@@ -72,11 +72,15 @@ class MyMemoryAdapter(TranslationProvider):
         email: str | None = None,
         api_key: str | None = None,
         cache_ttl: float | None = None,
+        registry: MyMemoryRegistry | None = None,
     ):
         """Initialize the MyMemory adapter.
 
         Email and API key are both optional. If omitted, they are
         read from the SHL environment configuration.
+
+        Registry is optional. If omitted, the shared module-level
+        registry is used.
         """
         self.email = email or get_env_value("MYMEMORY_EMAIL", "")
         self.api_key = api_key or get_env_value("MYMEMORY_API_KEY", "")
@@ -87,8 +91,11 @@ class MyMemoryAdapter(TranslationProvider):
         if self.api_key:
             self.api_key = self.api_key.strip()
 
+        # Use the supplied registry or the shared module-level one.
+        self.registry = registry or _registry
+
         if cache_ttl is not None:
-            _registry.cache_ttl = cache_ttl
+            self.registry.cache_ttl = cache_ttl
 
         self.error_parser = ErrorParser(
             provider=self.name,
@@ -116,8 +123,8 @@ class MyMemoryAdapter(TranslationProvider):
         source = (request.source_lang or "").lower().strip()
         target = request.target_lang.lower().strip()
 
-        # Fast-fail using the local registry.
-        if not _registry.is_pair_supported(source, target):
+        # Fast-fail using the registry.
+        if not self.registry.is_pair_supported(source, target):
             raise LanguageNotSupportedError(
                 f"MyMemory: language pair '{source}|{target}' is not "
                 "supported or is temporarily blocked."
@@ -129,7 +136,7 @@ class MyMemoryAdapter(TranslationProvider):
             return self._call_api(payload)
 
         except LanguageNotSupportedError:
-            _registry.mark_pair_unsupported(source, target)
+            self.registry.mark_pair_unsupported(source, target)
             raise
 
     def build_request(

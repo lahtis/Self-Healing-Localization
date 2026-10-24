@@ -79,13 +79,16 @@ def get_env_file_path() -> Path:
     """
     Return the preferred SHL .env file path.
 
-    The SHL-specific file is preferred over the project root .env.
+    SHL 2.0 reads the shared environment from ~/.config/shl/.env.
+    Falls back to the project root .env for backward compatibility
+    with SHL 1.x.
     """
-    shl_env = Path.cwd() / ".env" / "shl" / ".env"
+    shl_env = Path.home() / ".config" / "shl" / ".env"
 
     if shl_env.exists():
         return shl_env
 
+    # Backward compatibility: SHL 1.x project-root .env
     return Path.cwd() / ".env"
 
 

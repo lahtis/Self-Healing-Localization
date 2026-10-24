@@ -1,7 +1,7 @@
 """
 File: router.py — Policy-aware routing for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.3.1
+Version: 0.3.3
 License: MIT
 """
 
@@ -214,6 +214,11 @@ def _translate_with_processor(
 
     Placeholder configuration is carried by TranslationRequest and
     passed to TranslationProcessor unchanged.
+
+    Placeholders are protected in every branch that goes through
+    TranslationProcessor. When html_policy is None and the request does
+    not carry HTML, the request still goes through TranslationProcessor
+    so that placeholder protection is applied.
     """
     if html_policy is True:
         if request.html_format:
@@ -243,15 +248,14 @@ def _translate_with_processor(
             placeholder_pattern=forced_request.placeholder_pattern,
         ).process(forced_request).text
 
-    if request.html_format:
-        return TranslationProcessor(
-            translator,
-            placeholder_pattern=request.placeholder_pattern,
-        ).process(request).text
-
-    return translator(request)
-
-
+    # html_policy is None: preserve existing html_format behavior,
+    # but always route through TranslationProcessor so that
+    # placeholders are protected.
+    return TranslationProcessor(
+        translator,
+        placeholder_pattern=request.placeholder_pattern,
+    ).process(request).text
+    
 # ---------------------------------------------------------------------------
 # ZERO-BUDGET DETECTION
 # ---------------------------------------------------------------------------
@@ -756,6 +760,7 @@ def translate_text_with_metadata(
                 elif service == "mymemory":
                     adapter = MyMemoryAdapter(
                         email=mymemory_email,
+                        registry=_mymemory_registry,
                     )
 
                     source_provider_lang = language_parser.get_provider_code(
@@ -922,8 +927,24 @@ def translate_text_with_metadata(
                         api_key=local_api_key,
                         registry=_local_registry,
                     )
-                    translated = _translate_with_processor(
+
+                    source_provider_lang = language_parser.get_provider_code(
+                        request.source_lang,
+                        service,
+                    )
+                    target_provider_lang = language_parser.get_provider_code(
+                        request.target_lang,
+                        service,
+                    )
+
+                    provider_request = replace(
                         request,
+                        source_lang=source_provider_lang,
+                        target_lang=target_provider_lang,
+                    )
+
+                    translated = _translate_with_processor(
+                        provider_request,
                         adapter.translate,
                         get_provider_html_policy(service),
                     )
@@ -1097,8 +1118,11 @@ def _accept_unchanged_translation(
         target_lang,
     )
 
-    if text.strip() != translated.strip():
-        logger.info("Translation changed; accepting result.")
+    # TranslationProcessor returned the original text because it
+    # could not preserve the placeholders. Accept it so that the
+    # result is stored and the caller sees the original text
+    # instead of a partial translation.
+    if text.strip() == translated.strip():
         return True
 
     if source_lang == target_lang:
