@@ -134,8 +134,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     check.add_argument(
         "--base",
-        default="en",
-        help="Base language for missing/stale checks (default: en).",
+        default="eng",
+        help="Base language for missing/stale checks (default: eng).",
     )
 
     check.add_argument(

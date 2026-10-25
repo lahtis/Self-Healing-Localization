@@ -1,7 +1,7 @@
 """
 File: router.py — Policy-aware routing for SHL translation ecosystem.
 Author: Tuomas Lähteenmäki
-Version: 0.3.3
+Version: 0.3.4
 License: MIT
 """
 
@@ -255,7 +255,8 @@ def _translate_with_processor(
         translator,
         placeholder_pattern=request.placeholder_pattern,
     ).process(request).text
-    
+
+
 # ---------------------------------------------------------------------------
 # ZERO-BUDGET DETECTION
 # ---------------------------------------------------------------------------
@@ -1108,7 +1109,15 @@ def _accept_unchanged_translation(
     source_lang: str,
     target_lang: str,
 ) -> bool:
-    """Validate an unchanged translation using SHL language detection."""
+    """Validate a translation result.
+
+    A translation that differs from the original is accepted as-is.
+    The language-detection check is only applied when the translation
+    is identical to the original — in that case the detection is used
+    to decide whether the source and target are really the same
+    language, or whether the provider simply returned the original
+    unchanged.
+    """
 
     logger.info(
         "Checking translation result: '%s' -> '%s' (%s -> %s)",
@@ -1118,13 +1127,13 @@ def _accept_unchanged_translation(
         target_lang,
     )
 
-    # TranslationProcessor returned the original text because it
-    # could not preserve the placeholders. Accept it so that the
-    # result is stored and the caller sees the original text
-    # instead of a partial translation.
-    if text.strip() == translated.strip():
+    # If the translation differs from the original, accept it.
+    # The provider did real work; language detection is not needed.
+    if text.strip() != translated.strip():
+        logger.info("Translation changed; accepting result.")
         return True
 
+    # The translation is identical to the original.
     if source_lang == target_lang:
         logger.info("Source and target are identical; accepting result.")
         return True

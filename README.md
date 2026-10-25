@@ -1,262 +1,153 @@
-# Self‑Healing Localization (SHL) Library
-### Automatic, self‑maintaining localization for any Python project  
+# SHL — Self-Healing Localization
 
-* **Author:**  Tuomas Lähteenmäki  
-* **License:** MIT  
-* **Version:** 0.3.0
-* **Type:**    Library
-* **Status:**  stable, test, dev
+> **Your app speaks English. Your users don't.**
+> Add a new menu item. SHL translates it automatically.
+> No `xgettext`. No `.po` files. No `msgfmt`. No manual work.
 
-
+[![PyPI](https://img.shields.io/pypi/v/self-healing-localization)](https://pypi.org/project/self-healing-localization/)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
-[![PyPI](https://img.shields.io/pypi/v/self-healing-localization)](https://pypi.org/project/self-healing-localization/)
-[![TestPyPI](https://img.shields.io/badge/TestPyPI-Preview-blueviolet)](https://test.pypi.org/project/self-healing-localization/)
 ![Status: Beta](https://img.shields.io/badge/Status-Beta-yellow)
 [![Downloads](https://static.pepy.tech/badge/self-healing-localization)](https://pepy.tech/project/self-healing-localization)
 
----
-
-## Primary Links
-- Canonical Repository (Codeberg): https://codeberg.org/lahtis/Self_Healing_Localization
-- GitHub Mirror: https://github.com/lahtis/Self-Healing-Localization
-- Documentation: https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/docs
-- Demonstration: https://youtu.be/t5veRZtt3dU?si=ADD4yS5C2VwNKx9f
-
-- SHL Policy Editor: https://codeberg.org/lahtis/shl_policy_editor
+<!-- TARKISTA: lisää tähän GIF demosta (Flet-vieraskirja EN → FR).
+     Kun GIF on valmis, korvaa tämä kommentti kuvalla:
+     ![Demo](docs/demo.gif) -->
 
 ---
 
-## Overview
-Self‑Healing Localization Library (SHL) is a dependency‑free Python library that automates application localization and independently repairs missing translations. The library creates, updates, and synchronizes translation files throughout the application’s lifecycle without manual maintenance.
+## The self-healing loop
 
-SHL follows a self‑healing principle: when the application requests a missing translation key, the library automatically generates it, fetches a machine translation if needed, and stores the result in the correct language file. This makes localization deterministic and reduces developer workload.
+1. You add `ui_text("Settings", "Settings")` to your code.
+2. You start your app.
+3. SHL scans your source, finds the new key, translates it, and saves it.
+4. Next time the user opens the menu, the translation is already there.
 
-### Features
-* Automatic creation of missing translations
-* Automatic generation of new language files
-* BCP‑47 language code support (e.g., fi‑FI, pt‑BR, zh‑TW)
-* GLFM‑based language validation
-* Machine translation support: Microsoft Translator, DeepL, Google Translate, MyMemory, LibreTranslate, LibreTranslate Community, Papago Translate, Yandex Translate and Localhost.
-* Self‑healing localization pipeline
-* Unified high‑level localization engine
-* Offline and online support
-* Zero‑dependency core
-* Free and open‑source - SHL is fully free; paid providers may require separate subscriptions.
+**Missing key → translate → save → ready.**
 
-### Translation Providers Status
-The following translation providers have been tested and are currently operational:
+This is what "self-healing" means: the library notices what's missing
+and fixes it — without you having to run a build step, update a `.pot`
+file, or wait for a translator.
 
-* MyMemory (translated.net)
-* DeepL
-* LibreTranslate
-* LibreTranslate Community
-
-The other supported providers are implemented but have not yet been fully tested.
-
-> **Developer note:** SHL is a zero-budget project. Provider support is implemented first, while full provider testing is performed as resources allow. MyMemory, DeepL, LibreTranslate, and LibreTranslate Community have currently been tested successfully. Some providers may require a temporary paid subscription or other access in order to complete testing.
-
-### Memory Providers Status
-The following memory providers have been tested and are currently operational (as of v0.2.17):
-
-* MyMemory.dev
-
-> Note that `MYMEMORY_API_KEY` (translated.com) and `MYMEMORY_DEV_API_KEY` (mymemory.dev) are separate variables for separate services.
-
-### Limitations
-SHL does not process user‑audited or user‑modified files. The library does not perform self‑healing corrections on user data files or configuration files; it operates strictly within the application’s own localization layer.
-
-### Architecture
-SHL’s architecture is based on a layered model where the localization engine routes translation requests through a router to different providers. The provider layer uses configuration that defines provider priorities, timeouts, environment variables, and content filtering.
+---
 
 
+## Why SHL?
+
+Most localization libraries assume you will maintain translation files by hand.
+SHL assumes the opposite: **missing translations are a bug, and bugs should fix
+themselves.**
+
+## Why SHL?
+
+- **Automatic** — missing keys are created and translated on first use.
+- **Self-healing** — add a new string, and the translation is ready on
+  the next startup. No manual step.
+- **Eager, not lazy** — translations are done at startup, not when the
+  user opens a menu. No UI lag.
+- **Resilient** — if one provider fails, the next one takes over.
+- **Offline-capable** — works without API keys (local translation).
+- **Zero-dependency core** — no GUI, no ORM, no framework.
+- **gettext-style API, JSON under the hood** — `L("key")` and
+  `ui_text(...)` feel familiar, but translations live in plain
+  `locales/<lang>.json` files. No `.po` parsing, no `.mo` compilation.
+- **Works alongside gettext** — the scanner already recognizes `_()`,
+  `gettext()`, and `ngettext()` calls.
+- **10 providers** — Local, MyMemory, DeepL, Google, Microsoft,
+  LibreTranslate, LibreTranslate Community, Papago, Yandex,
+  DetectLanguage.
+  
+---
+
+## The ecosystem
+
+SHL is more than one library. It is a small ecosystem of optional tools
+that share the same core.
+
+| Component | What it does | Needs | Link |
+|---|---|---|---|
+| **`shl`** | The library itself | Python 3.10+ | [Codeberg](https://codeberg.org/lahtis/Self_Healing_Localization) |
+| **`shl-gui`** | GTK4 management GUI for locales and providers | GTK4 (optional) | [Codeberg](https://codeberg.org/lahtis/Self_Healing_Localization) |
+| **SHL Policy Editor** | Visual editor for `config.json` / provider policy | Standalone, no GTK4 required | [Codeberg](https://codeberg.org/lahtis/shl_policy_editor) |
+| **Digital Guestbook** | Demo application: a multilingual guestbook for hotels | Flet | [Codeberg](https://codeberg.org/lahtis/Digital-Guestbook) |
+
+You only need `shl`. The rest are optional.
 ---
 
 ## Quick Start
 
 ### Installation
 
-## Creating a virtual environment
-```bash
-python3 -m venv venv
-
-source venv/bin/activate
-```
-
-### Stable (PyPI)
 ```bash
 pip install self-healing-localization
 ```
----
 
-### Latest Development (TestPyPI)
+### Three-line example
+
 ```bash
-pip install -i https://test.pypi.org/simple/ self-healing-localization==0.3.0
+from shl.engine import LocalizationEngine
+
+engine = LocalizationEngine(base_lang="eng", lang_code="fin")
+print(engine.ui_text("welcome", "Welcome!"))
+
+# → "Tervetuloa!" (if a translation exists)
 ```
 
-## Environment Variables (.env)
-Create a `.env` file in your project root (optional):
-```ini
-MYMEMORY_EMAIL=your@email.com
-LIBRETRANSLATE_API_KEY=your-api-key
-LIBRETRANSLATE_COMMUNITY_API_KEY=your-api-key
-MYMEMORY_DEV_API_KEY=your-api-key
-DEEPL_API_KEY=your-api-key
-GOOGLE_API_KEY=your-api-key
-MICROSOFT_TRANSLATOR_KEY=your-api-key
-NAVER_CLIENT_ID=your-api-key
-NAVER_CLIENT_SECRET=your-api-key
-YANDEX_API_KEY=your-api-key
-LOCAL_TRANSLATOR_API_KEY=your-api-key
-DETECTLANGUAGE_API_KEY=your-api-key
-```
+And locales/fin.json now contains:
 
-> Environment variables are optional, but required for providers that use API keys. If a provider has no API key, SHL will still work offline and fall back to local translation or self‑healing behavior.
+{
+    "greeting": "Hei!"
+}
 
-## Configuration via config.conf
-Create a `config.conf` in your project root:
+That's it. The key "greeting" did not exist, so SHL created it,
+translated "Hello!" → "Hei!", and saved the result. The next time
+the app runs, the translation is read from disk — no network call.
 
-```ini
-[SETTINGS]
-language = fin
-base_lang = eng
-m_translation_enabled = true
-```
+### What just happened?
 
-> The library generates `shl-config.json` and `shl-policy-config.json` automatically in the project root.
+- 1. LocalizationEngine(lang_code="fin") — user wants Finnish UI.
+- 2. ui_text("greeting", "Hello!") — the key "greeting" is not in locales/fin.json.
+- 3. SHL asks the provider router for a translation: "Hello!" → "Hei!".
+- 4. The result is saved to locales/fin.json with the key "greeting".
+- 5. Next run: ui_text("greeting", "Hello!") returns "Hei!" directly from disk — no provider call.
 
-## Quick Start
+This is the self-healing loop: missing key → translate → save → reuse.
 
-### 1. Basic UI Localization
-Initialize the engine and start retrieving text. Missing keys are added to your JSON files automatically.
 
+### With machine translation enabled
 ```python
 from shl.engine import LocalizationEngine
 
-shl.setup_logging("DEBUG")
-
-# Initialize the engine ISO 639-3 (user language = Finnish, base = English)
-engine = LocalizationEngine(base_lang="eng")
-
-# If 'welcome_msg' is missing, it is created with the given default value
-title = engine.ui_text("welcome_msg", "Welcome to the App!")
-
-print(title)  # "Tervetuloa sovellukseen!" (if translation exists)
-```
-
-#### SHL interprets this as:
-
-* base_lang="eng" → source code strings are English
-* lang_code="fin" → user wants Finnish UI
-
-So SHL does:
-* 1. Look for welcome_msg in fin.json
-* 2. If missing:
-- Create the key in fin.json
-- Use the default value "Welcome to the App!" as the English source
-- Translate English → Finnish
-
-* 3. Return the Finnish result
-
-> Note: SHL uses ISO 639-3 (ISO 3-letter) language codes, such as eng for English, fin for Finnish, ita for Italian, and fra for French.
-
-#### Core takeaway
-
-- base_lang = the language your source JSON files are written in  
-- lang_code = the language the user wants to see in the UI right now
-Everything else in SHL’s behavior flows from that.
-
-#### How SHL interprets these two parameters
-
-##### 1) base_lang
-
-This is the language of your canonical UI strings — the language your codebase “speaks”.
-
-
-SHL uses base_lang to:
-* know which JSON file is the authoritative source
-* know what language missing keys should be stored in
-* know what language to translate from when generating other languages
-
-
-##### 2) lang_code
-
-This is the language the user wants to see.
-
-Examples:
-* Finnish user → lang_code="fin"
-* English user → lang_code="eng"
-* Italian user → lang_code="ita"
-
-SHL uses lang_code to:
-
-* decide which JSON file to read from
-* decide which JSON file to write new keys into
-* decide which language to translate to
-
---- 
- 
-### 3. Enable Machine Translation
-Machine translation is disabled by default. Enable it when you want missing texts to be translated automatically.
-
-```python
-config = {"m_translation_enabled": True} 					# you can overwrite config in code
+config = {"m_translation_enabled": True}
 engine = LocalizationEngine(lang_code="fin", config=config)
-
-text = engine.ui_text("new_key", "Hello World!")
-
-# → "Hei maailma!" (automatically translated to Finnish)
-
+print(engine.ui_text("greeting", "Hello!"))
 ```
+Output: 
 
-### 4. Prompt Templates
-SHL handles localized AI prompt templates the same way as UI text.
+Hei!
 
-```python
-prompt = engine.template("summarize_task", "Please summarize the following text:")
-```
+That's it. The key "greeting" did not exist in locales/fin.json, so SHL created it, translated "Hello!" → "Hei!", and saved the result. The next time the app runs, the translation is read from disk — no network call.
 
-If the template file for the current language does not exist, it is created automatically using the base language as the source.
+---
 
+## Limitations
 
-### 5. Dynamic Language Switching
-Switch languages at runtime without restarting the application.
+* SHL does not translate user-generated content. If your users write messages, comments, or reviews, those stay in the language they were written in. SHL is a localization library, not a content translation service.
+* SHL does not modify user data or configuration files. It only operates on the application's own localization layer.
+* Machine translation quality depends on the provider. Review translations before shipping.
+* Some providers require paid subscriptions or API keys.
+* SHL is in beta. APIs may change before 1.0.
 
-```python
-engine = LocalizationEngine(lang_code="eng", config={"m_translation_enabled": True})
+---
 
-# Switch to Finnish
-engine.set_language("fin")
-print(engine.ui_text("greeting", "Hello!"))  # "Hei!" (Machine-translated)
+## Documentation
+- Canonical Repository (Codeberg): https://codeberg.org/lahtis/Self_Healing_Localization
+- GitHub Mirror: https://github.com/lahtis/Self-Healing-Localization
+- Documentation: https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/docs
+- Full guide: https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/docs/guide.md
+- Demo video: https://www.youtube.com/watch?v=t5veRZtt3dU
+- SHL Policy Editor: https://codeberg.org/lahtis/shl_policy_editor
 
-# Switch to Swedish
-engine.set_language("swe")
-print(engine.ui_text("greeting", "Hello!"))  # "Hej!" (Machine-translated)
-```
-
-### 6. Region Subtag Support
-
-```python
-# Brazilian Portuguese and European Portuguese in separate files
-engine = LocalizationEngine(lang_code="pt-BR")  # → pt-br.json
-engine = LocalizationEngine(lang_code="pt-PT")  # → pt-pt.json
-
-# Traditional and Simplified Chinese in separate files
-engine = LocalizationEngine(lang_code="zh-TW")  # → zh-tw.json
-engine = LocalizationEngine(lang_code="zh-CN")  # → zh-cn.json
-```
-
-### 7. Direct Translation (Smart Routing)
-```python
-from shl.engine.translation import translate_text
-
-# Automatically chooses the best provider
-result = translate_text("Hello World", target_lang="fin")
-print(result)  # "Hei maailma"
-```
-
-### 8. UI translations
-Check the latest documentation files.
 
 ---
 
@@ -283,4 +174,5 @@ With SHL, any project can become multilingual — automatically, reliably, and w
 
 
 #localization • #i18n • #l10n • #self-healing • #translation • #multilingual #json • #python • #developer-tools • #automation • #templates • #cli #ai-assisted • #language-files • #internationalization • #localization-engine
+
 

@@ -147,7 +147,7 @@ PROVIDER_CAPABILITIES = {
     },
     
     "Local": {
-        "html": True,
+        "html": False,
         "glossary": True,    
         "formality": True,  
         "contextual_suggestions": True, 
@@ -394,7 +394,7 @@ PROVIDER_ALLOW = {
     },
 
     "Local": {
-        "html": True,
+        "html": False,
         "glossary": False,
         "formality": False,
         "contextual_suggestions": False,
@@ -516,7 +516,7 @@ PROVIDER_DENY = {
     },
 
     "Local": {
-        "html": False,
+        "html": True,
         "glossary": False,
         "formality": False,
         "contextual_suggestions": False,

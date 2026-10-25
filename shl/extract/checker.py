@@ -98,7 +98,7 @@ def _load_locale(
 def check_locales(
     source_keys: Mapping[str, str],
     locales_dir: Path,
-    base_language: str = "en",
+    base_language: str = "eng",
 ) -> CheckReport:
     """
     Compare source-extracted keys against locale files.

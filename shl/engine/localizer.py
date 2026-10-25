@@ -1,11 +1,16 @@
 """
 File: localizer.py
 Author: Tuomas Lähteenmäki
-Version: 0.2.1
+Version: 0.2.3
 License: MIT
 Description:
     Self-Healing Localizer for UI text.
     SETTINGS.language now overrides OS locale and GLFM completely.
+
+    Locale file names use the canonical ISO 639-3 identity
+    (e.g. "fin", "eng", "zho") so that the same file is used
+    regardless of whether the caller provides ISO 639-1,
+    ISO 639-3, or BCP-47 input.
 """
 
 import atexit
@@ -16,6 +21,7 @@ import shutil
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from shl.language_parser import LanguageParser
 from shl.utils.lang_utils import (
     base_language,
     normalize_full_tag,
@@ -42,25 +48,37 @@ class Localizer:
         if lang_code is None:
             lang_code = self._detect_language() or base_lang
 
-        self.lang_code = normalize_full_tag(lang_code)
-        self.base_lang_tag = normalize_full_tag(base_lang)
-        self.base_lang = base_language(self.base_lang_tag)
+        self._parser = LanguageParser()
+
+        # Kanoninen ISO 639-3 -identiteetti
+        self.lang_code = self._parser.normalize(lang_code)      # fin
+        self.base_lang = self._parser.normalize(base_lang)      # eng
+
+        # Tiedostonimet – ISO 639-3
+        self.lang_tag = self.lang_code                          # fin
+        self.base_lang_tag = self.base_lang                     # eng
 
         self._loaded_langs: Dict[str, Dict[str, Any]] = {}
 
         os.makedirs(self.folder, exist_ok=True)
 
-        self.lang_file = os.path.join(self.folder, f"{self.lang_code}.json")
-        self.base_file = os.path.join(self.folder, f"{self.base_lang_tag}.json")
+        self.lang_file = os.path.join(
+            self.folder, f"{self.lang_tag}.json"
+        )   # fin.json
+        self.base_file = os.path.join(
+            self.folder, f"{self.base_lang_tag}.json"
+        )   # eng.json
 
         self.texts = self._load_or_create()
 
         atexit.register(self._atexit_save)
 
         logger.debug(
-            "Localizer initialized: lang=%s, base=%s, base_tag=%s, keys=%s",
+            "Localizer initialized: lang=%s, base=%s, "
+            "lang_tag=%s, base_tag=%s, keys=%s",
             self.lang_code,
             self.base_lang,
+            self.lang_tag,
             self.base_lang_tag,
             len(self.texts),
         )
@@ -295,7 +313,7 @@ class Localizer:
                 return texts
 
         legacy_file = os.path.join(
-            self.folder, f"lang_{self.lang_code}.json"
+            self.folder, f"lang_{self.lang_tag}.json"
         )
         legacy_texts = self._migrate_legacy_file(
             legacy_file, self.lang_file
@@ -335,20 +353,24 @@ class Localizer:
         if not validated_key:
             return None
 
-        target_lang = normalize_full_tag(lang_code or self.lang_code)
+        target_lang = self._parser.normalize(
+            lang_code or self.lang_code
+        )
         text = self._get_text_from_lang(validated_key, target_lang)
 
         if text is not None:
             return text
 
-        if fallback and target_lang != self.base_lang_tag:
-            return self._get_text_from_lang(validated_key, self.base_lang_tag)
+        if fallback and target_lang != self.base_lang:
+            return self._get_text_from_lang(
+                validated_key, self.base_lang
+            )
 
         return None
 
     def _get_text_from_lang(self, key: str, lang_code: str) -> Optional[str]:
         try:
-            normalized_lang = normalize_full_tag(lang_code)
+            normalized_lang = self._parser.normalize(lang_code)
 
             if normalized_lang == self.lang_code:
                 return self.texts.get(key)
@@ -356,7 +378,9 @@ class Localizer:
             if normalized_lang in self._loaded_langs:
                 return self._loaded_langs[normalized_lang].get(key)
 
-            lang_file = os.path.join(self.folder, f"{normalized_lang}.json")
+            lang_file = os.path.join(
+                self.folder, f"{normalized_lang}.json"
+            )
 
             if not os.path.exists(lang_file):
                 self._loaded_langs[normalized_lang] = {}
@@ -372,7 +396,12 @@ class Localizer:
 
         except Exception as error:
             if not self._shutting_down:
-                logger.error("Error fetching key '%s' from language '%s': %s", key, lang_code, error)
+                logger.error(
+                    "Error fetching key '%s' from language '%s': %s",
+                    key,
+                    lang_code,
+                    error,
+                )
             return None
 
     def set_text(self, key: str, value: Optional[str]) -> bool:
@@ -390,7 +419,7 @@ class Localizer:
         return saved
 
     def set_language(self, lang_code: str) -> bool:
-        new_lang = normalize_full_tag(lang_code)
+        new_lang = self._parser.normalize(lang_code)
         if new_lang == self.lang_code:
             return True
 
@@ -398,7 +427,10 @@ class Localizer:
             return False
 
         self.lang_code = new_lang
-        self.lang_file = os.path.join(self.folder, f"{self.lang_code}.json")
+        self.lang_tag = new_lang
+        self.lang_file = os.path.join(
+            self.folder, f"{self.lang_tag}.json"
+        )
         self.texts = self._load_or_create()
         self._invalidate_cache()
         self._dirty = False
@@ -436,4 +468,3 @@ class Localizer:
 
     def __repr__(self) -> str:
         return f"Localizer(lang='{self.lang_code}', keys={len(self.texts)})"
-

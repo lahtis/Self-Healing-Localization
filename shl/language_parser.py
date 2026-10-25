@@ -2,7 +2,7 @@
 File: shl/language_parser.py
 Author: Tuomas Lähteenmäki
 License: MIT
-Version: 0.3.1
+Version: 0.3.2
 Description:
 Language parser for SHL.
 
@@ -60,7 +60,6 @@ class ParsedLanguage:
     Represents a language resolved through GLFM.
     """
 
-
     def __init__(
         self,
         input_value: str,
@@ -94,6 +93,7 @@ class ParsedLanguage:
             ")"
         )
 
+
 class LanguageParser:
     """
     Resolves language identifiers using GLFM.
@@ -117,7 +117,7 @@ class LanguageParser:
                 Path.home()
                 / ".cache"
                 / "shl"
-                / self.DEFAULT_CACHE_FILENAME                
+                / self.DEFAULT_CACHE_FILENAME
             )
         else:
             self.cache_path = Path(cache_path).expanduser().resolve()
@@ -278,14 +278,69 @@ class LanguageParser:
         return f"{source}-{target}"
 
     # ------------------------------------------------------------------
-    # BCP 47
+    # Language standards
     # ------------------------------------------------------------------
 
     def get_bcp47(self, language: str) -> Optional[str]:
         """
-        Return the GLFM BCP-47 tag for a language.
+        Return the full BCP-47 tag for a language.
+
+        Returns the GLFM BCP-47 tag exactly as stored (e.g.
+        "fi-Latn-FI", "en-Latn-US", "zh-Hans-CN"). Use
+        get_bcp47_base() for the base language subtag, or
+        get_locale_filename() for a file-safe name.
         """
         return self.parse(language).bcp47
+
+    def get_bcp47_base(self, language: str) -> Optional[str]:
+        """
+        Return the base language subtag of the BCP-47 tag.
+
+        Returns the base language subtag only (e.g. "fi", "en", "zh").
+        This is the form used for locale file names and provider
+        matching.
+        """
+        parsed = self.parse(language)
+
+        if not parsed.bcp47:
+            return None
+
+        return parsed.bcp47.split("-")[0]
+
+    def get_iso639_1(self, language: str) -> Optional[str]:
+        """
+        Return the ISO 639-1 code for a language.
+
+        Returns the ISO 639-1 code from the GLFM record (e.g. "fi",
+        "en", "zh"), or None if the record does not contain one.
+        """
+        parsed = self.parse(language)
+
+        iso639_1 = parsed.glfm_info.get("iso639_1")
+
+        if isinstance(iso639_1, str) and iso639_1:
+            return iso639_1.lower()
+
+        return None
+
+    def get_iso639_3(self, language: str) -> Optional[str]:
+        """
+        Return the ISO 639-3 code for a language.
+
+        Returns the ISO 639-3 code from the GLFM record (e.g. "fin",
+        "eng", "zho"), or None if the record does not contain one.
+        """
+        return self.parse(language).iso639_3
+
+    def get_locale_filename(self, language: str) -> Optional[str]:
+        """
+        Return a file-safe locale name for a language.
+
+        Returns the base language subtag (e.g. "fi", "en", "zh") which
+        is safe to use as a JSON file name on all filesystems,
+        including case-insensitive ones like Windows and macOS.
+        """
+        return self.get_bcp47_base(language)
 
     # ------------------------------------------------------------------
     # Provider cache
@@ -349,7 +404,6 @@ class LanguageParser:
     # Provider language resolution
     # ------------------------------------------------------------------
 
-
     def get_provider_code(
         self,
         language: str,
@@ -406,7 +460,6 @@ class LanguageParser:
             supported_codes,
             provider_data if isinstance(provider_data, dict) else None,
         )
-
 
     # ------------------------------------------------------------------
     # Provider matching

@@ -89,7 +89,7 @@ class LanguageValidator:
             
             mode = 'Lite' if self._use_lite else 'Full'
             nearest = self._max_nearest if self._max_nearest is not None else 'all'
-            logger.info(
+            logger.debug(
                 f"GLFM loaded: {len(self.languages)} languages "
                 f"(mode: {mode}, nearest: {nearest})"
             )

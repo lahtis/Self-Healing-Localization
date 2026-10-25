@@ -195,7 +195,7 @@ class TranslationCache:
             return
 
         with self._lock:
-            logger.info(
+            logger.debug(
                 "CACHE SET: text=%r translated=%r source=%s target=%s",
                 text,
                 translated,
