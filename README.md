@@ -68,7 +68,8 @@ that share the same core.
 |---|---|---|---|
 | **`shl`** | The library itself | Python 3.10+ | [Codeberg](https://codeberg.org/lahtis/Self_Healing_Localization) |
 | **`shl-gui`** | GTK4 management GUI for locales and providers | GTK4 (optional) | [Codeberg](https://codeberg.org/lahtis/Self_Healing_Localization) |
-| **SHL Policy Editor** | Visual editor for `config.json` / provider policy | Standalone, no GTK4 required | [Codeberg](https://codeberg.org/lahtis/shl_policy_editor) |
+| **SHL Policy Editor** (bundled) | Tkinter-based editor for `config.json` | Tkinter (stdlib) | [Codeberg](https://codeberg.org/lahtis/Self_Healing_Localization/src/branch/main/shl_policy_editor) |
+| **SHL Policy Editor** (standalone) | Full GTK4 visual editor for provider policy | GTK4 | [Codeberg](https://codeberg.org/lahtis/shl_policy_editor) |
 | **Digital Guestbook** | Demo application: a multilingual guestbook for hotels | Flet | [Codeberg](https://codeberg.org/lahtis/Digital-Guestbook) |
 
 You only need `shl`. The rest are optional.
