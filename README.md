@@ -95,10 +95,11 @@ print(engine.ui_text("welcome", "Welcome!"))
 ```
 
 And locales/fin.json now contains:
-
+```json
 {
     "greeting": "Hei!"
 }
+```
 
 That's it. The key "greeting" did not exist, so SHL created it,
 translated "Hello!" → "Hei!", and saved the result. The next time
