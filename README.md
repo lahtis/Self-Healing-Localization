@@ -10,9 +10,7 @@
 ![Status: Beta](https://img.shields.io/badge/Status-Beta-yellow)
 [![Downloads](https://static.pepy.tech/badge/self-healing-localization)](https://pepy.tech/project/self-healing-localization)
 
-<!-- TARKISTA: lisää tähän GIF demosta (Flet-vieraskirja EN → FR).
-     Kun GIF on valmis, korvaa tämä kommentti kuvalla:
-     ![Demo](docs/demo.gif) -->
+[![SHL library in action](https://img.youtube.com/vi/Tehwo6AOTPc/0.jpg)](https://www.youtube.com/watch?v=Tehwo6AOTPc)
 
 ---
 
@@ -83,18 +81,36 @@ You only need `shl`. The rest are optional.
 pip install self-healing-localization
 ```
 
+### 2. Configure a provider (optional)
+SHL works without API keys — it falls back to a local provider if available. For the best results, create a .env file in your project root with at least one provider:
+
+```ini
+# Free tier — good for small projects
+MYMEMORY_EMAIL=your@email.com
+
+# Or: best quality (paid)
+# DEEPL_API_KEY=your-api-key
+
+# Or: self-hosted
+# LIBRETRANSLATE_API_KEY=your-api-key
+# LIBRETRANSLATE_URL=http://localhost:5000
+```
+If you don't have any API keys, SHL will still work — but translations
+may be limited to the local provider.
+
+> **Note:** SHL works out of the box with the local provider.
+> For better quality, add a `.env` file with an API key.
+
 ### Three-line example
 
 ```bash
 from shl.engine import LocalizationEngine
 
 engine = LocalizationEngine(base_lang="eng", lang_code="fin")
-print(engine.ui_text("welcome", "Welcome!"))
-
-# → "Tervetuloa!" (if a translation exists)
+print(engine.ui_text("greeting", "Hello!"))
 ```
 
-And locales/fin.json now contains:
+And `locales/fin.json` now contains:
 ```json
 {
     "greeting": "Hei!"
@@ -107,11 +123,15 @@ the app runs, the translation is read from disk — no network call.
 
 ### What just happened?
 
-- 1. LocalizationEngine(lang_code="fin") — user wants Finnish UI.
-- 2. ui_text("greeting", "Hello!") — the key "greeting" is not in locales/fin.json.
-- 3. SHL asks the provider router for a translation: "Hello!" → "Hei!".
-- 4. The result is saved to locales/fin.json with the key "greeting".
-- 5. Next run: ui_text("greeting", "Hello!") returns "Hei!" directly from disk — no provider call.
+1. `LocalizationEngine(lang_code="fin")` — user wants Finnish UI.
+2. `ui_text("greeting", "Hello!")` — the key `"greeting"` is not in
+   `locales/fin.json`.
+3. SHL asks the provider router for a translation: `"Hello!"` → `"Hei!"`.
+4. The result is saved to `locales/fin.json` with the key `"greeting"`.
+5. Next run: `ui_text("greeting", "Hello!")` returns `"Hei!"` directly
+   from disk — no provider call.
+
+This is the self-healing loop: **missing key → translate → save → reuse.**
 
 This is the self-healing loop: missing key → translate → save → reuse.
 
